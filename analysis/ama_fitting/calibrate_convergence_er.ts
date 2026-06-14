@@ -22,6 +22,8 @@
 const fs   = require('fs');
 const path = require('path');
 const { MARKET_ADAPTER } = require('../../modules/constants');
+const { readJSON } = require('../../modules/utils/fs_utils');
+const { roundTo } = require('../../modules/utils/math_utils');
 const DEFAULT_DATA = path.join(__dirname, '..', '..', 'market_adapter', 'data', 'lp',
     '1_3_5537_1_3_0', 'lp_pool_133_1h.json');
 const FALLBACK_ER_PERIOD = 781;
@@ -74,7 +76,7 @@ function main() {
     // ── Load and validate data ──────────────────────────────────────────
     let data;
     try {
-        data = JSON.parse(fs.readFileSync(opts.data, 'utf8'));
+        data = readJSON(opts.data);
     } catch (err) {
         if (err.code === 'ENOENT') {
             console.error(`Data file not found: ${opts.data}`);
@@ -161,7 +163,7 @@ function main() {
     }
     // ── Recommended constant ───────────────────────────────────────────
     const avgImpliedER = results.reduce((a, r) => a + r.impliedER, 0) / results.length;
-    const recRounded = Math.round(avgImpliedER * 1000) / 1000;
+    const recRounded = roundTo(avgImpliedER, 1000);
     console.log('');
     console.log('--- Recommended constant ---');
     console.log(`  Average implied ER: ${avgImpliedER.toFixed(4)}`);

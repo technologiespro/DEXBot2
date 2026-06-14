@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
+const { readJSON } = require('../modules/utils/fs_utils');
 
 const PARENT = path.dirname(__dirname);
 const rootDir = resolveProjectRoot(PARENT);
@@ -86,6 +87,6 @@ if (mismatches.length > 0) {
 }
 
 function readJson(filePath: any) {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return readJSON(filePath);
 }
 export {};

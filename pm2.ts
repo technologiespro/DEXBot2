@@ -84,6 +84,7 @@ const { parsePm2Args } = require('./modules/launcher/launch_modes');
 const { setupGracefulShutdown } = require('./modules/graceful_shutdown');
 const { UPDATER, TIMING, BUILD_DIR } = require('./modules/constants');
 const { resolveProjectRoot } = require('./modules/launcher/runtime_entry');
+const { ensureDir, safeUnlink } = require('./modules/utils/fs_utils');
 
 // Setup graceful shutdown handlers
 setupGracefulShutdown();
@@ -284,7 +285,7 @@ function generateEcosystemConfig({ botNameFilter = null, clawOnly = false, exitO
 
     // Ensure logs directory exists
     if (!fs.existsSync(LOGS_DIR)) {
-        fs.mkdirSync(LOGS_DIR, { recursive: true });
+        ensureDir(LOGS_DIR);
     }
 
     try {
@@ -351,8 +352,8 @@ async function runManagedAppsPm2Action(action: any, { regenerate = false }: { re
 
 function cleanupStaleCredentialDaemonFiles() {
     try {
-        try { fs.unlinkSync(CREDENTIAL_SOCKET_PATH); } catch (e) { }
-        try { fs.unlinkSync(CREDENTIAL_READY_FILE); } catch (e) { }
+        safeUnlink(CREDENTIAL_SOCKET_PATH)
+        safeUnlink(CREDENTIAL_READY_FILE)
     } catch (e) {
         // Socket files already cleaned, that's fine
     }

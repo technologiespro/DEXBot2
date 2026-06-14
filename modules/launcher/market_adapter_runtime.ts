@@ -6,6 +6,7 @@ const { spawn } = require('child_process');
 const { buildScopedChildEnv } = require('./child_env');
 const { MARKET_ADAPTER } = require('../constants');
 const { resolveProjectRoot, buildRuntimeScriptPath } = require('./runtime_entry');
+const { safeUnlink } = require('../utils/fs_utils');
 
 const DEFAULT_CODE_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_ROOT = resolveProjectRoot(DEFAULT_CODE_ROOT);
@@ -121,7 +122,7 @@ function createMarketAdapterRuntime({
         }
 
         if (isLockStale(lockFile)) {
-            try { fs.unlinkSync(lockFile); } catch (_) {}
+            safeUnlink(lockFile)
         }
 
         if (isRunningExternally()) {

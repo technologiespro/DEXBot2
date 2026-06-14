@@ -25,6 +25,7 @@ const { parseNativeMarketHistoryTimestamp } = require('../market_adapter/utils/n
 const { detectMissingCandleTimestamps, fillCandleGaps, pruneStaleTail, tradesToCandles } = require('../market_adapter/candle_utils');
 const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');
 const { loadStrategiesFromProfiles } = require('../market_adapter/lp_chart_strategy_loader');
+const { ensureDir, writeJSON } = require('../modules/utils/fs_utils');
 
 const MARKET_PROFILES_FILE = path.join(__dirname, '..', 'profiles', 'market_profiles.json');
 
@@ -409,8 +410,8 @@ async function testNativeMarketHistoryDirectOrder() {
     const original = hadOriginal ? fs.readFileSync(MARKET_PROFILES_FILE, 'utf8') : null;
 
     try {
-        fs.mkdirSync(path.dirname(MARKET_PROFILES_FILE), { recursive: true });
-        fs.writeFileSync(MARKET_PROFILES_FILE, JSON.stringify({
+        ensureDir(path.dirname(MARKET_PROFILES_FILE));
+        writeJSON(MARKET_PROFILES_FILE, {
             profiles: [
                 {
                     assetA: 'TESTA',
@@ -424,7 +425,7 @@ async function testNativeMarketHistoryDirectOrder() {
                     },
                 },
             ],
-        }, null, 2));
+        });
 
         const ama1 = resolveAmaForBot({ assetA: 'TESTA', assetB: 'TESTB', gridPrice: 'ama1' });
         assert.strictEqual(ama1.fastPeriod, 3.26, 'market_profiles AMA1 override should preserve fractional fastPeriod');
@@ -455,8 +456,8 @@ async function testNativeMarketHistoryDirectOrder() {
     const original = hadOriginal ? fs.readFileSync(MARKET_PROFILES_FILE, 'utf8') : null;
 
     try {
-        fs.mkdirSync(path.dirname(MARKET_PROFILES_FILE), { recursive: true });
-        fs.writeFileSync(MARKET_PROFILES_FILE, JSON.stringify({
+        ensureDir(path.dirname(MARKET_PROFILES_FILE));
+        writeJSON(MARKET_PROFILES_FILE, {
             profiles: [
                 {
                     assetA: 'TESTA',
@@ -472,7 +473,7 @@ async function testNativeMarketHistoryDirectOrder() {
                     },
                 },
             ],
-        }, null, 2));
+        });
 
         const candles = Array.from({ length: 20 }, (_, i) => [1700000000000 + (i * 3600000), 100 + i, 101 + i, 99 + i, 100 + i, 1]);
         const comparison = calcAmaComparison(candles, {
@@ -529,8 +530,8 @@ async function testNativeMarketHistoryDirectOrder() {
     const original = hadOriginal ? fs.readFileSync(MARKET_PROFILES_FILE, 'utf8') : null;
 
     try {
-        fs.mkdirSync(path.dirname(MARKET_PROFILES_FILE), { recursive: true });
-        fs.writeFileSync(MARKET_PROFILES_FILE, JSON.stringify({
+        ensureDir(path.dirname(MARKET_PROFILES_FILE));
+        writeJSON(MARKET_PROFILES_FILE, {
             profiles: [
                 {
                     assetA: 'TESTB',
@@ -553,12 +554,12 @@ async function testNativeMarketHistoryDirectOrder() {
                     },
                 },
             ],
-        }, null, 2));
+        });
 
         const exactAma = resolveAmaForBot({ assetA: 'TESTA', assetB: 'TESTB', gridPrice: 'ama1' });
         assert.strictEqual(exactAma.fastPeriod, 1.1, 'exact profile orientation should win over a newer flipped profile');
 
-        fs.writeFileSync(MARKET_PROFILES_FILE, JSON.stringify({
+        writeJSON(MARKET_PROFILES_FILE, {
             profiles: [
                 {
                     assetA: 'TESTB',
@@ -571,7 +572,7 @@ async function testNativeMarketHistoryDirectOrder() {
                     },
                 },
             ],
-        }, null, 2));
+        });
 
         const flippedAma = resolveAmaForBot({ assetA: 'TESTA', assetB: 'TESTB', gridPrice: 'ama1' });
         assert.strictEqual(flippedAma.fastPeriod, 2.2, 'flipped profile should remain a valid fallback when no exact profile exists');
@@ -590,8 +591,8 @@ async function testNativeMarketHistoryDirectOrder() {
     const original = hadOriginal ? fs.readFileSync(MARKET_PROFILES_FILE, 'utf8') : null;
 
     try {
-        fs.mkdirSync(path.dirname(MARKET_PROFILES_FILE), { recursive: true });
-        fs.writeFileSync(MARKET_PROFILES_FILE, JSON.stringify({
+        ensureDir(path.dirname(MARKET_PROFILES_FILE));
+        writeJSON(MARKET_PROFILES_FILE, {
             profiles: [
                 {
                     assetA: 'TESTB',
@@ -618,7 +619,7 @@ async function testNativeMarketHistoryDirectOrder() {
                     },
                 },
             ],
-        }, null, 2));
+        });
 
         const meta = {
             assetA: { symbol: 'TESTA', id: '1.3.1' },
@@ -628,7 +629,7 @@ async function testNativeMarketHistoryDirectOrder() {
         const exactStrategies = loadStrategiesFromProfiles(MARKET_PROFILES_FILE, meta);
         assert.strictEqual(exactStrategies[0].name, 'Exact AMA1', 'LP chart loader should prefer an exact orientation match');
 
-        fs.writeFileSync(MARKET_PROFILES_FILE, JSON.stringify({
+        writeJSON(MARKET_PROFILES_FILE, {
             profiles: [
                 {
                     assetA: 'TESTB',
@@ -643,7 +644,7 @@ async function testNativeMarketHistoryDirectOrder() {
                     },
                 },
             ],
-        }, null, 2));
+        });
 
         const flippedStrategies = loadStrategiesFromProfiles(MARKET_PROFILES_FILE, meta);
         assert.strictEqual(flippedStrategies[0].name, 'Flipped AMA1', 'LP chart loader should still accept a flipped profile as fallback');

@@ -5,6 +5,7 @@ const chainKeys = require('../modules/chain_keys');
 const childProcess = require('child_process');
 const { EventEmitter } = require('events');
 const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
+const { ensureDir, safeUnlink } = require('../modules/utils/fs_utils');
 
 console.log('Running stale daemon cleanup tests');
 
@@ -17,10 +18,10 @@ const originalSpawn = childProcess.spawn;
 
 async function setupFiles() {
     if (!fs.existsSync(TEST_ROOT)) {
-        fs.mkdirSync(TEST_ROOT, { recursive: true });
+        ensureDir(TEST_ROOT);
     }
 
-    try { fs.unlinkSync(SOCKET_PATH); } catch (err) {}
+    safeUnlink(SOCKET_PATH)
 
     // Create a real socket file using the ORIGINAL spawn, then kill it
     const child = originalSpawn(process.execPath, ['-e', `
@@ -60,8 +61,8 @@ async function setupFiles() {
 }
 
 function cleanupFiles() {
-    try { fs.unlinkSync(SOCKET_PATH); } catch (err) {}
-    try { fs.unlinkSync(READY_FILE); } catch (err) {}
+    safeUnlink(SOCKET_PATH)
+    safeUnlink(READY_FILE)
     try { fs.rmdirSync(TEST_ROOT); } catch (err) {}
 }
 

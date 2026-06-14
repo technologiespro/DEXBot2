@@ -2,6 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { createMarketAdapterRuntime, isLockStale } = require('../modules/launcher/market_adapter_runtime');
+const { safeUnlink, writeJSON } = require('../modules/utils/fs_utils');
 
 console.log('Running market adapter runtime tests');
 
@@ -86,8 +87,8 @@ async function testSignalExitedChildRestartsOnNextRequiredSync() {
 
 async function testStartRemovesConfiguredStaleLock() {
     const lockFile = path.join('/tmp', `dexbot2-market-adapter-runtime-${process.pid}.lock`);
-    try { fs.unlinkSync(lockFile); } catch (_) {}
-    fs.writeFileSync(lockFile, JSON.stringify({ pid: -1 }), { mode: 0o600 });
+    safeUnlink(lockFile)
+    writeJSON(lockFile, { pid: -1 }, { mode: 0o600 });
 
     const runtime = createMarketAdapterRuntime({
         lockFile,
@@ -100,8 +101,8 @@ async function testStartRemovesConfiguredStaleLock() {
 }
 
 function writeStaleLock(lockFile, pid) {
-    try { fs.unlinkSync(lockFile); } catch (_) {}
-    fs.writeFileSync(lockFile, JSON.stringify({ pid }), { mode: 0o600 });
+    safeUnlink(lockFile)
+    writeJSON(lockFile, { pid }, { mode: 0o600 });
     const old = new Date(Date.now() - 10 * 60 * 1000);
     fs.utimesSync(lockFile, old, old);
 }
@@ -115,7 +116,7 @@ async function testLiveAdapterStaleMtimeIsNotRemovable() {
         false,
         'live market adapter lock must not be removable solely because mtime is old'
     );
-    try { fs.unlinkSync(lockFile); } catch (_) {}
+    safeUnlink(lockFile)
 }
 
 async function testLiveNonAdapterStaleLockIsRemovable() {
@@ -127,7 +128,7 @@ async function testLiveNonAdapterStaleLockIsRemovable() {
         true,
         'live non-adapter lock should be removable'
     );
-    try { fs.unlinkSync(lockFile); } catch (_) {}
+    safeUnlink(lockFile)
 }
 
 async function main() {

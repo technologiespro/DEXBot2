@@ -36,6 +36,7 @@ const { parseJsonWithComments } = require('../../modules/order/utils/system');
 const { MARKET_ADAPTER } = require('../../modules/constants');
 const { normalizePoolId, resolveAsset, findPoolByAssets } = require('../utils/chain');
 const { writeJsonAtomic } = require('../utils/atomic_write');
+const { readJSON } = require('../../modules/utils/fs_utils');
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -215,7 +216,7 @@ function buildFetchWindowsFromRange(timeRange, chunkMonths) {
 function loadManifest(manifestPath) {
     if (!fs.existsSync(manifestPath)) return null;
     try {
-        return JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        return readJSON(manifestPath);
     } catch (_: any) {
         return null;
     }
@@ -323,7 +324,7 @@ function saveManifest(manifestPath, manifest) {
 function validateChunkFile(chunkFile, requestKey, windowEntry) {
     if (!fs.existsSync(chunkFile)) return null;
     try {
-        const parsed = JSON.parse(fs.readFileSync(chunkFile, 'utf8'));
+        const parsed = readJSON(chunkFile);
         const meta = parsed?.meta || {};
         if (meta.pool !== requestKey.pool) return null;
         if (meta.intervalSeconds !== requestKey.intervalSeconds) return null;

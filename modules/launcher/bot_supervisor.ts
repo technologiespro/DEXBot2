@@ -8,6 +8,7 @@ const { buildScopedChildEnv } = require('./child_env');
 const { buildRuntimeScriptPath, isDistCodeRoot, resolveProjectRoot } = require('./runtime_entry');
 const { normalizeBotEntries, resolveRawBotEntries, loadSettingsFile } = require('../bot_settings');
 const { UPDATER, BUILD_DIR } = require('../constants');
+const { ensureDir, safeUnlink } = require('../utils/fs_utils');
 
 const CODE_ROOT = path.resolve(__dirname, '..', '..');
 const ROOT = resolveProjectRoot(CODE_ROOT);
@@ -47,7 +48,7 @@ function isServiceApp(app) {
 
 function ensureLogDir() {
     if (!fs.existsSync(LOGS_DIR)) {
-        fs.mkdirSync(LOGS_DIR, { recursive: true });
+        ensureDir(LOGS_DIR);
     }
 }
 
@@ -761,7 +762,7 @@ function createBotSupervisor({
 
     function startSocketServerInternal() {
         return new Promise((resolve, reject) => {
-            try { fs.unlinkSync(SOCKET_PATH); } catch (_: any) {}
+            safeUnlink(SOCKET_PATH)
 
             socketServer = net.createServer((socket) => {
             socketConnections.add(socket);
@@ -839,7 +840,7 @@ function createBotSupervisor({
             });
 
             process.once('exit', () => {
-                try { fs.unlinkSync(SOCKET_PATH); } catch (_: any) {}
+                safeUnlink(SOCKET_PATH)
             });
         });
     }
@@ -855,7 +856,7 @@ function createBotSupervisor({
             try { sock.destroy(); } catch (_: any) {}
         }
         socketConnections = new Set([...socketConnections].filter((sock) => preserved.has(sock)));
-        try { fs.unlinkSync(SOCKET_PATH); } catch (_: any) {}
+        safeUnlink(SOCKET_PATH)
     }
 
     async function start() {

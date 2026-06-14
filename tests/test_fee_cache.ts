@@ -15,6 +15,7 @@ const path = require('path');
 const { initializeFeeCache } = require('../modules/order/utils/system');
 const { getAssetFees } = require('../modules/order/utils/math');
 const Format = require('../modules/order/format');
+const { readJSON } = require('../modules/utils/fs_utils');
 
 async function main() {
     try {
@@ -30,7 +31,7 @@ async function main() {
         // Load bot configuration
         console.log('\nLoading bot configuration from profiles/bots.json...');
         const botsJsonPath = path.join(__dirname, '../profiles/bots.json');
-        const botsConfig = JSON.parse(fs.readFileSync(botsJsonPath, 'utf8'));
+        const botsConfig = readJSON(botsJsonPath);
 
         if (!botsConfig.bots || !Array.isArray(botsConfig.bots)) {
             throw new Error('Invalid bots.json format - missing "bots" array');

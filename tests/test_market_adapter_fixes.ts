@@ -17,6 +17,7 @@ const {
 
 const { KalmanTrendAnalyzer } = require('../analysis/trend_detection/kalman_trend_analyzer');
 const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');
+const { writeJSON } = require('../modules/utils/fs_utils');
 const {
     buildWhitelist,
     loadExistingWhitelist,
@@ -35,12 +36,12 @@ async function testWhitelistCache() {
 
     try {
         _resetCycleCache();
-        fs.writeFileSync(WHITELIST_FILE, JSON.stringify({
+        writeJSON(WHITELIST_FILE, {
             whitelist: {
                 'test-bot-1': { ama: true, dynamicWeight: false },
                 'test-bot-2': { ama: false, dynamicWeight: true },
             },
-        }), 'utf8');
+        });
 
         assert.strictEqual(isBotWhitelisted('test-bot-1'), true, 'Should find bot in whitelist');
         assert.strictEqual(isBotDynamicWeightWhitelisted('test-bot-1'), false, 'AMA-only whitelist should not imply dynamic weights');
@@ -57,12 +58,12 @@ async function testWhitelistCache() {
             'dynamic-weight whitelist should not imply asymmetric bounds'
         );
 
-        fs.writeFileSync(WHITELIST_FILE, JSON.stringify({
+        writeJSON(WHITELIST_FILE, {
             whitelist: {
                 'test-bot-1': { ama: false, dynamicWeight: true, asymmetricBounds: true },
                 'test-bot-2': { ama: true, dynamicWeight: false },
             },
-        }), 'utf8');
+        });
         assert.strictEqual(isBotWhitelisted('test-bot-1'), true, 'Should still return old value due to cache');
         assert.strictEqual(isBotDynamicWeightWhitelisted('test-bot-1'), false, 'Should still return old value due to cache');
         assert.strictEqual(isBotAsymmetricBoundsWhitelisted('test-bot-1'), false, 'Should still return old asymmetry value due to cache');
@@ -172,7 +173,7 @@ async function testWhitelistLoaderPreservesExistingFileEntries() {
                 'legacy-bool': true,
             },
         };
-        fs.writeFileSync(WHITELIST_FILE, JSON.stringify(existing), 'utf8');
+        writeJSON(WHITELIST_FILE, existing);
 
         assert.deepStrictEqual(
             loadExistingWhitelist(),

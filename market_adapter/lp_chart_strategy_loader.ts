@@ -6,6 +6,7 @@ const path = require('path');
 const { normalizeAssetSymbol, isExactPair, isSamePair } = require('./utils/chain');
 const { toIntervalLabel } = require('./interval_utils');
 const { PROJECT_ROOT } = require('./utils/paths');
+const { readJSON } = require('../modules/utils/fs_utils');
 
 const ANALYSIS_AMA_FITTING_DIR = path.join(PROJECT_ROOT, 'analysis', 'ama_fitting');
 const MARKET_ADAPTER_DIR = path.join(PROJECT_ROOT, 'market_adapter');
@@ -32,7 +33,7 @@ function buildAmaStrategy(name, ama, color, dash, lineWidth = 1.5) {
 function loadStrategiesFromResults(resultsPath) {
     if (!resultsPath || !fs.existsSync(resultsPath)) return null;
 
-    const json = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+    const json = readJSON(resultsPath);
     const meta = json?.meta;
     if (!meta) return null;
 
@@ -80,7 +81,7 @@ function loadStrategiesFromProfiles(profilesPath, meta) {
     if (!profilesPath || !fs.existsSync(profilesPath)) return null;
     if (!meta) return null;
 
-    const json = JSON.parse(fs.readFileSync(profilesPath, 'utf8'));
+    const json = readJSON(profilesPath);
     const profiles = Array.isArray(json?.profiles) ? json.profiles : [];
     if (profiles.length === 0) return null;
 

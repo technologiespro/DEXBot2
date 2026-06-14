@@ -12,6 +12,7 @@
 
 const { getAsset, getBackingAsset, getBitassetData, dbCall } = require('./chain_queries');
 const { loadDexbotOrderUtils } = require('./dexbot_bridge');
+const { roundTo } = require('../../modules/utils/math_utils');
 
 function getBlockchainToFloat() {
   return loadDexbotOrderUtils().blockchainToFloat;
@@ -122,7 +123,7 @@ async function fetchTrendInput(mpaSymbol: string) {
   return {
     marketPrice,
     feedPrice: feedData.feedPrice,
-    premium: premium !== null ? Math.round(premium * 10000) / 10000 : null,
+    premium: premium !== null ? roundTo(premium, 10000) : null,
     mpaSymbol: feedData.mpaSymbol,
     publicationTime: feedData.publicationTime,
   };

@@ -1,5 +1,6 @@
 const { clamp } = require('../../../modules/order/utils/math');
 const { MARKET_ADAPTER } = require('../../../modules/constants');
+const { roundTo } = require('../../../modules/utils/math_utils');
 const {
     normalizeMaxVolatilityOffset,
     normalizeVolatilityThreshold,
@@ -123,7 +124,7 @@ function computeAmaSlopeWeights(amaValues: any, weightVariance: any, opts: any =
     }
 
     // 4. Confidence derived from slope offset magnitude (0–100)
-    const roundedSlopeOffset = Math.round(slopeOffset * 100) / 100;
+    const roundedSlopeOffset = roundTo(slopeOffset, 100);
     const confidence = hasDirectionalOffset
         ? Math.round((Math.abs(slopeOffset) / maxSlopeOffset) * 100)
         : 0;
@@ -144,7 +145,7 @@ function computeAmaSlopeWeights(amaValues: any, weightVariance: any, opts: any =
         symmetricDelta = Math.abs(rawSymmetricDelta) < volatilityThreshold ? 0 : rawSymmetricDelta;
     }
 
-    const roundedSymmetricDelta = (Math.round(symmetricDelta * 100) / 100) || 0;
+    const roundedSymmetricDelta = (roundTo(symmetricDelta, 100)) || 0;
 
     return {
         slopeOffset: roundedSlopeOffset,

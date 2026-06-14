@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const { ensureDir, writeJSON } = require('../modules/utils/fs_utils');
 const ORDERS_DIR = path.join(__dirname, '..', 'profiles', 'orders');
 const ANALYZER_PATH = path.resolve(__dirname, '..', 'scripts', 'analyze-orders.ts');
 const WHITELIST_MODULE_PATH = path.resolve(__dirname, '..', 'modules', 'market_adapter_whitelist.ts');
@@ -24,8 +25,8 @@ function stripColorCodes(str) {
 
 function writeSnapshot(botKey, payload) {
   const filePath = path.join(ORDERS_DIR, `${botKey}.dynamicgrid.json`);
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
+  ensureDir(path.dirname(filePath));
+  writeJSON(filePath, payload);
   return filePath;
 }
 
@@ -38,7 +39,7 @@ function removeSnapshot(botKey) {
 
 function withWhitelist(entries, fn) {
   const originalEnv = process.env.DEXBOT_TEST_MARKET_ADAPTER_WHITELIST_FILE;
-  fs.writeFileSync(TEST_WHITELIST_PATH, JSON.stringify({ whitelist: entries }, null, 2) + '\n', 'utf8');
+  writeJSON(TEST_WHITELIST_PATH, { whitelist: entries });
   process.env.DEXBOT_TEST_MARKET_ADAPTER_WHITELIST_FILE = TEST_WHITELIST_PATH;
   delete require.cache[WHITELIST_MODULE_PATH];
   delete require.cache[ANALYZER_PATH];

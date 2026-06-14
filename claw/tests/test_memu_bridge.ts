@@ -5,10 +5,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { ensureDir } = require('../../modules/utils/fs_utils');
 
 function writeFakeMemuPackage(tmpRoot) {
   const memuDir = path.join(tmpRoot, 'memu');
-  fs.mkdirSync(memuDir, { recursive: true });
+  ensureDir(memuDir);
   fs.writeFileSync(path.join(memuDir, '__init__.py'), `
 from types import SimpleNamespace
 

@@ -9,13 +9,14 @@
 // a fresh master password.
 const net = require('net');
 const fs = require('fs');
+const safeUnlink = (p) => { try { fs.unlinkSync(p); } catch (_) {} };
 
 const socketPath = process.env.DEXBOT_TEST_SOCKET
     || '/run/user/0/dexbot2/dexbot-cred-daemon.sock';
 const readyPath = process.env.DEXBOT_TEST_READY
     || '/run/user/0/dexbot2/dexbot-cred-daemon.ready';
 
-try { fs.unlinkSync(socketPath); } catch (_) {}
+safeUnlink(socketPath)
 const server = net.createServer((socket) => {
     let buffer = '';
     socket.on('data', (data) => {

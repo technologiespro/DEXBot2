@@ -94,6 +94,7 @@ const {
 const { fetchBootstrapPassword } = require('./modules/launcher/credential_bootstrap');
 const { normalizeBootstrapCredential } = require('./modules/launcher/credential_secret');
 const Logger = require('./modules/logger');
+const { ensureDir, safeUnlink } = require('./modules/utils/fs_utils');
 const daemonLogger = new Logger('credential-daemon');
 
 // Resolve project root — handles running from dist/ (compiled) vs source
@@ -260,7 +261,7 @@ async function resolveVaultSecret() {
             const bootstrapSocket = fs.readFileSync(bootstrapPathFile, 'utf-8').trim();
             if (bootstrapSocket) {
                 delete process.env.DEXBOT_CRED_BOOTSTRAP_PATH_FILE;
-                try { fs.unlinkSync(bootstrapPathFile); } catch (_) {}
+                safeUnlink(bootstrapPathFile)
                 daemonLogger.log?.(`[credential-daemon] Resolving vault secret from bootstrap path file: ${bootstrapSocket}`);
                 const secret = await fetchBootstrapPassword({ socketPath: bootstrapSocket, retries: 2 });
                 daemonLogger.log?.('[credential-daemon] Bootstrap secret transfer completed');
@@ -270,7 +271,7 @@ async function resolveVaultSecret() {
             // Bootstrap path file was consumed on a previous run (or never
             // written).  This is normal for a PM2 restart/resurrect — the
             // daemon is locked and needs re-authentication.
-            try { fs.unlinkSync(bootstrapPathFile); } catch (_) {}
+            safeUnlink(bootstrapPathFile)
             if (!process.stdin || !process.stdin.isTTY) {
                 daemonLogger.log?.(
                     '[credential-daemon] Credential daemon is locked — no bootstrap path file and no TTY. ' +
@@ -508,7 +509,7 @@ async function initialize() {
         const auditLogDir = path.join(PROJECT_ROOT, 'profiles', 'logs');
         if (!fs.existsSync(auditLogDir)) {
             try {
-                fs.mkdirSync(auditLogDir, { recursive: true, mode: 0o700 });
+                ensureDir(auditLogDir, { mode: 0o700 });
             } catch (err: any) {
                 debugLog(`Failed to create audit log directory ${auditLogDir}: ${err.message}`);
             }

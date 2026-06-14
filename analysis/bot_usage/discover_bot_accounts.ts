@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+const { writeJSON } = require('../../modules/utils/fs_utils');
+
 /**
  * DEXBOT ACCOUNT DISCOVERY
  *
@@ -339,7 +341,7 @@ async function run() {
         console.log('  No accounts found. Try a larger --days window or lower --min-creates.');
         if (opts.outputJson) {
             const fs = require('fs');
-            fs.writeFileSync(opts.outputJson, JSON.stringify({ results: [], note: 'No accounts found', opts }, null, 2));
+            writeJSON(opts.outputJson, { results: [], note: 'No accounts found', opts });
             console.log(`  Wrote empty results to ${opts.outputJson}`);
         }
         return;
@@ -559,7 +561,7 @@ async function run() {
             sellCount:   r.sellCount,
             pairAssets:  r.pairAssets,
         }));
-        fs.writeFileSync(opts.outputJson, JSON.stringify({ results: exportData, opts: { days: opts.days, minCreates: opts.minCreates, cvThreshold: opts.cvThreshold, skipGrid: opts.skipGrid, timestamp: new Date().toISOString() } }, null, 2));
+        writeJSON(opts.outputJson, { results: exportData, opts: { days: opts.days, minCreates: opts.minCreates, cvThreshold: opts.cvThreshold, skipGrid: opts.skipGrid, timestamp: new Date().toISOString() } });
         console.log(` Results exported to ${opts.outputJson}`);
         console.log('');
     }

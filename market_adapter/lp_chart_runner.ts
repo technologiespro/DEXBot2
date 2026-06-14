@@ -32,6 +32,7 @@ const { loadStrategiesForLpChart } = require('./lp_chart_strategy_loader');
 const { findLatestLpData } = require('./utils/data_discovery');
 
 const { PROJECT_ROOT: ROOT } = require('./utils/paths');
+const { ensureDir, readJSON } = require('../modules/utils/fs_utils');
 const LP_DATA_DIR = path.join(ROOT, 'market_adapter', 'data', 'lp');
 const ANALYSIS_CHARTS_DIR = path.join(ROOT, 'analysis', 'charts');
 const AMA_PROFILES_FILE = path.join(ROOT, 'profiles', 'market_profiles.json');
@@ -220,7 +221,7 @@ function resolveLpDataFile(dataFile?: string): string {
 
 function loadLpDataFile(dataFile?: string): LpDataBundle {
     const resolved = resolveLpDataFile(dataFile);
-    const raw: Record<string, unknown> = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+    const raw: Record<string, unknown> = readJSON(resolved);
     const meta = (raw.meta ?? null) as LpMeta | null;
     const candles: unknown[] = Array.isArray(raw?.candles) ? (raw.candles as unknown[]) : (Array.isArray(raw) ? (raw as unknown[]) : []);
     if (!Array.isArray(candles) || candles.length === 0) {
@@ -312,7 +313,7 @@ function calculateMetrics(amaValues: number[], candles: LpCandleObject[]): Metri
 
 function writeChartHtml({ meta, candleArrays, amaResults, outFile }: ChartHtmlParams): void {
     const html = generateHTML(meta, candleArrays, amaResults);
-    fs.mkdirSync(path.dirname(outFile), { recursive: true });
+    ensureDir(path.dirname(outFile));
     fs.writeFileSync(outFile, html);
 }
 

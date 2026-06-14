@@ -3,6 +3,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+const { ensureDir, safeUnlink, writeJSON } = require('../modules/utils/fs_utils');
 
 const {
     findLatestLpData,
@@ -14,14 +15,12 @@ const {
 } = require('../market_adapter/lp_chart_strategy_loader');
 
 function writeJson(filePath, payload) {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
+    ensureDir(path.dirname(filePath));
+    writeJSON(filePath, payload);
 }
 
 function removeFile(filePath) {
-    try {
-        fs.unlinkSync(filePath);
-    } catch (_) {}
+    safeUnlink(filePath)
 }
 
 function makeAmaConfig(name, erPeriod, fastPeriod, slowPeriod) {

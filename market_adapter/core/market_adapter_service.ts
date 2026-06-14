@@ -26,6 +26,7 @@ const {
 const { DEFAULT_CONFIG, MARKET_ADAPTER } = require('../../modules/constants');
 const { resolveConfiguredPriceBound } = require('../../modules/order/utils/order');
 const Logger = require('../../modules/logger');
+const { roundTo } = require('../../modules/utils/math_utils');
 const marketAdapterServiceLogger = new Logger('MarketAdapterService');
 
 const AMA_SLOPE_PERCENT_MODE_PER_BAR = 'perBar';
@@ -84,13 +85,6 @@ function normalizePersistedAmaSlopeDiagnostics(data: any, lookbackBars: any){
     return normalized;
 }
 
-function roundTo(value: any, places: any = 6){
-    const n = Number(value);
-    const scale = 10 ** Math.max(0, Math.floor(places));
-    if (!Number.isFinite(n)) return null;
-    return Math.round(n * scale) / scale;
-}
-
 function computeGridPriceOffsetPlan(bot: any, amaSlope: any){
     const targetSpreadPercentRaw = Number(bot?.targetSpreadPercent);
     const targetSpreadPercent = Number.isFinite(targetSpreadPercentRaw) && targetSpreadPercentRaw > 0
@@ -107,15 +101,15 @@ function computeGridPriceOffsetPlan(bot: any, amaSlope: any){
         ? Math.min(directionalSlope / maxSlopeOffset, 1)
         : 0;
     const direction = trend === 'UP' ? 1 : trend === 'DOWN' ? -1 : 0;
-    const gridPriceOffsetPct = roundTo(direction * slopeRatio * maxGridPriceOffsetPct, 6) || 0;
+    const gridPriceOffsetPct = roundTo(direction * slopeRatio * maxGridPriceOffsetPct, 1e6) || 0;
 
     return {
         trend: trend || 'NEUTRAL',
         rawSlopeOffset: Number.isFinite(rawSlopeOffset) ? rawSlopeOffset : null,
         maxSlopeOffset: Number.isFinite(maxSlopeOffset) ? maxSlopeOffset : null,
-        slopeRatio: roundTo(slopeRatio, 6) || 0,
-        targetSpreadPercent: roundTo(targetSpreadPercent, 6),
-        maxGridPriceOffsetPct: roundTo(maxGridPriceOffsetPct, 6),
+        slopeRatio: roundTo(slopeRatio, 1e6) || 0,
+        targetSpreadPercent: roundTo(targetSpreadPercent, 1e6),
+        maxGridPriceOffsetPct: roundTo(maxGridPriceOffsetPct, 1e6),
         gridPriceOffsetPct,
     };
 }
@@ -762,7 +756,7 @@ class MarketAdapterService {
                 : (Math.abs(regimeAdjusted) < outputThreshold ? 0 : regimeAdjusted);
             const off = Math.max(-offsetClamp, Math.min(offsetClamp, gatedOff * gain));
             gatedOffSeries[i] = gatedOff;
-            combinedOffSeries[i] = Math.round(off * 1000) / 1000;
+            combinedOffSeries[i] = roundTo(off, 1000);
         }
 
         const confirmBars = Math.max(0, Math.min(5, Math.round(signalConfirmBars)));
@@ -812,7 +806,7 @@ class MarketAdapterService {
 
         const lastAmaOffset = useAmaBlend ? (amaOffsets[amaOffsets.length - 1] ?? 0) : 0;
         const amaSlopeGated = slopeResult.isReady
-            ? Math.round((alpha * (lastAmaOffset / channelNorm) * gain * regimeMultiplier) * 1000) / 1000
+            ? roundTo(alpha * (lastAmaOffset / channelNorm) * gain * regimeMultiplier, 1000)
             : 0;
 
         const amaSlope = {
@@ -856,8 +850,8 @@ class MarketAdapterService {
         const volPenalty = slopeResult.isReady ? (slopeResult.symmetricDelta ?? 0) : 0;
         const trendOff   = belowMinOutputThreshold ? 0 : finalOff;
 
-        const effectiveSell = Math.round(clamp(staticSell - trendOff + volPenalty, MIN_W, MAX_W) * 100) / 100;
-        const effectiveBuy  = Math.round(clamp(staticBuy  + trendOff + volPenalty, MIN_W, MAX_W) * 100) / 100;
+        const effectiveSell = roundTo(clamp(staticSell - trendOff + volPenalty, MIN_W, MAX_W), 100);
+        const effectiveBuy  = roundTo(clamp(staticBuy  + trendOff + volPenalty, MIN_W, MAX_W), 100);
 
         const weights = {
             sell: effectiveSell,

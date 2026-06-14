@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { resolveProjectRoot } = require('./launcher/runtime_entry');
+const { readJSON } = require('./utils/fs_utils');
 
 const CODE_ROOT = path.join(__dirname, '..');
 const ROOT = resolveProjectRoot(CODE_ROOT);
@@ -44,7 +45,7 @@ function loadMarketAdapterWhitelist(): Map<string, WhitelistFlags> | false {
     }
 
     try {
-        const json = JSON.parse(fs.readFileSync(WHITELIST_FILE, 'utf8'));
+        const json = readJSON(WHITELIST_FILE);
         const raw = json?.whitelist;
         const map = new Map<string, WhitelistFlags>();
 

@@ -3,6 +3,7 @@
 const { HurstAnalyzer } = require('../../../analysis/trend_detection/hurst_analyzer');
 const { PermutationEntropyAnalyzer } = require('../../../analysis/trend_detection/permutation_entropy_analyzer');
 const { MARKET_ADAPTER } = require('../../../modules/constants');
+const { roundTo } = require('../../../modules/utils/math_utils');
 const HURST_CONFIG = MARKET_ADAPTER.HURST_CONFIG;
 const PE_CONFIG = MARKET_ADAPTER.PE_CONFIG;
 
@@ -165,13 +166,13 @@ function computeRegimeMultiplier(closes: any, opts: any = {}) {
     const finalMult = Math.min(rawMult, 1.0);
 
     return {
-        multiplier:  Math.round(finalMult * 1000) / 1000,
+        multiplier:  roundTo(finalMult, 1000),
         hurst:       h,
-        pe:          Math.round(ne * 10000) / 10000,
+        pe:          roundTo(ne, 10000),
         hurstRegime: classifyHurstRegime(h, hurstZoneBand),
         peRegime:    classifyPeRegime(ne, peNodes),
         isReady:     true,
-        series:      series.map((value) => Math.round(value * 1000) / 1000),
+        series:      series.map((value) => roundTo(value, 1000)),
     };
 }
 

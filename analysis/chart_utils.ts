@@ -6,6 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { ensureDir } = require('../modules/utils/fs_utils');
 
 function escapeHtml(str) {
     return String(str).replace(/[&<>"']/g, (m) => ({
@@ -29,7 +30,7 @@ function toEpochSeconds(ts, fallbackIdx) {
 
 function writeChartFile(filePath, html) {
     const chartDir = path.dirname(filePath);
-    if (!fs.existsSync(chartDir)) fs.mkdirSync(chartDir, { recursive: true });
+    if (!fs.existsSync(chartDir)) ensureDir(chartDir);
     fs.writeFileSync(filePath, html, 'utf8');
 }
 

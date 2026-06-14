@@ -112,6 +112,7 @@ const {
 const { getCredentialReadyFilePath } = require('./credential_runtime');
 
 const Logger = require('./logger');
+const { readJSON } = require('./utils/fs_utils');
 const chainOrdersLogger = new Logger('ChainOrders');
 const { ORDER_EVENTS } = NATIVE_CLIENT;
 
@@ -493,7 +494,7 @@ async function executeViaDaemonToken(accountName, signingToken, operations) {
                     const ROOT = resolveProjectRoot(PARENT);
                     const readyFile = getCredentialReadyFilePath({ root: ROOT });
                     if (fs.existsSync(readyFile)) {
-                        const daemonInfo = JSON.parse(fs.readFileSync(readyFile, 'utf8'));
+                        const daemonInfo = readJSON(readyFile);
                         if (daemonInfo && typeof daemonInfo.pid === 'number') {
                             process.kill(daemonInfo.pid, 'SIGHUP');
                             chainOrdersLogger.log(`[credential-daemon] Sent SIGHUP (pid ${daemonInfo.pid}) to reload policy config`);

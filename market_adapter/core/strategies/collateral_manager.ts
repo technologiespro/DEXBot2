@@ -1,3 +1,4 @@
+const { roundTo } = require('../../../modules/utils/math_utils');
 'use strict';
 
 /**
@@ -64,7 +65,7 @@ function adjustCollateralRatio(trendData: any, minRatio = 1.5, maxRatio = 2.0) {
 
     // Clamp to bounds
     targetRatio = Math.max(min, Math.min(max, targetRatio));
-    targetRatio = Math.round(targetRatio * 1000) / 1000;
+    targetRatio = roundTo(targetRatio, 1000);
 
     return {
         targetRatio,

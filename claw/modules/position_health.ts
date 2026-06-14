@@ -9,6 +9,7 @@
 'use strict';
 
 const { CR_ZONES } = require('../../modules/constants');
+const { roundToDecimals } = require('../../modules/utils/math_utils');
 
 const DEFAULT_PRICE_RANGE_RATIO = 3.0;
 
@@ -132,16 +133,6 @@ function assessAllPositions(positions: any[], trendSignal: Record<string, any> |
   return (positions || []).map((p) => assessPosition(p, trendSignal));
 }
 
-function roundNumber(value: any, digits: number = 3) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return 0;
-  }
-  const factor = 10 ** digits;
-  return Math.round(numeric * factor) / factor;
-}
-
-
 function parseRatioValue(value: any, referencePrice: any, mode: string) {
   if (typeof value === 'string') {
     const match = value.trim().match(/^([0-9]+(?:\.[0-9]+)?)x$/i);
@@ -160,7 +151,7 @@ function parseRatioValue(value: any, referencePrice: any, mode: string) {
 }
 
 function formatRatioAsMultiplier(ratio: any) {
-  const rounded = roundNumber(ratio, 2);
+  const rounded = roundToDecimals(ratio, 2);
   return `${rounded}x`;
 }
 
@@ -241,8 +232,8 @@ function computePriceRangeRatioPlan(botConfig: Record<string, any> = {}, options
   const recommendedRatio = observedRatio !== null && Number.isFinite(observedRatio)
     ? Math.min(maxRatio, Math.max(minRatio, observedRatio * headroomFactor * touchExpansionFactor))
     : current.ratio;
-  const roundedRecommendedRatio = roundNumber(recommendedRatio, 2);
-  const ratioDelta = roundNumber(roundedRecommendedRatio - current.ratio, 2);
+  const roundedRecommendedRatio = roundToDecimals(recommendedRatio, 2);
+  const ratioDelta = roundToDecimals(roundedRecommendedRatio - current.ratio, 2);
   const shouldUpdate = Math.abs(ratioDelta) >= minRangeRatioDelta;
   let reason = 'keep_existing_range_ratio';
   if (!Number.isFinite(observedRatio)) {
@@ -256,9 +247,9 @@ function computePriceRangeRatioPlan(botConfig: Record<string, any> = {}, options
   return {
     classification: classifyPriceRangeRatio(roundedRecommendedRatio),
     currentClassification: classifyPriceRangeRatio(current.ratio),
-    currentRatio: roundNumber(current.ratio, 2),
+    currentRatio: roundToDecimals(current.ratio, 2),
     isSymmetric: current.isSymmetric,
-    observedRatio: Number.isFinite(observedRatio) ? roundNumber(observedRatio, 2) : null,
+    observedRatio: Number.isFinite(observedRatio) ? roundToDecimals(observedRatio, 2) : null,
     ratioDelta,
     reason,
     recommendedRatio: roundedRecommendedRatio,

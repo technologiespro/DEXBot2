@@ -8,6 +8,7 @@ console.log('Running logger tests');
 
 const Logger = require('../modules/order/index').logger;
 const { createPm2AwareLogger } = require('../modules/logger');
+const { safeUnlink } = require('../modules/utils/fs_utils');
 
 // Capture console output by stream
 let captured: any[] = [];
@@ -81,7 +82,7 @@ assert.strictEqual(createPm2AwareLogger('default').quiet, true, 'PM2-aware logge
 assert.strictEqual(createPm2AwareLogger('verbose', { quietUnderPm2: false }).quiet, false, 'PM2 quieting can be disabled with quietUnderPm2=false');
 
 const pm2DirectLogFile = path.join(os.tmpdir(), `dexbot-logger-pm2-${process.pid}.log`);
-try { fs.unlinkSync(pm2DirectLogFile); } catch (err) {}
+safeUnlink(pm2DirectLogFile)
 const pm2Logger = new Logger('pm2-direct-file', { logFile: pm2DirectLogFile, quietUnderPm2: false, quiet: false });
 let pm2Captured: any[] = [];
 console.log = (...args) => { pm2Captured.push(args.join(' ')); };
@@ -134,7 +135,7 @@ assert.strictEqual(corrLogger.correlationId, null, 'setCorrelationId(null) shoul
 
 // 3. JSON output
 const jsonLogFile = path.join(os.tmpdir(), `dexbot-logger-json-${process.pid}.log`);
-try { fs.unlinkSync(jsonLogFile); } catch (err) {}
+safeUnlink(jsonLogFile)
 const jsonLogger = new Logger('JsonTest', {
     logFile: jsonLogFile,
     level: 'info',
@@ -155,11 +156,11 @@ assert.strictEqual(parsed1.correlationId, undefined, 'first JSON line should not
 const parsed2 = JSON.parse(jsonLines[1]);
 assert.strictEqual(parsed2.correlationId, 'corr-999', 'second JSON line should include correlationId');
 assert.strictEqual(parsed2.level, 'WARN', 'JSON level should be WARN');
-try { fs.unlinkSync(jsonLogFile); } catch (err) {}
+safeUnlink(jsonLogFile)
 
 // 4. flush()
 const flushLogFile = path.join(os.tmpdir(), `dexbot-logger-flush-${process.pid}.log`);
-try { fs.unlinkSync(flushLogFile); } catch (err) {}
+safeUnlink(flushLogFile)
 const flushLogger = new Logger('FlushTest', {
     logFile: flushLogFile,
     level: 'info',
@@ -169,7 +170,7 @@ flushLogger.info('flush test message');
 await flushLogger.flush();
 const flushContent = fs.readFileSync(flushLogFile, 'utf8');
 assert(flushContent.includes('flush test message'), 'flush() should ensure data is written to file');
-try { fs.unlinkSync(flushLogFile); } catch (err) {}
+safeUnlink(flushLogFile)
 
 // 5. Levels map includes critical
 assert.strictEqual(logger.levels.critical, 4, 'critical should be level 4 in the levels map');
@@ -186,9 +187,9 @@ assert(infoCaptured[0].includes('should appear'), 'info-level logger should show
 
 // 7. Rotation — write enough to trigger rotate, verify .1 exists with expected content
 const rotateLogFile = path.join(os.tmpdir(), `dexbot-logger-rotate-${process.pid}.log`);
-try { fs.unlinkSync(rotateLogFile); } catch (err) {}
-try { fs.unlinkSync(rotateLogFile + '.1'); } catch (err) {}
-try { fs.unlinkSync(rotateLogFile + '.2'); } catch (err) {}
+safeUnlink(rotateLogFile)
+safeUnlink(rotateLogFile + '.1')
+safeUnlink(rotateLogFile + '.2')
 const rotateLogger = new Logger('RotateTest', {
     logFile: rotateLogFile,
     level: 'info',
@@ -223,9 +224,9 @@ assert(rotated2Content.includes('X'.repeat(200)), 'rotated .2 should contain fir
 rotateLogger.info('W'.repeat(200));
 await rotateLogger.flush();
 assert(!fs.existsSync(rotateLogFile + '.3'), 'rotated .3 should be pruned (maxFiles=2)');
-try { fs.unlinkSync(rotateLogFile); } catch (err) {}
-try { fs.unlinkSync(rotateLogFile + '.1'); } catch (err) {}
-try { fs.unlinkSync(rotateLogFile + '.2'); } catch (err) {}
+safeUnlink(rotateLogFile)
+safeUnlink(rotateLogFile + '.1')
+safeUnlink(rotateLogFile + '.2')
 
 console.log('logger tests passed');
 }

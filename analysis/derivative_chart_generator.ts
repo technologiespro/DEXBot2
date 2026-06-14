@@ -3,6 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 const { escapeHtml, serializeJsonForScript, toEpochSeconds, UPLOT_SHARED_SCRIPT } = require('./chart_utils');
+const { ensureDir, readJSON } = require('../modules/utils/fs_utils');
+const { fixedTo } = require('../modules/utils/math_utils');
 function parseArgs(argv = process.argv.slice(2)) {
     const cfg = {
         inputFile: null,
@@ -180,7 +182,7 @@ function generateHTML(data, title) {
         return { up, down };
     })();
     const candleCount = results.length;
-    const fmtPrice = (v) => (v === null ? 'n/a' : Number(v).toFixed(6));
+    const fmtPrice = (v) => (v === null ? 'n/a' : fixedTo(v, 6));
     const fmtSignedPrice = (v) => (v === null ? 'n/a' : `${v >= 0 ? '+' : ''}${Math.round(Number(v))}`);
     const fmtPct = (v) => (v === null ? 'n/a' : `${v >= 0 ? '+' : ''}${Math.round(Number(v))}%`);
     const fmtShare = (count) => (candleCount > 0 ? `${Math.round((count / candleCount) * 100)}%` : 'n/a');
@@ -700,7 +702,7 @@ let pendingRangeRaf = 0;
 const [xMin, xMax] = [dates[0], dates[dates.length - 1]];
 try {
 priceChart = initChart('price-chart', {
-    ...makePlotBase(false, (u, vals) => vals.map((v) => Number(v).toFixed(6)), {
+    ...makePlotBase(false, (u, vals) => vals.map((v) => fixedTo(v, 6)), {
         auto: true,
         distr: 3,
         log: 10,
@@ -713,7 +715,7 @@ priceChart = initChart('price-chart', {
     }),
     axes: [
         makeAxis(false, 'x'),
-        makeYAxis(true, (u, vals) => vals.map((v) => Number(v).toFixed(6)), 62, 'Price'),
+        makeYAxis(true, (u, vals) => vals.map((v) => fixedTo(v, 6)), 62, 'Price'),
     ],
     plugins: [tooltipPlugin()],
     series: [
@@ -785,7 +787,7 @@ interpChart = initChart('interp-chart', {
     ],
 }, [dates, interpBullBlock, interpBullWeakBlock, interpOBBlock, interpBearBlock, interpBearWeakBlock, interpOSBlock, interpValues, bullWeakEntryMarkers, bullConfirmationMarkers, lateBullMarkers, bearWeakEntryMarkers, bearConfirmationMarkers, lateBearMarkers]);
 macdChart = initChart('macd-chart', {
-    ...makePlotBase(false, (u, vals) => vals.map((v) => Number(v).toFixed(4)), {
+    ...makePlotBase(false, (u, vals) => vals.map((v) => fixedTo(v, 4)), {
         auto: true,
         range: (u, min, max) => {
             const base = padRange(min, max, 0.12, 0.12);
@@ -794,7 +796,7 @@ macdChart = initChart('macd-chart', {
     }),
     axes: [
         makeAxis(false, 'x'),
-        makeYAxis(true, (u, vals) => vals.map((v) => Number(v).toFixed(4)), 62, 'MACD %'),
+        makeYAxis(true, (u, vals) => vals.map((v) => fixedTo(v, 4)), 62, 'MACD %'),
     ],
     series: [
         { label: 'Time' },
@@ -806,12 +808,12 @@ macdChart = initChart('macd-chart', {
     ],
 }, [dates, macdHistUp, macdHistDown, macdLine, macdSignal, dates.map(() => 0)]);
 rsiChart = initChart('rsi-chart', {
-    ...makePlotBase(true, (u, vals) => vals.map((v) => Number(v).toFixed(1)), {
+    ...makePlotBase(true, (u, vals) => vals.map((v) => fixedTo(v, 1)), {
         range: (u, min, max) => [0, 100],
     }),
     axes: [
         makeAxis(true, 'x'),
-        makeYAxis(true, (u, vals) => vals.map((v) => Number(v).toFixed(1)), 56, 'RSI'),
+        makeYAxis(true, (u, vals) => vals.map((v) => fixedTo(v, 1)), 56, 'RSI'),
     ],
     series: [
         { label: 'Time' },
@@ -860,9 +862,9 @@ raf(() => sizeCharts());
 }
 async function main() {
     const cfg = parseArgs();
-    const data = JSON.parse(fs.readFileSync(cfg.inputFile, 'utf8'));
+    const data = readJSON(cfg.inputFile);
     const html = generateHTML(data, cfg.title);
-    fs.mkdirSync(path.dirname(cfg.outputFile), { recursive: true });
+    ensureDir(path.dirname(cfg.outputFile));
     fs.writeFileSync(cfg.outputFile, html, 'utf8');
     if (!cfg.quiet) console.log(`Chart written to ${cfg.outputFile}`);
 }

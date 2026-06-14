@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
+const { readJSON } = require('../modules/utils/fs_utils');
 
 const ROOT_DEPTH_1 = path.dirname(__dirname);
 const root = resolveProjectRoot(ROOT_DEPTH_1);
@@ -35,7 +36,7 @@ function assertMainnetCorpusReport() {
 
     let report;
     try {
-        report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+        report = readJSON(reportPath);
     } catch (err: any) {
         console.error(`\nInvalid mainnet corpus report JSON: ${err.message}`);
         process.exit(1);

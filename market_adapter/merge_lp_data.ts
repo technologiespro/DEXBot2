@@ -24,6 +24,7 @@
 const fs   = require('fs');
 const path = require('path');
 const { mergeCandles } = require('./candle_utils');
+const { ensureDir, readJSON, writeJSON } = require('../modules/utils/fs_utils');
 
 // ─── CLI ──────────────────────────────────────────────────────────────────────
 
@@ -88,7 +89,7 @@ function run() {
     const [dataA, dataB] = files.map((f, i) => {
         const resolved = path.resolve(f);
         if (!fs.existsSync(resolved)) throw new Error(`File not found: ${resolved}`);
-        const parsed = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+        const parsed = readJSON(resolved);
         console.log(`  file${i + 1}: ${path.relative(process.cwd(), resolved)}  (${parsed.candles.length} candles)`);
         return parsed;
     });
@@ -129,8 +130,8 @@ function run() {
         ? path.resolve(out)
         : path.join(path.dirname(path.resolve(files[1])), path.basename(files[1]));
 
-    fs.mkdirSync(path.dirname(outPath), { recursive: true });
-    fs.writeFileSync(outPath, JSON.stringify(output, null, 2));
+    ensureDir(path.dirname(outPath));
+    writeJSON(outPath, output);
     const kb = (fs.statSync(outPath).size / 1024).toFixed(1);
 
     console.log('');

@@ -2,6 +2,7 @@
 
 const { MARKET_ADAPTER } = require('../../modules/constants');
 const { escapeHtml, serializeJsonForScript, toEpochSeconds, UPLOT_SHARED_SCRIPT } = require('../chart_utils');
+const { roundTo } = require('../../modules/utils/math_utils');
 
 function generateHTML(data, title = 'ATR Volatility Research') {
     const results = data.allResults || [];
@@ -416,7 +417,7 @@ function generateHTML(data, title = 'ATR Volatility Research') {
             const end = Math.ceil(hi / step) * step;
             const splits = [];
             for (let v = start; v <= end + 1e-9; v += step) {
-                const rounded = Math.round(v * 100) / 100;
+                const rounded = roundTo(v, 100);
                 if (!splits.includes(rounded)) splits.push(rounded);
             }
             if (!splits.includes(0)) splits.push(0);

@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const policy = require('../modules/credential_policy');
+const { readJSON, writeJSON } = require('../modules/utils/fs_utils');
 
 console.log('Testing allowedOps per-operation parameter constraints...\n');
 
@@ -286,7 +287,7 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
 
     // Test 10: Required loader should accept valid policy
     console.log('[Test 10] Required loader accepts valid policy');
-    fs.writeFileSync(policyPath, JSON.stringify(validPolicy, null, 2), 'utf8');
+    writeJSON(policyPath, validPolicy);
     const requiredPolicy = policy.loadRequiredPolicyConfig(policyPath);
     assert.deepStrictEqual(requiredPolicy, validPolicy, 'Valid policy should load successfully');
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -299,7 +300,7 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
     const ensuredPolicy = policy.ensurePolicyConfig(preflightPath);
     assert.deepStrictEqual(ensuredPolicy, { accounts: {} }, 'Missing policy should be initialized minimally');
     assert.deepStrictEqual(
-        JSON.parse(fs.readFileSync(preflightPath, 'utf8')),
+        readJSON(preflightPath),
         { accounts: {} },
         'Initialized policy should be written to disk'
     );

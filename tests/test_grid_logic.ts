@@ -15,6 +15,7 @@ const { OrderManager } = require('../modules/order/manager');
 const { allocateFundsByWeights, getSingleDustThreshold } = require('../modules/order/utils/math');
 const { shouldFlagOutOfSpread } = require('../modules/order/utils/order');
 const { WHITELIST_FILE, resetMarketAdapterWhitelistCache } = require('../modules/market_adapter_whitelist');
+const { ensureDir, safeUnlink, writeJSON } = require('../modules/utils/fs_utils');
 const _distWhitelist = require(`../${BUILD_DIR}/modules/market_adapter_whitelist.js`);
 const _resetBothWhitelistCaches = () => {
     resetMarketAdapterWhitelistCache();
@@ -241,8 +242,8 @@ async function runTests() {
         const ordersDir = path.join(__dirname, '..', 'profiles', 'orders');
         const amaFile = path.join(ordersDir, `${botKey}.dynamicgrid.json`);
 
-        fs.mkdirSync(ordersDir, { recursive: true });
-        fs.writeFileSync(amaFile, JSON.stringify({ centerPrice: 1000, updatedAt: new Date().toISOString() }, null, 2) + '\n', 'utf8');
+        ensureDir(ordersDir);
+        writeJSON(amaFile, { centerPrice: 1000, updatedAt: new Date().toISOString() });
 
         try {
             delete require.cache[gridModulePath];
@@ -276,7 +277,7 @@ async function runTests() {
             assert(manager.config.minPrice > 400 && manager.config.minPrice < 600, 'minPrice should be resolved from AMA center in case-insensitive mode');
             assert(manager.config.maxPrice > 1800 && manager.config.maxPrice < 2200, 'maxPrice should be resolved from AMA center in case-insensitive mode');
         } finally {
-            try { fs.unlinkSync(amaFile); } catch (_) {}
+            safeUnlink(amaFile)
         }
     }
 
@@ -289,14 +290,14 @@ async function runTests() {
             ? fs.readFileSync(WHITELIST_FILE, 'utf8')
             : null;
 
-        fs.mkdirSync(ordersDir, { recursive: true });
-        fs.writeFileSync(WHITELIST_FILE, JSON.stringify({
+        ensureDir(ordersDir);
+        writeJSON(WHITELIST_FILE, {
             whitelist: {
                 [botKey]: { ama: true, dynamicWeight: true, asymmetricBounds: true }
             }
-        }, null, 2) + '\n', 'utf8');
+        });
         _resetBothWhitelistCaches();
-        fs.writeFileSync(amaFile, JSON.stringify({
+        writeJSON(amaFile, {
             centerPrice: 1100,
             amaCenterPrice: 1000,
             dynamicWeights: {
@@ -306,7 +307,7 @@ async function runTests() {
                 maxAsymmetryFactor: 0.35
             },
             updatedAt: new Date().toISOString(),
-        }, null, 2) + '\n', 'utf8');
+        });
 
         try {
             delete require.cache[gridModulePath];
@@ -351,9 +352,9 @@ async function runTests() {
             assert(Math.abs(manager.config.minPrice - 591.3978494623656) < 1e-9, 'AMA gridPrice should use the persisted center price plus range scaling');
             assert.strictEqual(manager.config.maxPrice, 2354, 'AMA gridPrice should use the persisted center price plus range scaling');
         } finally {
-            try { fs.unlinkSync(amaFile); } catch (_) {}
+            safeUnlink(amaFile)
             if (originalWhitelist == null) {
-                try { fs.unlinkSync(WHITELIST_FILE); } catch (_) {}
+                safeUnlink(WHITELIST_FILE)
             } else {
                 fs.writeFileSync(WHITELIST_FILE, originalWhitelist, 'utf8');
             }
@@ -370,20 +371,20 @@ async function runTests() {
             ? fs.readFileSync(WHITELIST_FILE, 'utf8')
             : null;
 
-        fs.mkdirSync(ordersDir, { recursive: true });
-        fs.writeFileSync(WHITELIST_FILE, JSON.stringify({
+        ensureDir(ordersDir);
+        writeJSON(WHITELIST_FILE, {
             whitelist: {
                 [botKey]: { ama: true, dynamicWeight: true, asymmetricBounds: true }
             }
-        }, null, 2) + '\n', 'utf8');
+        });
         _resetBothWhitelistCaches();
-        fs.writeFileSync(amaFile, JSON.stringify({
+        writeJSON(amaFile, {
             gridCenterPrice: 1000,
             centerPrice: 1000,
             amaCenterPrice: 1000,
             gridPriceOffsetPct: 0.8,
             updatedAt: new Date().toISOString(),
-        }, null, 2) + '\n', 'utf8');
+        });
 
         try {
             delete require.cache[gridModulePath];
@@ -419,9 +420,9 @@ async function runTests() {
             assert(Math.abs(manager._lastGridPricingContext.offsetAdjustedStartPrice - 100.8) < 1e-9, 'AMA spread offset should adjust only the market placement price before bounds fallback');
             assert(Math.abs(manager._lastGridPricingContext.startPrice - 1000) < 1e-9, 'if the adjusted market price is still out of bounds, rebuild should continue to fall back to the AMA grid center');
         } finally {
-            try { fs.unlinkSync(amaFile); } catch (_) {}
+            safeUnlink(amaFile)
             if (originalWhitelist == null) {
-                try { fs.unlinkSync(WHITELIST_FILE); } catch (_) {}
+                safeUnlink(WHITELIST_FILE)
             } else {
                 fs.writeFileSync(WHITELIST_FILE, originalWhitelist, 'utf8');
             }
@@ -438,14 +439,14 @@ async function runTests() {
             ? fs.readFileSync(WHITELIST_FILE, 'utf8')
             : null;
 
-        fs.mkdirSync(ordersDir, { recursive: true });
-        fs.writeFileSync(WHITELIST_FILE, JSON.stringify({
+        ensureDir(ordersDir);
+        writeJSON(WHITELIST_FILE, {
             whitelist: {
                 [botKey]: { ama: true, dynamicWeight: true, asymmetricBounds: false }
             }
-        }, null, 2) + '\n', 'utf8');
+        });
         _resetBothWhitelistCaches();
-        fs.writeFileSync(amaFile, JSON.stringify({
+        writeJSON(amaFile, {
             gridCenterPrice: 1000,
             centerPrice: 1000,
             amaCenterPrice: 1000,
@@ -457,7 +458,7 @@ async function runTests() {
                 maxSlopeOffset: 1,
             },
             updatedAt: new Date().toISOString(),
-        }, null, 2) + '\n', 'utf8');
+        });
 
         try {
             delete require.cache[gridModulePath];
@@ -493,9 +494,9 @@ async function runTests() {
             assert(Math.abs(manager._lastGridPricingContext.startPrice - 1000) < 1e-9, 'without the whitelist the rebuild should still fall back to the raw AMA center');
             assert.strictEqual(manager._lastGridPricingContext.rangeScalingFactor, null, 'range scaling should also be disabled by the same whitelist flag');
         } finally {
-            try { fs.unlinkSync(amaFile); } catch (_) {}
+            safeUnlink(amaFile)
             if (originalWhitelist == null) {
-                try { fs.unlinkSync(WHITELIST_FILE); } catch (_) {}
+                safeUnlink(WHITELIST_FILE)
             } else {
                 fs.writeFileSync(WHITELIST_FILE, originalWhitelist, 'utf8');
             }
@@ -519,20 +520,20 @@ async function runTests() {
         const distGridPath = require.resolve(`../${BUILD_DIR}/modules/order/grid.js`);
         const originalDistGridModule = require.cache[distGridPath];
 
-        fs.mkdirSync(ordersDir, { recursive: true });
-        fs.writeFileSync(WHITELIST_FILE, JSON.stringify({
+        ensureDir(ordersDir);
+        writeJSON(WHITELIST_FILE, {
             whitelist: {
                 [botKey]: { ama: true, dynamicWeight: true, asymmetricBounds: true }
             }
-        }, null, 2) + '\n', 'utf8');
+        });
         _resetBothWhitelistCaches();
-        fs.writeFileSync(amaFile, JSON.stringify({
+        writeJSON(amaFile, {
             gridCenterPrice: 1000,
             centerPrice: 1000,
             amaCenterPrice: 1000,
             gridPriceOffsetPct: 0.8,
             updatedAt: new Date().toISOString(),
-        }, null, 2) + '\n', 'utf8');
+        });
 
         try {
             systemModule.derivePrice = async () => 1000;
@@ -576,9 +577,9 @@ async function runTests() {
             else delete require.cache[gridModulePath];
             if (originalDistGridModule) require.cache[distGridPath] = originalDistGridModule;
             else delete require.cache[distGridPath];
-            try { fs.unlinkSync(amaFile); } catch (_) {}
+            safeUnlink(amaFile)
             if (originalWhitelist == null) {
-                try { fs.unlinkSync(WHITELIST_FILE); } catch (_) {}
+                safeUnlink(WHITELIST_FILE)
             } else {
                 fs.writeFileSync(WHITELIST_FILE, originalWhitelist, 'utf8');
             }

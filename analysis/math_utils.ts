@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const { readJSON } = require('../modules/utils/fs_utils');
 
 /**
  * Math utilities for analysis scripts.
@@ -103,7 +104,7 @@ function normalizeCandle(candle) {
  */
 function loadCandleFile(filePath) {
     if (!filePath || !fs.existsSync(filePath)) return { candles: [], meta: null };
-    const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const raw = readJSON(filePath);
     if (Array.isArray(raw)) return { candles: raw, meta: null };
     if (raw && Array.isArray(raw.candles)) return { candles: raw.candles, meta: raw.meta || raw };
     if (raw && Array.isArray(raw.data)) return { candles: raw.data, meta: raw };

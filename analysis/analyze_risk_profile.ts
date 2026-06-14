@@ -37,6 +37,7 @@ function quantileToSigma(q) {
     return normSInv((1 + q) / 2);
 }
 const { calcStdDev } = require('./math_utils');
+const { readJSON } = require('../modules/utils/fs_utils');
 function getAmaDeltaStdDev(closes, amaConfig, warmup) {
     const amaValues = calculateAMA(closes, amaConfig);
     const deltas = [];
@@ -78,7 +79,7 @@ function main() {
         console.error(`Data file not found: ${dataPath}`);
         process.exit(1);
     }
-    const data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+    const data = readJSON(dataPath);
     if (!data.candles || !Array.isArray(data.candles)) {
         console.error('Invalid data format: Expected "candles" array.');
         process.exit(1);

@@ -31,6 +31,7 @@ const { sendControlCommand } = require('../modules/launcher/supervisor_control')
 // Contains: REPOSITORY_URL, BRANCH, BUILD_DIR settings
 const { UPDATER, BUILD_DIR } = require('../modules/constants');
 const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
+const { readJSON } = require('../modules/utils/fs_utils');
 
 // Project root directory — handles running from scripts/ or dist/scripts/
 const ROOT = resolveProjectRoot(path.dirname(__dirname));
@@ -106,7 +107,7 @@ function detectMonolithicRuntime() {
 
     const detected = { wrapperPid, botPid: readLivePidFile(MONOLITHIC_BOT_PID_FILE), botNames: [] };
     try {
-        const info = JSON.parse(fs.readFileSync(MONOLITHIC_BOT_INFO_FILE, 'utf8'));
+        const info = readJSON(MONOLITHIC_BOT_INFO_FILE);
         if (Array.isArray(info.botNames)) {
             detected.botNames = info.botNames.map((name) => String(name));
         } else if (info.botName) {

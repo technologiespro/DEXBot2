@@ -17,6 +17,7 @@ const { calculateAMA, getAmaWarmupBars } = require('../market_adapter/core/strat
 const { KalmanTrendAnalyzer } = require('../analysis/trend_detection/kalman_trend_analyzer');
 const { buildKalmanVelocitySeries, computeAbsolutePercentileThreshold } = require('../analysis/trend_detection/kalman_velocity_smoothing');
 const { sleepUntilAlignedBoundary } = require('../market_adapter/test_helpers');
+const { roundToDecimals } = require('../modules/utils/math_utils');
 
 function generateCandles(count, price) {
     const candles = [];
@@ -95,11 +96,6 @@ function generateUpThenDownCandles(upCount, downCount, start = 100, upStep = 0.4
         candles.push([baseTs + index * 3600000, price, price, price, price, 1]);
     }
     return candles;
-}
-
-function roundTo(value, decimals) {
-    const factor = 10 ** decimals;
-    return Math.round(value * factor) / factor;
 }
 
 function clamp(value, min, max) {
@@ -351,7 +347,7 @@ function computeDirectionalOffsetSeries(parityInputs, { clampFinalOutput }) {
             ? clamp(gatedOff * gain, -offsetClamp, offsetClamp)
             : (gatedOff * gain);
         gatedOffSeries[i] = gatedOff;
-        combinedOffSeries[i] = roundTo(appliedOff, 3);
+        combinedOffSeries[i] = roundToDecimals(appliedOff, 3);
     }
 
     const { echoedAppliedSeries, echoedPreGainSeries } = latchConfirmedSeries(
@@ -2458,8 +2454,8 @@ async function testSlopeTriggerRecoversBaselineFromDynamicGridAfterStateClear() 
     assert.strictEqual(lastTrigger.previousGridResetAmaSlope.trend, persistedGridRangeScalingAmaSlope.trend);
     assert.strictEqual(lastTrigger.previousGridResetAmaSlope.slopeOffset, persistedGridRangeScalingAmaSlope.slopeOffset);
     assert.strictEqual(
-        roundTo(lastTrigger.previousGridResetAmaSlope.slopePct, 6),
-        roundTo(persistedGridRangeScalingAmaSlope.slopePct / MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS, 6),
+        roundToDecimals(lastTrigger.previousGridResetAmaSlope.slopePct, 6),
+        roundToDecimals(persistedGridRangeScalingAmaSlope.slopePct / MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS, 6),
         'slope trigger should normalize the persisted grid reset baseline from dynamicgrid.json before comparison'
     );
     assert.strictEqual(result.previousCenterPrice, 100, 'previous center should be restored from dynamicgrid.json after state clear');
@@ -2488,10 +2484,10 @@ function testLegacyStateSlopeDiagnosticsConvertToPerBar() {
     }, 9);
 
     assert.strictEqual(normalized.amaSlopePercentMode, 'perBar', 'legacy state should be promoted to per-bar mode');
-    assert.strictEqual(roundTo(normalized.amaSlope.slopePct, 6), 0.1, 'legacy amaSlope should be divided by lookback');
-    assert.strictEqual(roundTo(normalized.gridRangeScalingAmaSlope.slopePct, 6), -0.2, 'legacy reset baseline should be divided by lookback');
-    assert.strictEqual(roundTo(normalized.amaSlopeDeltaPercent, 6), 0.02, 'legacy slope delta should be divided by lookback');
-    assert.strictEqual(roundTo(normalized.amaSlopeThresholdPercent, 6), 0.01, 'legacy slope threshold should be divided by lookback');
+    assert.strictEqual(roundToDecimals(normalized.amaSlope.slopePct, 6), 0.1, 'legacy amaSlope should be divided by lookback');
+    assert.strictEqual(roundToDecimals(normalized.gridRangeScalingAmaSlope.slopePct, 6), -0.2, 'legacy reset baseline should be divided by lookback');
+    assert.strictEqual(roundToDecimals(normalized.amaSlopeDeltaPercent, 6), 0.02, 'legacy slope delta should be divided by lookback');
+    assert.strictEqual(roundToDecimals(normalized.amaSlopeThresholdPercent, 6), 0.01, 'legacy slope threshold should be divided by lookback');
 }
 
 function testMarkedPerBarStateSlopeDiagnosticsStayUnchanged() {
@@ -2612,8 +2608,8 @@ async function testLegacyDynamicGridSlopeBaselineIsNormalizedBeforeComparison() 
     assert.strictEqual(triggerWrites, 0, 'legacy window baseline should not emit a reset trigger');
     assert.strictEqual((state.bots[bot.botKey] as any).amaSlopePercentMode, 'perBar', 'state should persist the normalized unit marker');
     assert.strictEqual(
-        roundTo((state.bots[bot.botKey] as any).gridRangeScalingAmaSlope.slopePct, 6),
-        roundTo(currentSlopePct, 6),
+        roundToDecimals((state.bots[bot.botKey] as any).gridRangeScalingAmaSlope.slopePct, 6),
+        roundToDecimals(currentSlopePct, 6),
         'legacy reset baseline should be converted to the current per-bar slope before comparison'
     );
 }
@@ -4929,7 +4925,7 @@ async function testDynamicWeightChartParityMatchesLiveService() {
     );
     assert.deepStrictEqual(
         liveSeries.combinedOffSeries,
-        chartSeries.gatedOffSeries.map((value) => roundTo(clamp(value * parityInputs.gain, -parityInputs.offsetClamp, parityInputs.offsetClamp), 3)),
+        chartSeries.gatedOffSeries.map((value) => roundToDecimals(clamp(value * parityInputs.gain, -parityInputs.offsetClamp, parityInputs.offsetClamp), 3)),
         'live output should equal the chart shape after final gain and runtime clamping'
     );
 
@@ -4937,7 +4933,7 @@ async function testDynamicWeightChartParityMatchesLiveService() {
     const expectedVolatilityPenalty = parityInputs.slopeResult.isReady ? (parityInputs.slopeResult.symmetricDelta ?? 0) : 0;
     const expectedTrendOffset = expectedBelowThreshold ? 0 : liveSeries.finalOff;
     const expectedEffectiveWeights = {
-        sell: roundTo(
+        sell: roundToDecimals(
             clamp(
                 staticWeights.sell - expectedTrendOffset + expectedVolatilityPenalty,
                 MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT,
@@ -4945,7 +4941,7 @@ async function testDynamicWeightChartParityMatchesLiveService() {
             ),
             2
         ),
-        buy: roundTo(
+        buy: roundToDecimals(
             clamp(
                 staticWeights.buy + expectedTrendOffset + expectedVolatilityPenalty,
                 MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT,

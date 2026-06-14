@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { loadSettingsFile, resolveRawBotEntries } = require('../../modules/bot_settings');
 const { normalizeProfileDir } = require('./launcher_paths');
+const { ensureDir, writeJSON } = require('../../modules/utils/fs_utils');
 
 const LEGACY_MODE_ALIASES = {
   'unlock-start': 'unlock',
@@ -65,10 +66,10 @@ function saveConfig(config: Record<string, any>, options: Record<string, any> = 
 
   // Ensure directory exists
   if (!fs.existsSync(PROFILES_DIR)) {
-    fs.mkdirSync(PROFILES_DIR, { recursive: true });
+    ensureDir(PROFILES_DIR);
   }
 
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
+  writeJSON(configPath, config);
 }
 
 /**

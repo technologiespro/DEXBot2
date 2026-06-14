@@ -21,6 +21,7 @@ const { cloneWeightDistribution, calculateOrderCreationFees, calculateSwapInAmou
 const { updateDynamicGridSnapshotSync } = require('../market_adapter/utils/dynamic_grid_snapshot');
 const { reconcileGridOrders } = require('./order/grid_reconcile');
 const { formatUnmatchedChainOrder, getSideBudget } = require('./order/utils/order');
+const { ensureDir } = require('./utils/fs_utils');
 
 const CODE_ROOT = path.join(__dirname, '..');
 const ROOT = resolveProjectRoot(CODE_ROOT);
@@ -347,7 +348,7 @@ async function getPm2ProcessNames() {
  */
 async function startMarketAdapterPm2() {
     if (!fs.existsSync(LOGS_DIR)) {
-        fs.mkdirSync(LOGS_DIR, { recursive: true });
+        ensureDir(LOGS_DIR);
     }
 
     const pm2Args = [

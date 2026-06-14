@@ -2,6 +2,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { resolveProjectRoot } = require('../../modules/launcher/runtime_entry');
+const { ensureDir, safeUnlink } = require('../../modules/utils/fs_utils');
 
 const MB_PARENT_DIR = path.dirname(path.dirname(__dirname));
 const MB_PROJECT_ROOT = resolveProjectRoot(MB_PARENT_DIR);
@@ -25,7 +26,7 @@ function resolveMemuScript() {
 
 function ensureMemuDir(dir: any) {
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    ensureDir(dir);
   }
   return dir;
 }
@@ -323,7 +324,7 @@ function createMemuBridge(options: Record<string, any> = {}) {
 
       const tmpDir = path.join(memuDir, 'tmp');
       if (!fs.existsSync(tmpDir)) {
-        fs.mkdirSync(tmpDir, { recursive: true });
+        ensureDir(tmpDir);
       }
       const tmpFile = path.join(tmpDir, `conv_${Date.now()}.txt`);
       fs.writeFileSync(tmpFile, formatted, 'utf8');
@@ -331,10 +332,7 @@ function createMemuBridge(options: Record<string, any> = {}) {
       try {
         return await this.memorize(tmpFile, 'conversation', user);
       } finally {
-        try {
-          fs.unlinkSync(tmpFile);
-        } catch (e: any) {
-        }
+        safeUnlink(tmpFile)
       }
     },
 
@@ -345,7 +343,7 @@ function createMemuBridge(options: Record<string, any> = {}) {
 
       const tmpDir = path.join(memuDir, 'tmp');
       if (!fs.existsSync(tmpDir)) {
-        fs.mkdirSync(tmpDir, { recursive: true });
+        ensureDir(tmpDir);
       }
       const tmpFile = path.join(tmpDir, `trading_${Date.now()}.json`);
       fs.writeFileSync(tmpFile, formatted, 'utf8');
@@ -353,10 +351,7 @@ function createMemuBridge(options: Record<string, any> = {}) {
       try {
         return await this.memorize(tmpFile, 'document', user);
       } finally {
-        try {
-          fs.unlinkSync(tmpFile);
-        } catch (e: any) {
-        }
+        safeUnlink(tmpFile)
       }
     },
 

@@ -6,6 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { readJSON } = require('../../modules/utils/fs_utils');
 
 function toCandles(arr) {
     return arr.map((c) => ({
@@ -32,7 +33,7 @@ function parseListOrRange(spec, fallback) {
 }
 
 function loadLpData(filePath) {
-    const json = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const json = readJSON(filePath);
     return { candles: toCandles(json.candles ?? json), meta: json.meta ?? null };
 }
 

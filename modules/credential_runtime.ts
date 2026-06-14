@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const Logger = require('./logger');
 const { resolveProjectRoot } = require('./launcher/runtime_entry');
+const { ensureDir } = require('./utils/fs_utils');
 const runtimeLogger = new Logger('credential-runtime');
 
 interface RuntimeDirOptions {
@@ -91,7 +92,7 @@ function ensureCredentialRuntimeDirSync(options: RuntimeDirOptions = {}) {
     // mode: 0o700 in mkdirSync is sufficient; the redundant chmodSync that
     // previously followed was a no-op.  assertPrivatePathSecurity verifies
     // the resulting mode as a post-condition.
-    fs.mkdirSync(runtimeDir, { recursive: true, mode: 0o700 });
+    ensureDir(runtimeDir, { mode: 0o700 });
     assertPrivatePathSecurity(runtimeDir, { expectedType: 'dir', requiredMode: 0o700 });
     return runtimeDir;
 }

@@ -1,6 +1,7 @@
 'use strict';
 
 const { MARKET_ADAPTER } = require('../../modules/constants');
+const { roundTo } = require('../../modules/utils/math_utils');
 
 /**
  * Permutation Entropy Analyzer
@@ -138,10 +139,10 @@ class PermutationEntropyAnalyzer {
 
         return {
             isReady: this.isReady,
-            entropy: Math.round(this.entropy * 10000) / 10000,
-            normalizedEntropy: Math.round(this.normalizedEntropy * 10000) / 10000,
+            entropy: roundTo(this.entropy, 10000),
+            normalizedEntropy: roundTo(this.normalizedEntropy, 10000),
             regime,
-            regimeStrength: Math.round(regimeStrength * 100) / 100,
+            regimeStrength: roundTo(regimeStrength, 100),
             updateCount: this._updateCount,
         };
     }

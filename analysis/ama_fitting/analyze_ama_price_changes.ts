@@ -21,10 +21,11 @@
 const fs   = require('fs');
 const path = require('path');
 const { calculateAMA } = require('../../market_adapter/core/strategies/ama');
+const { readJSON } = require('../../modules/utils/fs_utils');
 const THRESHOLDS = [1, 2, 3, 4]; // percent
 // ── Load data ─────────────────────────────────────────────────────────────────
 function loadData(filePath) {
-    const json    = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const json    = readJSON(filePath);
     const candles = json.candles ?? json;
     return {
         candles: candles.map(c => ({ timestamp: c[0], close: c[4] })),
@@ -32,7 +33,7 @@ function loadData(filePath) {
     };
 }
 function loadAmaParams(resultsPath) {
-    const json = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+    const json = readJSON(resultsPath);
     const amas = json.meta?.amas;
     if (!amas) throw new Error('No amas found in results file');
     return [

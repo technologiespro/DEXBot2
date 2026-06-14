@@ -46,6 +46,7 @@ const path = require('path');
 
 const { setCachedModule, restoreCachedModule } = require('./helpers/module_cache_stub');
 const { writeJsonFileAtomic, writeBotsFileWithLock } = require('../modules/bots_file_lock');
+const { readJSON } = require('../modules/utils/fs_utils');
 
 const creditRuntimePath = path.resolve(__dirname, '../modules/credit_runtime.ts');
 const bitsharesClientPath = path.resolve(__dirname, '../modules/bitshares_client.ts');
@@ -485,7 +486,7 @@ async function testWriteJsonFileAtomic() {
     writeJsonFileAtomic(target, payload);
 
     assert.ok(fs.existsSync(target), 'target file should exist after atomic write');
-    const parsed = JSON.parse(fs.readFileSync(target, 'utf8'));
+    const parsed = readJSON(target);
     assert.deepStrictEqual(parsed, payload, 'written content should match input');
 
     // No leftover tmp files in the directory.
@@ -540,7 +541,7 @@ async function testWriteBotsFileWithLockUsesAtomic() {
         writeBotsFileWithLock(botsFile, cfgB),
     ]);
 
-    const parsed = JSON.parse(fs.readFileSync(botsFile, 'utf8'));
+    const parsed = readJSON(botsFile);
     assert.ok(parsed && Array.isArray(parsed.bots), 'bots.json must parse to an object with a bots array');
     assert.strictEqual(parsed.bots.length, 1, 'bots.json should contain exactly one bot (last writer wins)');
     assert.ok(['a', 'b'].includes(parsed.bots[0].name), 'last writer\'s bot should be present');

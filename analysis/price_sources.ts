@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { fillCandleGaps } = require('../market_adapter/candle_utils');
 const { getCandleClose, getCandleTimestamp, loadCandleFile } = require('./math_utils');
+const { readJSON } = require('../modules/utils/fs_utils');
 
 interface JsonFileConfig {
     filePath: string;
@@ -81,7 +82,7 @@ class MarketAdapterSource {
         }
 
         try {
-            const data = JSON.parse(fs.readFileSync(centersFile, 'utf8'));
+            const data = readJSON(centersFile);
 
             let botData = data[this.botKey];
             if (!botData && data.bots && data.bots[this.botKey]) {

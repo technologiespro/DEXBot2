@@ -95,6 +95,7 @@ const {
     assertPrivatePathSecurity,
 } = require('./credential_runtime');
 const Logger = require('./logger');
+const { ensureDir, safeUnlink } = require('./utils/fs_utils');
 
 const chainKeysLogger = new Logger('chain-keys');
 
@@ -131,7 +132,7 @@ const PROFILES_KEYS_FILE = process.env.DEXBOT_KEYS_FILE
  */
 function ensureProfilesKeysDirectory() {
     const dir = path.dirname(PROFILES_KEYS_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(dir)) ensureDir(dir);
 }
 
 function toBuffer(value: any, encoding: BufferEncoding = 'hex') {
@@ -761,7 +762,7 @@ function saveAccounts(data) {
         }
         fs.renameSync(tmpPath, PROFILES_KEYS_FILE);
     } catch (err) {
-        try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
+        safeUnlink(tmpPath)
         throw err;
     }
 }

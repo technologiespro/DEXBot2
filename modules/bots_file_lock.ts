@@ -42,6 +42,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { ensureDir, safeUnlink, writeJSON } = require('./utils/fs_utils');
 
 /**
  * Write a JSON document atomically by staging to a tmp file in the same
@@ -60,14 +61,14 @@ const crypto = require('crypto');
 function writeJsonFileAtomic(targetPath, data) {
     const dir = path.dirname(targetPath);
     if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+        ensureDir(dir);
     }
     const tmpPath = `${targetPath}.${process.pid}.${Date.now()}.${crypto.randomBytes(8).toString('hex')}.tmp`;
     try {
-        fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2) + '\n', 'utf8');
+        writeJSON(tmpPath, data);
         fs.renameSync(tmpPath, targetPath);
     } catch (err) {
-        try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
+        safeUnlink(tmpPath)
         throw err;
     }
 }

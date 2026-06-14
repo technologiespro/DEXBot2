@@ -47,6 +47,7 @@ const fcd = require(helperPath);
 // to the repo root; using the candidate-aware variant lets the test
 // pass our temp path and still validate the same algorithm.
 const unlock = require('../unlock');
+const { safeUnlink } = require('../modules/utils/fs_utils');
 if (typeof unlock.pidMatchesScriptCandidates !== 'function') {
     throw new Error('unlock.pidMatchesScriptCandidates is not exported; cannot validate the predicate algorithm');
 }
@@ -110,9 +111,9 @@ async function assertStubIsRecognised(stubPid) {
 }
 
 async function runLiveForeignKilledTest() {
-    try { fs.unlinkSync(socketFile); } catch (_) {}
-    try { fs.unlinkSync(readyFile); } catch (_) {}
-    try { fs.unlinkSync(credPidFile); } catch (_) {}
+    safeUnlink(socketFile)
+    safeUnlink(readyFile)
+    safeUnlink(credPidFile)
 
     const stub = await launchStub();
     const stubPid = (stub as any).pid;
@@ -139,8 +140,8 @@ async function runLiveForeignKilledTest() {
 }
 
 async function runLiveForeignPidMismatchTest() {
-    try { fs.unlinkSync(socketFile); } catch (_) {}
-    try { fs.unlinkSync(readyFile); } catch (_) {}
+    safeUnlink(socketFile)
+    safeUnlink(readyFile)
     fs.writeFileSync(credPidFile, '0', { mode: 0o600 });
 
     const stub = await launchStub();
@@ -165,9 +166,9 @@ async function runLiveForeignPidMismatchTest() {
 }
 
 async function runOwnedStubLeftAloneTest() {
-    try { fs.unlinkSync(socketFile); } catch (_) {}
-    try { fs.unlinkSync(readyFile); } catch (_) {}
-    try { fs.unlinkSync(credPidFile); } catch (_) {}
+    safeUnlink(socketFile)
+    safeUnlink(readyFile)
+    safeUnlink(credPidFile)
 
     const stub = await launchStub();
     const stubPid = (stub as any).pid;
@@ -196,16 +197,16 @@ async function runSocketWithoutReadyFileTest() {
     // Reproduces Finding 3: a live foreign daemon is still listening on
     // the socket after the ready file was removed. The detector must
     // notice and kill it, even though the ready file is missing.
-    try { fs.unlinkSync(socketFile); } catch (_) {}
-    try { fs.unlinkSync(readyFile); } catch (_) {}
-    try { fs.unlinkSync(credPidFile); } catch (_) {}
+    safeUnlink(socketFile)
+    safeUnlink(readyFile)
+    safeUnlink(credPidFile)
 
     const stub = await launchStub();
     const stubPid = (stub as any).pid;
     await assertStubIsRecognised(stubPid);
     // Simulate the ready file being removed by an external process
     // (e.g. a previous unlock unlinked it).
-    try { fs.unlinkSync(readyFile); } catch (_) {}
+    safeUnlink(readyFile)
     assert.ok(fs.existsSync(socketFile), 'socket should still be present');
     assert.ok(!fs.existsSync(readyFile), 'ready file should be gone');
 

@@ -21,6 +21,7 @@ const {
     DEFAULT_STRATEGIES,
 } = require('../analysis/ama_fitting/generate_unified_comparison_chart');
 const { MARKET_ADAPTER } = require('../modules/constants');
+const { writeJSON } = require('../modules/utils/fs_utils');
 
 function testParseArgs() {
     const parsed = parseArgs(['--data', 'foo.json', '--out', 'out.html', '--no-open']);
@@ -84,7 +85,7 @@ function testGenerateMarketLpChartUplot() {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot2-lp-uplot-'));
     const dataFile = path.join(tmpDir, 'lp_pool_133_1h.json');
     const outFile = path.join(tmpDir, 'lp_chart.html');
-    fs.writeFileSync(dataFile, JSON.stringify({
+    writeJSON(dataFile, {
         meta: {
             pool: '1.19.133',
             intervalSeconds: 3600,
@@ -99,7 +100,7 @@ function testGenerateMarketLpChartUplot() {
             [1710010800000, 1.14, 1.25, 1.10, 1.19, 14],
             [1710014400000, 1.19, 1.28, 1.15, 1.23, 11],
         ],
-    }, null, 2));
+    });
     const result = generateMarketLpChartUplot({
         dataFile,
         noOpen: true,

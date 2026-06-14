@@ -81,6 +81,7 @@ const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const { SETTINGS_FILE, readGeneralSettings, writeGeneralSettings } = require('./general_settings');
 
 const { parseJsonWithComments } = require('./order/utils/system');
+const { writeJSON } = require('./utils/fs_utils');
 
 const MODULE_DIR$1 = path.dirname(__dirname);
 const PROJECT_ROOT$1 = resolveProjectRoot(MODULE_DIR$1);
@@ -116,7 +117,7 @@ function loadBotsConfig() {
 function saveBotsConfig(config: any, filePath: string): void {
     try {
         ensureProfilesDirectory(PROFILES_DIR);
-        fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n', 'utf8');
+        writeJSON(filePath, config);
     } catch (err: any) {
         console.error('Failed to save bots configuration:', err.message);
         throw err;

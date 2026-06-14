@@ -4,10 +4,11 @@ const fs = require('fs');
 const path = require('path');
 const { writeJsonAtomic } = require('./atomic_write');
 const { acquirePathLockSync, releaseFileLockSync } = require('./file_lock');
+const { ensureDir, readJSON } = require('../../modules/utils/fs_utils');
 
 function readJsonOrNull(filePath: any) {
     try {
-        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        return readJSON(filePath);
     } catch (_: any) {
         return null;
     }
@@ -22,7 +23,7 @@ function updateDynamicGridSnapshotSync(filePath: any, mutator: any, options: any
         throw new TypeError('updateDynamicGridSnapshotSync requires a mutator function');
     }
 
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    ensureDir(path.dirname(filePath));
     const lock = acquirePathLockSync(filePath, options.lock || {});
     try {
         const previous = readJsonOrNull(filePath);

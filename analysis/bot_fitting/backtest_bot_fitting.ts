@@ -5,6 +5,7 @@ const path = require('path');
 const { calculateAMA } = require('../../market_adapter/core/strategies/ama');
 const { range } = require('../math_utils');
 const { parseListOrRange, loadLpData, fmt } = require('./shared_utils');
+const { ensureDir, readJSON, writeJSON } = require('../../modules/utils/fs_utils');
 
 const DEFAULT_ACTIVE_ORDERS = 5;
 const DEFAULT_FEE_ROUNDTRIP_PCT = 0.20;
@@ -106,7 +107,7 @@ function parseArgs() {
 }
 
 function loadAmaStrategies(resultsPath) {
-    const json = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+    const json = readJSON(resultsPath);
     const amas = (json.meta?.amas ?? {}) as any;
     const labels = { AMA1: 'AMA1', AMA2: 'AMA2', AMA3: 'AMA3', AMA4: 'AMA4' as string };
 
@@ -344,8 +345,8 @@ function run() {
 
     const outName = `bot_fitting_results_${path.basename(cfg.dataPath, '.json')}.json`;
     const outPath = path.join(__dirname, outName);
-    fs.mkdirSync(__dirname, { recursive: true });
-    fs.writeFileSync(outPath, JSON.stringify({
+    ensureDir(__dirname);
+    writeJSON(outPath, {
         meta: {
             generatedAt: new Date().toISOString(),
             dataPath: path.relative(process.cwd(), cfg.dataPath),
@@ -368,7 +369,7 @@ function run() {
             },
         },
         results: byAma,
-    }, null, 2));
+    });
 
     console.log(`Saved: ${path.relative(process.cwd(), outPath)}`);
 }

@@ -1,6 +1,7 @@
 'use strict';
 
 const { MARKET_ADAPTER } = require('../../modules/constants');
+const { roundTo } = require('../../modules/utils/math_utils');
 
 /**
  * Hurst Exponent Analyzer
@@ -155,9 +156,9 @@ class HurstAnalyzer {
 
         return {
             isReady: this.isReady,
-            hurst: Math.round(this.hurst * 1000) / 1000,
+            hurst: roundTo(this.hurst, 1000),
             regime,
-            regimeStrength: Math.round(regimeStrength * 100) / 100,
+            regimeStrength: roundTo(regimeStrength, 100),
             updateCount: this._updateCount,
         };
     }

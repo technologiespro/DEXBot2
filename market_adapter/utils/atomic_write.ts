@@ -2,18 +2,19 @@
 
 const fs = require('fs');
 const path = require('path');
+const { ensureDir, safeUnlink, writeJSON } = require('../../modules/utils/fs_utils');
 
 function writeJsonAtomic(targetPath, data, options = {}) {
     const dir = path.dirname(targetPath);
     if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+        ensureDir(dir);
     }
     const tmpPath = `${targetPath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
     try {
-        fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2) + '\n', 'utf8');
+        writeJSON(tmpPath, data);
         fs.renameSync(tmpPath, targetPath);
     } catch (err) {
-        try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
+        safeUnlink(tmpPath)
         throw err;
     }
 }

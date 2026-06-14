@@ -4,6 +4,8 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
+const { ensureDir, readJSON, writeJSON } = require('../modules/utils/fs_utils');
+const { fixedTo } = require('../modules/utils/math_utils');
 
 console.log('Running dexbot maintenance runtime dynamic weight tests');
 
@@ -299,14 +301,14 @@ async function testManualTriggerResetRefreshesCenterPrice() {
     const triggerFile = `/tmp/${botKey}.trigger`;
     const snapshotFile = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
 
-    fs.mkdirSync(path.dirname(snapshotFile), { recursive: true });
-    fs.writeFileSync(snapshotFile, JSON.stringify({
+    ensureDir(path.dirname(snapshotFile));
+    writeJSON(snapshotFile, {
         centerPrice: 100,
         amaCenterPrice: 123.45,
         gridPriceOffsetPct: 0.8,
         source: _adapterSource,
         updatedAt: '2026-01-01T00:00:00Z',
-    }, null, 2) + '\n', 'utf8');
+    });
     fs.writeFileSync(triggerFile, '', 'utf8');
 
     const previousExistsSync = fs.existsSync;
@@ -376,7 +378,7 @@ async function testManualTriggerResetRefreshesCenterPrice() {
         const ok = await handlePendingTriggerReset.call(self);
         assert.strictEqual(ok, true, 'manual trigger reset should succeed');
 
-        const updated = JSON.parse(fs.readFileSync(snapshotFile, 'utf8'));
+        const updated = readJSON(snapshotFile);
         assert.strictEqual(updated.centerPrice, 123.45, 'manual reset should refresh centerPrice from amaCenterPrice');
         assert.strictEqual(updated.gridPriceOffsetPct, 0.8, 'manual reset should preserve the AMA spread offset for the rebuild');
         assert.strictEqual(updated.lastGridResetSource, 'manual_grid_resync', 'manual reset should record manual reset provenance');
@@ -399,15 +401,15 @@ async function testManualTriggerResetKeepsOffsetWhenCenterAlreadyCurrent() {
     const triggerFile = `/tmp/${botKey}.trigger`;
     const snapshotFile = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
 
-    fs.mkdirSync(path.dirname(snapshotFile), { recursive: true });
-    fs.writeFileSync(snapshotFile, JSON.stringify({
+    ensureDir(path.dirname(snapshotFile));
+    writeJSON(snapshotFile, {
         gridCenterPrice: 123.45,
         centerPrice: 123.45,
         amaCenterPrice: 123.45,
         gridPriceOffsetPct: 0.8,
         source: _adapterSource,
         updatedAt: '2026-01-01T00:00:00Z',
-    }, null, 2) + '\n', 'utf8');
+    });
     fs.writeFileSync(triggerFile, '', 'utf8');
 
     const previousExistsSync = fs.existsSync;
@@ -476,7 +478,7 @@ async function testManualTriggerResetKeepsOffsetWhenCenterAlreadyCurrent() {
         const ok = await handlePendingTriggerReset.call(self);
         assert.strictEqual(ok, true, 'manual trigger reset should succeed when center already equals AMA');
 
-        const updated = JSON.parse(fs.readFileSync(snapshotFile, 'utf8'));
+        const updated = readJSON(snapshotFile);
         assert.strictEqual(updated.centerPrice, 123.45, 'manual reset should leave the current AMA center intact');
         assert.strictEqual(updated.gridPriceOffsetPct, 0.8, 'manual reset should preserve the AMA spread offset when center is already current');
     } finally {
@@ -494,21 +496,21 @@ async function testMarketAdapterTriggerResetRefreshesAmaCenterPrice() {
     const triggerFile = `/tmp/${botKey}.trigger`;
     const snapshotFile = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
 
-    fs.mkdirSync(path.dirname(snapshotFile), { recursive: true });
-    fs.writeFileSync(snapshotFile, JSON.stringify({
+    ensureDir(path.dirname(snapshotFile));
+    writeJSON(snapshotFile, {
         gridCenterPrice: 100,
         centerPrice: 100,
         amaCenterPrice: 123.45,
         gridPriceOffsetPct: 0.8,
         source: _adapterSource,
         updatedAt: '2026-01-01T00:00:00Z',
-    }, null, 2) + '\n', 'utf8');
-    fs.writeFileSync(triggerFile, JSON.stringify({
+    });
+    writeJSON(triggerFile, {
         source: _adapterSource,
         reason: 'market_adapter_delta_threshold',
         newCenterPrice: 100,
         amaCenterPrice: 123.45,
-    }, null, 2) + '\n', 'utf8');
+    });
 
     const previousExistsSync = fs.existsSync;
     const previousReadFileSync = fs.readFileSync;
@@ -577,7 +579,7 @@ async function testMarketAdapterTriggerResetRefreshesAmaCenterPrice() {
         const ok = await handlePendingTriggerReset.call(self);
         assert.strictEqual(ok, true, 'market-adapter trigger reset should succeed');
 
-        const updated = JSON.parse(fs.readFileSync(snapshotFile, 'utf8'));
+        const updated = readJSON(snapshotFile);
         assert.strictEqual(updated.centerPrice, 123.45, 'market-adapter reset should refresh centerPrice from latest amaCenterPrice');
         assert.strictEqual(updated.amaCenterPrice, 123.45, 'market-adapter reset should preserve raw AMA diagnostics');
         assert.strictEqual(updated.lastGridResetSource, 'market_adapter_delta_threshold', 'market-adapter reset should preserve the trigger reason as reset provenance');
@@ -600,20 +602,20 @@ async function testMarketAdapterBootstrapTriggerResetRecordsBootstrapSource() {
     const triggerFile = `/tmp/${botKey}.trigger`;
     const snapshotFile = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
 
-    fs.mkdirSync(path.dirname(snapshotFile), { recursive: true });
-    fs.writeFileSync(snapshotFile, JSON.stringify({
+    ensureDir(path.dirname(snapshotFile));
+    writeJSON(snapshotFile, {
         gridCenterPrice: 100,
         centerPrice: 100,
         amaCenterPrice: 123.45,
         source: _adapterSource,
         updatedAt: '2026-01-01T00:00:00Z',
-    }, null, 2) + '\n', 'utf8');
-    fs.writeFileSync(triggerFile, JSON.stringify({
+    });
+    writeJSON(triggerFile, {
         source: _adapterSource,
         reason: 'market_adapter_bootstrap',
         newCenterPrice: 100,
         amaCenterPrice: 123.45,
-    }, null, 2) + '\n', 'utf8');
+    });
 
     const previousExistsSync = fs.existsSync;
     const previousReadFileSync = fs.readFileSync;
@@ -682,7 +684,7 @@ async function testMarketAdapterBootstrapTriggerResetRecordsBootstrapSource() {
         const ok = await handlePendingTriggerReset.call(self);
         assert.strictEqual(ok, true, 'market-adapter bootstrap trigger reset should succeed');
 
-        const updated = JSON.parse(fs.readFileSync(snapshotFile, 'utf8'));
+        const updated = readJSON(snapshotFile);
         assert.strictEqual(updated.centerPrice, 123.45, 'market-adapter bootstrap reset should refresh centerPrice from latest amaCenterPrice');
         assert.strictEqual(updated.amaCenterPrice, 123.45, 'market-adapter bootstrap reset should preserve raw AMA diagnostics');
         assert.strictEqual(updated.lastGridResetSource, 'market_adapter_bootstrap', 'market-adapter bootstrap reset should preserve bootstrap provenance');
@@ -705,20 +707,20 @@ async function testMarketAdapterSlopeTriggerResetRecordsSlopeSource() {
     const triggerFile = `/tmp/${botKey}.trigger`;
     const snapshotFile = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
 
-    fs.mkdirSync(path.dirname(snapshotFile), { recursive: true });
-    fs.writeFileSync(snapshotFile, JSON.stringify({
+    ensureDir(path.dirname(snapshotFile));
+    writeJSON(snapshotFile, {
         gridCenterPrice: 100,
         centerPrice: 100,
         amaCenterPrice: 123.45,
         source: _adapterSource,
         updatedAt: '2026-01-01T00:00:00Z',
-    }, null, 2) + '\n', 'utf8');
-    fs.writeFileSync(triggerFile, JSON.stringify({
+    });
+    writeJSON(triggerFile, {
         source: _adapterSource,
         reason: 'market_adapter_ama_slope_delta_threshold',
         newCenterPrice: 100,
         amaCenterPrice: 123.45,
-    }, null, 2) + '\n', 'utf8');
+    });
 
     const previousExistsSync = fs.existsSync;
     const previousReadFileSync = fs.readFileSync;
@@ -787,7 +789,7 @@ async function testMarketAdapterSlopeTriggerResetRecordsSlopeSource() {
         const ok = await handlePendingTriggerReset.call(self);
         assert.strictEqual(ok, true, 'market-adapter slope trigger reset should succeed');
 
-        const updated = JSON.parse(fs.readFileSync(snapshotFile, 'utf8'));
+        const updated = readJSON(snapshotFile);
         assert.strictEqual(updated.centerPrice, 123.45, 'market-adapter slope reset should refresh centerPrice from latest amaCenterPrice');
         assert.strictEqual(updated.amaCenterPrice, 123.45, 'market-adapter slope reset should preserve raw AMA diagnostics');
         assert.strictEqual(updated.lastGridResetSource, 'market_adapter_ama_slope_delta_threshold', 'market-adapter slope reset should preserve slope provenance');
@@ -808,15 +810,15 @@ function testUpdateBotGridResetMetadataRecordsActualReset() {
 
     const botKey = `metadata-reset-${Date.now()}`;
     const snapshotFile = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
-    fs.mkdirSync(path.dirname(snapshotFile), { recursive: true });
-    fs.writeFileSync(snapshotFile, JSON.stringify({
+    ensureDir(path.dirname(snapshotFile));
+    writeJSON(snapshotFile, {
         gridCenterPrice: 123.45,
         centerPrice: 123.45,
         amaCenterPrice: 130.25,
         gridPriceOffsetPct: 0.8,
         source: _adapterSource,
         updatedAt: '2026-01-01T00:00:00Z',
-    }, null, 2) + '\n', 'utf8');
+    });
 
     const prevReadFileSync = fs.readFileSync;
     let adapterStateReadCount = 0;
@@ -837,7 +839,7 @@ function testUpdateBotGridResetMetadataRecordsActualReset() {
         });
         assert.strictEqual(ok, true, 'metadata update should succeed when snapshot exists');
 
-        const updated = JSON.parse(fs.readFileSync(snapshotFile, 'utf8'));
+        const updated = readJSON(snapshotFile);
         assert.strictEqual(updated.gridCenterPrice, 123.45, 'metadata update should preserve grid center');
         assert.strictEqual(updated.centerPrice, 123.45, 'metadata update should preserve center alias');
         assert.strictEqual(updated.amaCenterPrice, 130.25, 'metadata update should preserve current AMA diagnostics');
@@ -857,14 +859,14 @@ function testUpdateBotGridResetMetadataRejectsInvalidSnapshot() {
 
     const botKey = `metadata-invalid-${Date.now()}`;
     const snapshotFile = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
-    fs.mkdirSync(path.dirname(snapshotFile), { recursive: true });
-    fs.writeFileSync(snapshotFile, JSON.stringify({
+    ensureDir(path.dirname(snapshotFile));
+    writeJSON(snapshotFile, {
         gridCenterPrice: 0,
         centerPrice: 0,
         amaCenterPrice: 130.25,
         source: _adapterSource,
         updatedAt: '2026-01-01T00:00:00Z',
-    }, null, 2) + '\n', 'utf8');
+    });
 
     try {
         const ok = updateBotGridResetMetadata(botKey, {
@@ -873,7 +875,7 @@ function testUpdateBotGridResetMetadataRejectsInvalidSnapshot() {
         });
         assert.strictEqual(ok, false, 'metadata update should report false when no valid center can be preserved');
 
-        const updated = JSON.parse(fs.readFileSync(snapshotFile, 'utf8'));
+        const updated = readJSON(snapshotFile);
         assert.strictEqual(updated.lastGridResetAt, undefined);
         assert.strictEqual(updated.lastGridResetSource, undefined);
     } finally {
@@ -974,7 +976,7 @@ async function testRmsDivergenceRunsFullGridResync() {
         }),
     });
     setCachedModule(formatPath, {
-        formatPrice6: (value) => Number(value).toFixed(6),
+        formatPrice6: (value) => fixedTo(value, 6),
     });
     setCachedModule(orderUtilsPath, {
         virtualizeOrder: (order) => order,

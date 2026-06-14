@@ -18,6 +18,7 @@ const { FEE_PARAMETERS } = require('./constants');
 const { getCredentialReadyFilePath, assertPrivatePathSecurity } = require('./credential_runtime');
 const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const Logger = require('./logger');
+const { ensureDir, readJSON, safeUnlink, writeJSON } = require('./utils/fs_utils');
 
 // Module-scope logger for library-style helpers that don't own a process
 // logger.  The class honours PM2 auto-quiet and routes to a log file when one
@@ -155,7 +156,7 @@ function readPolicyConfigDetailed(filePath: string): { status: string; config: a
 
     let raw;
     try {
-        raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        raw = readJSON(filePath);
     } catch (error: any) {
         return {
             status: 'invalid',
@@ -215,7 +216,7 @@ function checkPolicyFileSecurity(filePath: string) {
 function ensurePolicyConfig(filePath: string): PolicyConfig {
     if (!fs.existsSync(filePath)) {
         try {
-            fs.mkdirSync(path.dirname(filePath), { recursive: true });
+            ensureDir(path.dirname(filePath));
             fs.writeFileSync(filePath, JSON.stringify(createMinimalPolicyConfig(), null, 2), {
                 encoding: 'utf8',
                 mode: 0o600,
@@ -1412,7 +1413,7 @@ function loadBotHmacSecret(accountName: string, policyConfigPath: string, option
             }
             fs.renameSync(tmpPath, policyConfigPath);
         } catch (err) {
-            try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
+            safeUnlink(tmpPath)
             throw err;
         }
         warn(`[policy] SECURITY: Auto-provisioned strict botHmacSecret for ${accountName} — first-time secret generation`);

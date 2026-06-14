@@ -13,6 +13,7 @@ if (process.env.RUN_LIVE_BITSHARES_TESTS !== '1') {
 }
 
 const { BitShares, waitForConnected } = require('../modules/bitshares_client');
+const { fixedTo } = require('../modules/utils/math_utils');
 
 const colors = {
     reset: '\x1b[0m',
@@ -81,11 +82,11 @@ async function testAnyPair() {
                 const ob = await BitShares.db.get_order_book(assetA.id, assetB.id, 5);
                 console.log(`  Bids: ${ob.bids ? ob.bids.length : 0}`);
                 if (ob.bids && ob.bids.length > 0) {
-                    console.log(`    Best bid: ${Number(ob.bids[0].price).toFixed(8)}`);
+                    console.log(`    Best bid: ${fixedTo(ob.bids[0].price, 8)}`);
                 }
                 console.log(`  Asks: ${ob.asks ? ob.asks.length : 0}`);
                 if (ob.asks && ob.asks.length > 0) {
-                    console.log(`    Best ask: ${Number(ob.asks[0].price).toFixed(8)}`);
+                    console.log(`    Best ask: ${fixedTo(ob.asks[0].price, 8)}`);
                 }
 
                 const ticker = await BitShares.db.get_ticker(assetA.id, assetB.id);

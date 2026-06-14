@@ -7,6 +7,7 @@ const path = require('path');
 console.log('Running credential runtime path tests');
 
 const runtime = require('../modules/credential_runtime');
+const { ensureDir } = require('../modules/utils/fs_utils');
 
 function testDefaultPathsUseProfilesRun() {
     const originalXdg = process.env.XDG_RUNTIME_DIR;
@@ -50,7 +51,7 @@ function testXdgRuntimeOverride() {
     const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-runtime-xdg-'));
     const xdgRuntimeDir = path.join(baseDir, 'xdg-runtime');
 
-    fs.mkdirSync(xdgRuntimeDir, { recursive: true });
+    ensureDir(xdgRuntimeDir);
     process.env.XDG_RUNTIME_DIR = xdgRuntimeDir;
     delete process.env.DEXBOT_CRED_RUNTIME_DIR;
     delete process.env.DEXBOT_CRED_DAEMON_SOCKET;

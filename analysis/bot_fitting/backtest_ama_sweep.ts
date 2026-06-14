@@ -22,6 +22,7 @@ const { Worker, isMainThread, parentPort, workerData } = require('worker_threads
 const { calculateAMA } = require('../../market_adapter/core/strategies/ama');
 const { range } = require('../math_utils');
 const { parseListOrRange, loadLpData, fmt } = require('./shared_utils');
+const { readJSON, writeJSON } = require('../../modules/utils/fs_utils');
 
 const DEFAULT_MAX_ORDERS = 20; // matches bot default activeOrders per side
 const DEFAULT_FEE_ROUNDTRIP_PCT = 0.20;
@@ -133,7 +134,7 @@ function printHelp() {
 }
 
 function loadAmaStrategies(resultsPath) {
-    const json = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+    const json = readJSON(resultsPath);
     const amas = (json.meta as any)?.amas;
     if (!amas) throw new Error('No meta.amas found in results file.');
 
@@ -745,7 +746,7 @@ async function run() {
     // ── Save JSON ───────────────────────────────────────────────────────────
     const outName = `ama_sweep_results_${path.basename(cfg.dataPath, '.json')}.json`;
     const outPath = path.join(__dirname, outName);
-    fs.writeFileSync(outPath, JSON.stringify({
+    writeJSON(outPath, {
         meta: {
             generatedAt: new Date().toISOString(),
             dataPath: path.relative(process.cwd(), cfg.dataPath),
@@ -788,7 +789,7 @@ async function run() {
             amaParams: { er: winner.strategy.er, fast: winner.strategy.fast, slow: winner.strategy.slow },
             ...winner.sim,
         },
-    }, jsonSafe, 2));
+    });
 
     console.log(`\nSaved: ${path.relative(process.cwd(), outPath)}`);
 }

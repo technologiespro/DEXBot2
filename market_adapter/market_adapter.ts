@@ -168,7 +168,7 @@ function loadMarketAdapterSettings() {
     if (_marketAdapterSettingsCache !== null) return _marketAdapterSettingsCache;
     if (!fs.existsSync(MARKET_ADAPTER_SETTINGS_FILE)) return null;
     try {
-        _marketAdapterSettingsCache = JSON.parse(fs.readFileSync(MARKET_ADAPTER_SETTINGS_FILE, 'utf8'));
+        _marketAdapterSettingsCache = readJSON(MARKET_ADAPTER_SETTINGS_FILE);
         return _marketAdapterSettingsCache;
     } catch (_: any) {
         console.warn(`[WARN] Failed to parse ${MARKET_ADAPTER_SETTINGS_FILE}: ${_.message}. Using defaults.`);
@@ -637,6 +637,8 @@ function applyRuntimeDefaultsFromGeneralSettings(cfg: any, provided: { deltaThre
 }
 
 const { createPm2AwareLogger } = require('../modules/logger');
+const { readJSON } = require('../modules/utils/fs_utils');
+const { fixedTo, roundTo } = require('../modules/utils/math_utils');
 const marketAdapterLogFile = path.join(PROFILES_DIR, 'logs', 'market_adapter.log');
 const logger = createPm2AwareLogger('MarketAdapter', { quiet: DEFAULTS.quiet, logFile: marketAdapterLogFile });
 
@@ -687,7 +689,7 @@ function loadActiveBots() {
 function loadJson(filePath, defaultValue) {
     try {
         if (!fs.existsSync(filePath)) return defaultValue;
-        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        return readJSON(filePath);
     } catch (_: any) {
         return defaultValue;
     }
@@ -1027,7 +1029,7 @@ function writeBotDynamicGrid(botKey: string, gridCenterPrice: number, options: {
         const result = updateDynamicGridSnapshotSync(filePath, (previousSnapshot) => {
             const amaCenterPrice = Number(options.amaCenterPrice);
             const resolvedGridCenterPrice = Number.isFinite(Number(gridCenterPrice))
-                ? Math.round(Number(gridCenterPrice) * 1e8) / 1e8
+                ? roundTo(Number(gridCenterPrice), 1e8)
                 : null;
             const payload: Record<string, any> = {
                 gridCenterPrice: resolvedGridCenterPrice,
@@ -1151,7 +1153,7 @@ function mergeGridResetMetadataFromDynamicGrid(state: any) {
         const snapshotPath = path.join(ORDERS_DIR, `${botKey}.dynamicgrid.json`);
         let snapshot;
         try {
-            snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
+            snapshot = readJSON(snapshotPath);
         } catch (_: any) {
             continue;
         }
@@ -1267,7 +1269,7 @@ async function runOnce(cfg, state, contextCache) {
             if (Array.isArray(r.amaComparison) && r.amaComparison.length > 0) {
                 const parts = r.amaComparison.map((a) => {
                     const val = Number.isFinite(a.value) ? a.value.toFixed(8) : 'n/a';
-                    const erSmoothText = Number.isFinite(Number(a.erSmoothPeriod)) ? `/es${Number(a.erSmoothPeriod).toFixed(0)}` : '';
+                    const erSmoothText = Number.isFinite(Number(a.erSmoothPeriod)) ? `/es${fixedTo(a.erSmoothPeriod, 0)}` : '';
                     return `${a.name}[${a.erPeriod}/${a.fastPeriod}/${a.slowPeriod}${erSmoothText}]=${val}`;
                 });
                 log(cfg, `  AMA compare: ${parts.join(' | ')}`);

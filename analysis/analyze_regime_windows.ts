@@ -28,6 +28,7 @@ const PE_CONFIG = MARKET_ADAPTER.PE_CONFIG;
 const { createSource }              = require('./price_sources');
 const { writeChartFile }            = require('./chart_utils');
 const { getCandleClose }            = require('./math_utils');
+const { roundTo } = require('../modules/utils/math_utils');
 
 const HURST_CENTER   = HURST_CONFIG.window;
 const PE_CENTER      = PE_CONFIG.window;
@@ -193,11 +194,11 @@ function computeComposite(allResults) {
 
         return {
             ...r,
-            stabilityScore:    Math.round(rnStability[i]    * 1000) / 1000,
-            entropyScore:       Math.round(rnEntropy[i]     * 1000) / 1000,
-            structuredScore:    Math.round(rnStructured[i]  * 1000) / 1000,
-            lagScore:           Math.round(rnLag[i]         * 1000) / 1000,
-            composite:          Math.round(composite * 1000) / 1000,
+            stabilityScore:    roundTo(rnStability[i], 1000),
+            entropyScore:       roundTo(rnEntropy[i], 1000),
+            structuredScore:    roundTo(rnStructured[i], 1000),
+            lagScore:           roundTo(rnLag[i], 1000),
+            composite:          roundTo(composite, 1000),
         };
     });
 }

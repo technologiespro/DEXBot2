@@ -43,6 +43,7 @@ const { getCredentialReadyFilePath, getCredentialSocketPath } = require('./modul
 const foreignCredDaemon = require('./modules/launcher/foreign_cred_daemon');
 const { normalizeBotEntry, resolveRawBotEntries, loadSettingsFile } = require('./modules/bot_settings');
 const chainKeys = require('./modules/chain_keys');
+const { ensureDir, readJSON, safeUnlink, writeJSON } = require('./modules/utils/fs_utils');
 
 const CODE_ROOT = __dirname;
 const ROOT = resolveProjectRoot(CODE_ROOT);
@@ -71,9 +72,9 @@ function formatBotCount(count: number) {
 }
 
 function cleanupMonolithicStateFiles() {
-    try { fs.unlinkSync(MONOLITHIC_PID_FILE); } catch (_) {}
-    try { fs.unlinkSync(MONOLITHIC_BOT_PID_FILE); } catch (_) {}
-    try { fs.unlinkSync(MONOLITHIC_BOT_INFO_FILE); } catch (_) {}
+    safeUnlink(MONOLITHIC_PID_FILE)
+    safeUnlink(MONOLITHIC_BOT_PID_FILE)
+    safeUnlink(MONOLITHIC_BOT_INFO_FILE)
 }
 
 function forwardSignal(child: any, signal: any) {
@@ -218,7 +219,7 @@ function waitForStableChildStartup(child: any, { label = 'child process', timeou
 
 function ensureMonolithicLogDir() {
     if (!fs.existsSync(LOGS_DIR)) {
-        fs.mkdirSync(LOGS_DIR, { recursive: true });
+        ensureDir(LOGS_DIR);
     }
 }
 
@@ -393,7 +394,7 @@ function waitForSupervisorReady({ child = null, timeoutMs = 15000, intervalMs = 
 
 function ensureSupervisorLogDir() {
     if (!fs.existsSync(LOGS_DIR)) {
-        fs.mkdirSync(LOGS_DIR, { recursive: true });
+        ensureDir(LOGS_DIR);
     }
 }
 
@@ -482,8 +483,8 @@ async function waitForPidExit(pid: number, timeoutMs: number) {
 }
 
 function cleanupCredentialRuntimeFiles() {
-    try { fs.unlinkSync(CREDENTIAL_SOCKET_FILE); } catch (_) {}
-    try { fs.unlinkSync(CREDENTIAL_READY_FILE); } catch (_) {}
+    safeUnlink(CREDENTIAL_SOCKET_FILE)
+    safeUnlink(CREDENTIAL_READY_FILE)
 }
 
 function ensureNoForeignCredentialDaemon({ verbose = true } = {}): Promise<boolean> {
@@ -512,14 +513,14 @@ async function stopMonolithicCredentialDaemon(): Promise<{ signaled: boolean; cl
     const daemonPid = Number(pidRaw);
     if (!pidRaw || !Number.isInteger(daemonPid) || daemonPid <= 0) {
         cleanupCredentialRuntimeFiles();
-        try { fs.unlinkSync(MONOLITHIC_CRED_PID_FILE); } catch (_) {}
+        safeUnlink(MONOLITHIC_CRED_PID_FILE)
         return { signaled: false, cleaned: true };
     }
 
     const signaled = isPidAlive(daemonPid);
     await stopCredentialDaemonPid(daemonPid);
     cleanupCredentialRuntimeFiles();
-    try { fs.unlinkSync(MONOLITHIC_CRED_PID_FILE); } catch (_) {}
+    safeUnlink(MONOLITHIC_CRED_PID_FILE)
     return { signaled, cleaned: true };
 }
 
@@ -668,7 +669,7 @@ function isOwnedMarketAdapterChildRunning(): boolean {
 
 function readMarketAdapterLockPid(): number {
     try {
-        const info = JSON.parse(fs.readFileSync(MARKET_ADAPTER_LOCK_FILE, 'utf8'));
+        const info = readJSON(MARKET_ADAPTER_LOCK_FILE);
         return Number(info.pid) || 0;
     } catch (_) { return 0; }
 }
@@ -695,7 +696,7 @@ function isMarketAdapterLockStale(): boolean {
 function removeMarketAdapterLockIfNotLive() {
     const pid = readMarketAdapterLockPid();
     if (!pid || !isLikelyMarketAdapterProcess(pid)) {
-        try { fs.unlinkSync(MARKET_ADAPTER_LOCK_FILE); } catch (_) {}
+        safeUnlink(MARKET_ADAPTER_LOCK_FILE)
         return true;
     }
     return false;
@@ -721,7 +722,7 @@ async function stopOwnedMarketAdapterChild(): Promise<void> {
     }
     _marketAdapterChild = null;
     _marketAdapterChildStartedAt = 0;
-    try { fs.unlinkSync(MARKET_ADAPTER_LOCK_FILE); } catch (_) {}
+    safeUnlink(MARKET_ADAPTER_LOCK_FILE)
 }
 
 function spawnMarketAdapterChild() {
@@ -794,7 +795,7 @@ function scheduleMarketAdapterWatchdog() {
 
             if (isMarketAdapterLockStale()) {
                 const stalePid = readMarketAdapterLockPid();
-                try { fs.unlinkSync(MARKET_ADAPTER_LOCK_FILE); } catch (_) {}
+                safeUnlink(MARKET_ADAPTER_LOCK_FILE)
                 console.warn(`[market-adapter-watchdog] removed stale lock (was pid=${stalePid})`);
             }
 
@@ -1414,7 +1415,7 @@ function readMarketAdapterStatus(): { pid: number | null; alive: boolean; uptime
 async function stopMarketAdapterFromLock(timeoutMs = 5000): Promise<{ pid: number | null; stopped: boolean }> {
     const status = readMarketAdapterStatus();
     if (!status.pid || !status.alive) {
-        try { fs.unlinkSync(MARKET_ADAPTER_LOCK_FILE); } catch (_) {}
+        safeUnlink(MARKET_ADAPTER_LOCK_FILE)
         return { pid: status.pid, stopped: false };
     }
 
@@ -1426,12 +1427,12 @@ async function stopMarketAdapterFromLock(timeoutMs = 5000): Promise<{ pid: numbe
             stopped = await waitForPidExit(status.pid, 2000);
         }
         if (stopped || !isLikelyMarketAdapterProcess(status.pid)) {
-            try { fs.unlinkSync(MARKET_ADAPTER_LOCK_FILE); } catch (_) {}
+            safeUnlink(MARKET_ADAPTER_LOCK_FILE)
         }
         return { pid: status.pid, stopped };
     } catch (err: any) {
         if (err.code === 'ESRCH') {
-            try { fs.unlinkSync(MARKET_ADAPTER_LOCK_FILE); } catch (_) {}
+            safeUnlink(MARKET_ADAPTER_LOCK_FILE)
             return { pid: status.pid, stopped: true };
         }
         throw err;
@@ -1545,14 +1546,14 @@ function readLiveMonolithicPid(): { pid: number; stale: boolean } {
         pid = Number(raw);
         if (!Number.isInteger(pid) || pid <= 0) pid = 0;
     } catch (_) {
-        try { fs.unlinkSync(MONOLITHIC_PID_FILE); } catch (_) {}
+        safeUnlink(MONOLITHIC_PID_FILE)
         return { pid: 0, stale: true };
     }
 
     if (pid <= 0) return { pid: 0, stale: true };
 
     if (!isLikelyUnlockProcess(pid)) {
-        try { fs.unlinkSync(MONOLITHIC_PID_FILE); } catch (_) {}
+        safeUnlink(MONOLITHIC_PID_FILE)
         return { pid: 0, stale: true };
     }
 

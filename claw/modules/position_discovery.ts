@@ -17,6 +17,7 @@ const {
   getFullAccount,
 } = require('./chain_queries');
 const { loadDexbotOrderUtils } = require('./dexbot_bridge');
+const { roundTo } = require('../../modules/utils/math_utils');
 
 function getBlockchainToFloat() {
   return loadDexbotOrderUtils().blockchainToFloat;
@@ -156,8 +157,8 @@ async function discoverPositionsSummary(accountName: string) {
       market: p.market,
       debt: p.onChain.debtAmount,
       collateral: p.onChain.collateralAmount,
-      cr: p.onChain.collateralRatio ? Math.round(p.onChain.collateralRatio * 1000) / 1000 : null,
-      btsPerMpa: p.onChain.btsPerMpa ? Math.round(p.onChain.btsPerMpa * 10000) / 10000 : null,
+      cr: p.onChain.collateralRatio ? roundTo(p.onChain.collateralRatio, 1000) : null,
+      btsPerMpa: p.onChain.btsPerMpa ? roundTo(p.onChain.btsPerMpa, 10000) : null,
     })),
   };
 }

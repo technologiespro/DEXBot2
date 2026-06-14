@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { safeUnlink } = require('../utils/fs_utils');
 
 /**
  * Foreign credential daemon detection.
@@ -97,15 +98,15 @@ function readOwnedCredentialDaemonPid(pidFile, isLikelyProcess) {
     try { raw = fs.readFileSync(pidFile, 'utf8'); } catch (_) { return 0; }
     const pid = Number(raw.trim());
     if (!Number.isInteger(pid) || pid <= 0) {
-        try { fs.unlinkSync(pidFile); } catch (_) {}
+        safeUnlink(pidFile)
         return 0;
     }
     if (!isPidAlive(pid)) {
-        try { fs.unlinkSync(pidFile); } catch (_) {}
+        safeUnlink(pidFile)
         return 0;
     }
     if (typeof isLikelyProcess === 'function' && !isLikelyProcess(pid)) {
-        try { fs.unlinkSync(pidFile); } catch (_) {}
+        safeUnlink(pidFile)
         return 0;
     }
     return pid;
@@ -132,11 +133,6 @@ async function stopPid(pid, timeoutMs = 5000) {
         if (!err || err.code !== 'ESRCH') throw err;
     }
     return !isPidAlive(pid);
-}
-
-function safeUnlink(target) {
-    if (!target) return;
-    try { fs.unlinkSync(target); } catch (_) {}
 }
 
 /**

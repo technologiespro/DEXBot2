@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { createBotKey } = require('../modules/account_orders');
 const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
+const { readJSON } = require('../modules/utils/fs_utils');
 
 const PARENT = path.dirname(__dirname);
 const ROOT = resolveProjectRoot(PARENT);
@@ -51,7 +52,7 @@ function loadExistingWhitelist() {
 
     let json;
     try {
-        json = JSON.parse(fs.readFileSync(WHITELIST_FILE, 'utf8'));
+        json = readJSON(WHITELIST_FILE);
     } catch (err: any) {
         process.stderr.write(`Warning: ignoring malformed ${WHITELIST_FILE}: ${err.message}\n`);
         return {};

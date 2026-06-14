@@ -17,6 +17,7 @@ const { OrderManager } = require('../modules/order/manager');
 const { ORDER_TYPES, ORDER_STATES, GRID_LIMITS, COW_ACTIONS } = require('../modules/constants');
 const { reconcileGrid } = require('../modules/order/utils/validate');
 const assert = require('assert');
+const { roundTo } = require('../modules/utils/math_utils');
 
 let testsPassed = 0;
 let testsFailed = 0;
@@ -70,7 +71,7 @@ function createManagerWithGridSize(gridSize = 14, budgetBuy = 1000, budgetSell =
         mgr.orders.set(gridId, {
             id: gridId,
             type: orderType,
-            price: Math.round(price * 100) / 100,
+            price: roundTo(price, 100),
             size: 0,
             state: ORDER_STATES.VIRTUAL,
             orderId: null

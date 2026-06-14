@@ -9,6 +9,7 @@ const { generateHTML, loadMarketProfiles } = require('./tradingview_uplot_chart_
 const { MARKET_ADAPTER } = require('../../modules/constants');
 const { toIntervalLabel } = require('../../market_adapter/interval_utils');
 const { loadCandleFile } = require('../math_utils');
+const { ensureDir, readJSON } = require('../../modules/utils/fs_utils');
 
 const DEFAULT_CHART_DIR = path.join(__dirname, '..', 'charts');
 const DEFAULT_CHART_FILE = path.join(DEFAULT_CHART_DIR, 'tradingview_chart.html');
@@ -84,7 +85,7 @@ function loadJsonMeta(filePath) {
 function loadBotSettings(filePath = DEFAULT_BOTS_FILE) {
     if (!filePath || !fs.existsSync(filePath)) return null;
     try {
-        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        return readJSON(filePath);
     } catch (err) {
         return null;
     }
@@ -197,7 +198,7 @@ async function main() {
         }, title);
 
         const chartDir = path.dirname(config.chartFile);
-        if (!fs.existsSync(chartDir)) fs.mkdirSync(chartDir, { recursive: true });
+        if (!fs.existsSync(chartDir)) ensureDir(chartDir);
         fs.writeFileSync(config.chartFile, html, 'utf8');
 
         if (!config.quiet) console.log(`[TradingView] ✓ Chart saved to ${config.chartFile}`);

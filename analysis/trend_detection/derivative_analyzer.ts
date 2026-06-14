@@ -1,3 +1,4 @@
+const { roundTo } = require('../../modules/utils/math_utils');
 'use strict';
 
 /**
@@ -943,16 +944,16 @@ class DerivativeAnalyzer {
             fastSmaTrend:       fastSmaConfirmed ? fastSmaRaw : 'NEUTRAL',
             fastSmaBarsInTrend: this.barsInFastSmaTrend,
             fastSmaConfidence:  fastSmaConf,
-            fastSmaValue:       this.currFastSma !== null ? Math.round(this.currFastSma * 1e6) / 1e6 : null,
+            fastSmaValue:       this.currFastSma !== null ? roundTo(this.currFastSma, 1e6) : null,
             // MACD
-            macdLine:      this.currMacd ? Math.round(this.currMacd.macd      * 1e8) / 1e8 : null,
-            macdSignal:    this.currMacd ? Math.round(this.currMacd.signal    * 1e8) / 1e8 : null,
-            macdHistogram: this.currMacd ? Math.round(this.currMacd.histogram * 1e8) / 1e8 : null,
+            macdLine:      this.currMacd ? roundTo(this.currMacd.macd, 1e8) : null,
+            macdSignal:    this.currMacd ? roundTo(this.currMacd.signal, 1e8) : null,
+            macdHistogram: this.currMacd ? roundTo(this.currMacd.histogram, 1e8) : null,
             macdTrend: this.currMacd
                 ? (this.currMacd.histogram > 0 ? 'BULL' : this.currMacd.histogram < 0 ? 'BEAR' : 'NEUTRAL')
                 : null,
             // RSI
-            rsi: this.currRsi !== null ? Math.round(this.currRsi * 100) / 100 : null,
+            rsi: this.currRsi !== null ? roundTo(this.currRsi, 100) : null,
             rsiZone: this.currRsi !== null
                 ? (this.currRsi > this.rsiOverboughtLevel ? 'OVERBOUGHT' : this.currRsi < this.rsiOversoldLevel ? 'OVERSOLD' : 'NEUTRAL')
                 : null,
@@ -969,7 +970,7 @@ class DerivativeAnalyzer {
             isLateBearWithoutWeak: this.isLateBearWithoutWeak,
             // Values
             price:       this.currPrice,
-            slowSma:     this.currSma     !== null ? Math.round(this.currSma     * 1e6) / 1e6 : null,
+            slowSma:     this.currSma     !== null ? roundTo(this.currSma, 1e6) : null,
             updateCount: this.updateCount,
         };
     }

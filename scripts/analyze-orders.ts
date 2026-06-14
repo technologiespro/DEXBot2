@@ -19,6 +19,7 @@ const { formatPrice6 } = require('../modules/order/format');
 const { ORDER_TYPES, ORDER_STATES, MARKET_ADAPTER } = require('../modules/constants');
 const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
 const { getWhitelistFlags } = require('../modules/market_adapter_whitelist');
+const { readJSON } = require('../modules/utils/fs_utils');
 
 const PARENT = path.dirname(__dirname);
 const ROOT = resolveProjectRoot(PARENT);
@@ -62,15 +63,6 @@ const HEADER_WIDTH = 11 + BAR_WIDTH;
  * Utility Functions
  * Helper functions for file I/O, formatting, and data retrieval
  */
-
-/**
- * readJSON: Load and parse JSON file
- * @param {string} filePath - Path to JSON file
- * @returns {Object} Parsed JSON object
- */
-function readJSON(filePath) {
-  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-}
 
 function sanitizeKey(source) {
   if (!source) return 'bot';
@@ -120,7 +112,7 @@ function readDynamicGridSnapshot(botKey) {
   try {
     const filePath = path.join(ORDERS_DIR, `${botKey}.dynamicgrid.json`);
     if (!fs.existsSync(filePath)) return null;
-    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const data = readJSON(filePath);
     return data && typeof data === 'object' ? data : null;
   } catch (e) {
     return null;

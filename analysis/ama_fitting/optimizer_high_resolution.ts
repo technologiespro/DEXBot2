@@ -206,6 +206,7 @@ function boundaryFlags(winner, erValues, fastValues, slowValues) {
 
 const { ensureDir } = require('../../modules/order/utils/system');
 const { range } = require('../math_utils');
+const { readJSON, writeJSON } = require('../../modules/utils/fs_utils');
 
 // ── Data loaders ──────────────────────────────────────────────────────────────
 
@@ -244,7 +245,7 @@ function updateAmaProfilesFile({ dataFile, meta, winners, sourceResultsFile }) {
 
     if (fs.existsSync(AMA_PROFILES_FILE)) {
         try {
-            const current = JSON.parse(fs.readFileSync(AMA_PROFILES_FILE, 'utf8'));
+            const current = readJSON(AMA_PROFILES_FILE);
             if (current && typeof current === 'object') {
                 payload.version = Number(current.version) || 1;
                 payload.profiles = Array.isArray(current.profiles) ? current.profiles : [];
@@ -297,7 +298,7 @@ function updateAmaProfilesFile({ dataFile, meta, winners, sourceResultsFile }) {
     else payload.profiles.push(profile);
 
     ensureDir(path.dirname(AMA_PROFILES_FILE));
-    fs.writeFileSync(AMA_PROFILES_FILE, JSON.stringify(payload, null, 2) + '\n', 'utf8');
+    writeJSON(AMA_PROFILES_FILE, payload);
 }
 
 // ── AMA Reposition Rate ───────────────────────────────────────────────────────
@@ -638,7 +639,7 @@ async function run() {
         ? `optimization_results_${path.basename(dataFile, '.json')}.json`
         : 'optimization_results_high_resolution.json';
     const outPath = path.join(__dirname, outName);
-    fs.writeFileSync(outPath, JSON.stringify({
+    writeJSON(outPath, {
         meta: {
             dataLabel,
             candles: candles.length,
@@ -671,7 +672,7 @@ async function run() {
                 AMA4: ama4,
             },
         },
-    }, null, 2));
+    });
 
     if (args.writeProfiles && dataFile && ama1 && ama2 && ama3 && ama4) {
         updateAmaProfilesFile({

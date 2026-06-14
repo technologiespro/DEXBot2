@@ -13,6 +13,7 @@ const {
 const { createPasswordBootstrapServer } = require('./credential_bootstrap');
 const { buildScopedChildEnv } = require('./child_env');
 const { buildRuntimeScriptArgs, resolveProjectRoot } = require('./runtime_entry');
+const { safeUnlink } = require('../utils/fs_utils');
 
 const DEFAULT_CODE_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_ROOT = resolveProjectRoot(DEFAULT_CODE_ROOT);
@@ -127,8 +128,8 @@ function createCredentialDaemonController({
             new Promise((resolve) => setTimeout(resolve, 5000)),
         ]);
 
-        try { fs.unlinkSync(socketPath); } catch (err: any) { }
-        try { fs.unlinkSync(readyFilePath); } catch (err: any) { }
+        safeUnlink(socketPath)
+        safeUnlink(readyFilePath)
         daemonProcess = null;
         daemonExitPromise = null;
     }

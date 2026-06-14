@@ -56,6 +56,7 @@ function parseArgs() {
     };
 }
 const { calcStdDev } = require('./math_utils');
+const { ensureDir, readJSON } = require('../modules/utils/fs_utils');
 /**
  * Main entry point.
  * 1. Parse config, load candles, compute AMA
@@ -87,7 +88,7 @@ function main() {
         console.error(`Data file not found: ${cfg.data}`);
         process.exit(1);
     }
-    const raw = JSON.parse(fs.readFileSync(cfg.data, 'utf8'));
+    const raw = readJSON(cfg.data);
     if (!raw.candles || !Array.isArray(raw.candles)) {
         console.error('Invalid data: expected "candles" array');
         process.exit(1);
@@ -350,7 +351,7 @@ table.heatmap td.yl { color: #8b949e; font-size: 10px; text-align: right; paddin
 </body>
 </html>`;
     const outDir = path.dirname(cfg.output);
-    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+    if (!fs.existsSync(outDir)) ensureDir(outDir);
     fs.writeFileSync(cfg.output, html, 'utf8');
     console.log(`✓ Heatmap saved to ${cfg.output}`);
 }

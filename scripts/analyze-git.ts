@@ -13,6 +13,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const Format = require('../modules/order/format');
+const { ensureDir } = require('../modules/utils/fs_utils');
 
 /**
  * RepoAnalyzer Class
@@ -968,7 +969,7 @@ class RepoAnalyzer {
 </html>`;
 
         const outputPath = path.join(process.cwd(), 'analysis', 'charts', 'repo-stats.html');
-        fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+        ensureDir(path.dirname(outputPath));
         fs.writeFileSync(outputPath, html);
         console.log(`✅ HTML chart generated: ${outputPath}`);
         console.log(`   Open in browser: file://${outputPath}`);

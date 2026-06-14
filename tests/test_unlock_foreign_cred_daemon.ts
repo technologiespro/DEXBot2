@@ -2,6 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { safeUnlink } = require('../modules/utils/fs_utils');
 
 console.log('Running foreign credential daemon detection tests');
 
@@ -20,7 +21,7 @@ function writeSocketAndReady() {
 
 function cleanup() {
     for (const p of [socketFile, readyFile, credPidFile]) {
-        try { fs.unlinkSync(p); } catch (_) {}
+        safeUnlink(p)
     }
 }
 
@@ -40,7 +41,7 @@ async function runNoRuntimeFilesTest() {
 
 async function runStaleFilesNoLiveDaemonTest() {
     writeSocketAndReady();
-    try { fs.unlinkSync(credPidFile); } catch (_) {}
+    safeUnlink(credPidFile)
 
     const cleaned = await fcd.ensureNoForeignCredentialDaemon(baseOpts);
     assert.strictEqual(cleaned, false, 'stale files without a live owner should be cleaned but not flagged as foreign');
@@ -95,9 +96,9 @@ async function runSocketWithoutReadyFileTest() {
     // should NOT short-circuit on the missing ready file; it should still
     // attempt to look up the owner and find nothing (because no real
     // listener exists in this temp dir), then clean up the socket.
-    try { fs.unlinkSync(readyFile); } catch (_) {}
+    safeUnlink(readyFile)
     fs.writeFileSync(socketFile, '');
-    try { fs.unlinkSync(credPidFile); } catch (_) {}
+    safeUnlink(credPidFile)
 
     const cleaned = await fcd.ensureNoForeignCredentialDaemon(baseOpts);
     assert.strictEqual(cleaned, false, 'socket without ready file with no live owner is a no-op foreign-wise');
@@ -108,7 +109,7 @@ async function runOrphanReadyFileTest() {
     // Ready file exists but socket does not. This is a stale marker that
     // would block the controller's readiness probe. The helper should
     // remove it.
-    try { fs.unlinkSync(socketFile); } catch (_) {}
+    safeUnlink(socketFile)
     fs.writeFileSync(readyFile, '');
 
     const cleaned = await fcd.ensureNoForeignCredentialDaemon(baseOpts);
@@ -130,7 +131,7 @@ async function runInodeExactPathMatchTest() {
     const net = require('net');
     const shortTarget = path.join(tmpRoot, 's');
     const longPath = shortTarget + '.longer';
-    try { fs.unlinkSync(longPath); } catch (_) {}
+    safeUnlink(longPath)
     const server = net.createServer(() => {});
     const listenError = await new Promise((resolve) => {
         server.once('error', resolve);
@@ -148,8 +149,8 @@ async function runInodeExactPathMatchTest() {
         assert.strictEqual(inode, 0, 'substring match must not match a longer path');
     } finally {
         server.close();
-        try { fs.unlinkSync(shortTarget); } catch (_) {}
-        try { fs.unlinkSync(longPath); } catch (_) {}
+        safeUnlink(shortTarget)
+        safeUnlink(longPath)
     }
 }
 

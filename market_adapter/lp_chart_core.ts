@@ -2,6 +2,7 @@
 
 const { toIntervalLabel } = require('./interval_utils');
 const { escapeHtml, serializeJsonForScript } = require('../analysis/chart_utils');
+const { fixedTo, roundTo } = require('../modules/utils/math_utils');
 
 function formatPct(v: any) {
     const num = Number(v);
@@ -398,7 +399,7 @@ function makeDevSplits(scaleMin, scaleMax, foundIncr, foundSpace) {
     const splits = [];
 
     for (let v = start; v <= end + 1e-9; v += step) {
-        const rounded = Math.round(v * 100) / 100;
+        const rounded = roundTo(v, 100);
         if (!splits.length || splits[splits.length - 1] !== rounded) splits.push(rounded);
     }
 
@@ -415,9 +416,9 @@ function makeVolumeSplits(scaleMin, scaleMax, foundIncr, foundSpace) {
 
     if (scaleMax <= scaleMin) return [];
 
-    const start = Math.round(scaleMin * 100) / 100;
+    const start = roundTo(scaleMin, 100);
     const mid = Math.round(((scaleMin + scaleMax) / 2) * 100) / 100;
-    const end = Math.round(scaleMax * 100) / 100;
+    const end = roundTo(scaleMax, 100);
     const splits = [start];
 
     if (mid > start && mid < end) splits.push(mid);
@@ -555,7 +556,7 @@ let charts: any[] = [];
 
 try {
 priceChart = initChart('price-chart', {
-    ...makePlotBase(false, (u, vals) => vals.map((v) => Number(v).toFixed(6)), {
+    ...makePlotBase(false, (u, vals) => vals.map((v) => fixedTo(v, 6)), {
         auto: true,
         distr: 3,
         log: 10,
@@ -583,7 +584,7 @@ priceChart = initChart('price-chart', {
 }, priceData);
 
 devChart = initChart('dev-chart', {
-    ...makePlotBase(false, (u, vals) => vals.map((v) => Number(v).toFixed(2) + '%'), {
+    ...makePlotBase(false, (u, vals) => vals.map((v) => fixedTo(v, 2) + '%'), {
         auto: true,
         range: (u, min, max) => {
             if (!Number.isFinite(min) || !Number.isFinite(max)) return [min, max];
@@ -595,7 +596,7 @@ devChart = initChart('dev-chart', {
     axes: [
         makeAxis(false, 'x'),
         {
-            ...makeYAxis(true, (u, vals) => vals.map((v) => Number(v).toFixed(2) + '%'), 82),
+            ...makeYAxis(true, (u, vals) => vals.map((v) => fixedTo(v, 2) + '%'), 82),
             border: { show: true, stroke: THEME.axis, width: 2 },
             grid: { show: true, stroke: THEME.grid, width: 2 },
             splits: (u, axisIdx, scaleMin, scaleMax) => makeDevSplits(scaleMin, scaleMax),

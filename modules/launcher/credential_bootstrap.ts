@@ -3,6 +3,7 @@ const net = require('net');
 const os = require('os');
 const path = require('path');
 const { TIMING } = require('../constants');
+const { safeUnlink } = require('../utils/fs_utils');
 
 const BOOTSTRAP_SOCKET_PREFIX = 'dexbot-cred-bootstrap-';
 const DEFAULT_TIMEOUT_MS = TIMING.DAEMON_STARTUP_TIMEOUT_MS;
@@ -14,7 +15,7 @@ function debugLog(message, err = null) {
 
 function cleanupBootstrapArtifacts(socketPath, socketDir) {
     if (socketPath) {
-        try { fs.unlinkSync(socketPath); } catch (err: any) { }
+        safeUnlink(socketPath)
     }
     if (socketDir) {
         try { fs.rmdirSync(socketDir); } catch (err: any) { }

@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { ensureDir, writeJSON } = require('../../modules/utils/fs_utils');
 
 const PROFILES_DIR = path.resolve(__dirname, '..', '..', 'profiles');
 const ORDERS_DIR = path.join(PROFILES_DIR, 'orders');
@@ -34,7 +35,7 @@ function withDynamicWeightFiles(botKey) {
     const originalWhitelist = readOptionalFile(WHITELIST_FILE);
     const originalSnapshot = readOptionalFile(snapshotFile);
 
-    fs.mkdirSync(ORDERS_DIR, { recursive: true });
+    ensureDir(ORDERS_DIR);
     fs.writeFileSync(
         WHITELIST_FILE,
         JSON.stringify({

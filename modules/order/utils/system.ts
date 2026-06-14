@@ -56,6 +56,7 @@ const OrderUtils = require('./order');
 const CODE_ROOT = path.join(__dirname, '..', '..', '..');
 const ROOT = resolveProjectRoot(CODE_ROOT);
 const Logger = require('../../logger');
+const { ensureDir } = require('../../utils/fs_utils');
 const systemLogger = new Logger('System');
 
 // ================================================================================
@@ -981,7 +982,7 @@ function syncBoundaryToFunds(manager: any): { changed: boolean; newIdx?: number 
  * @returns {boolean} True if directory was created, false if it already existed
  */
 function ensureProfilesDirectory(profilesDir: string): boolean {
-    if (!fs.existsSync(profilesDir)) { fs.mkdirSync(profilesDir, { recursive: true }); return true; }
+    if (!fs.existsSync(profilesDir)) { ensureDir(profilesDir); return true; }
     return false;
 }
 
@@ -1204,18 +1205,6 @@ function deepFreeze(obj: any): any {
  */
 function cloneMap<K, V>(map: Map<K, V>): Map<K, V> {
     return new Map(map);
-}
-
-/**
- * Ensure a directory exists, creating it recursively if it doesn't.
- * Safe to call when the directory already exists.
- * @param {string} dirPath - Directory path to ensure
- * @returns {void}
- */
-function ensureDir(dirPath: string): void {
-    if (!fs.existsSync(dirPath)) {
-        fs.mkdirSync(dirPath, { recursive: true });
-    }
 }
 
 /**

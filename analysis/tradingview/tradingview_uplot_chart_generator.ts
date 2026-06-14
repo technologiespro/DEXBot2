@@ -5,6 +5,7 @@ const path = require('path');
 const { MARKET_ADAPTER } = require('../../modules/constants');
 const { escapeHtml, serializeJsonForScript } = require('../chart_utils');
 const { normalizeCandle } = require('../math_utils');
+const { readJSON } = require('../../modules/utils/fs_utils');
 
 function inferBaseIntervalSeconds(candles, fallback = 3600) {
     if (!Array.isArray(candles) || candles.length < 2) return fallback;
@@ -26,7 +27,7 @@ function inferBaseIntervalSeconds(candles, fallback = 3600) {
 function loadMarketProfiles(filePath = path.join(__dirname, '..', '..', 'profiles', 'market_profiles.json')) {
     if (!filePath || !fs.existsSync(filePath)) return null;
     try {
-        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        return readJSON(filePath);
     } catch (err: any) {
         console.warn(`[WARN] Failed to parse ${filePath}: ${err.message}. Falling back to built-in AMA defaults.`);
         return null;

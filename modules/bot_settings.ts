@@ -4,6 +4,7 @@ const { parseJsonWithComments } = require('./order/utils/system');
 const { createBotKey } = require('./account_orders');
 const { isPositiveNumber, isPositiveNumberOrPercent } = require('./order/utils/math');
 const { resolveMinCollateralIncreaseThreshold } = require('./cr_planner');
+const { writeJSON } = require('./utils/fs_utils');
 
 function loadSettingsFile(filePath: string, { silent = false, exitOnError = true }: { silent?: boolean; exitOnError?: boolean } = {}): { config: any; filePath: string } {
     if (!fs.existsSync(filePath)) {
@@ -29,7 +30,7 @@ function loadSettingsFile(filePath: string, { silent = false, exitOnError = true
 
 function saveSettingsFile(config: any, filePath: string): void {
     try {
-        fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n', 'utf8');
+        writeJSON(filePath, config);
     } catch (err: any) {
         console.error('Failed to save bot settings to', filePath, '-', err.message);
         throw err;

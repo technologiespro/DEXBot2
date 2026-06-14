@@ -1,6 +1,7 @@
 'use strict';
 
 const { smoothKalmanVelocityPoint } = require('./kalman_velocity_smoothing');
+const { roundTo } = require('../../modules/utils/math_utils');
 
 /**
  * Kalman Trend Analyzer
@@ -282,14 +283,14 @@ class KalmanTrendAnalyzer {
         return {
             isReady: this.updateCount > this.warmupBars,
             price: this.currPrice,
-            kalmanPrice: Math.round(this.tactical.x * 1e8) / 1e8,
-            modalPrice: Math.round(this.modal.x * 1e8) / 1e8,
-            velocity: Math.round(this.tactical.v * 1e8) / 1e8,
-            velocityPct: Math.round(rawVelocityPct * 100) / 100,
+            kalmanPrice: roundTo(this.tactical.x, 1e8),
+            modalPrice: roundTo(this.modal.x, 1e8),
+            velocity: roundTo(this.tactical.v, 1e8),
+            velocityPct: roundTo(rawVelocityPct, 100),
             velocityRawPct: rawVelocityPct,
-            velocityFilteredPct: this.velocityFilteredPct == null ? null : Math.round(this.velocityFilteredPct * 100) / 100,
+            velocityFilteredPct: this.velocityFilteredPct == null ? null : roundTo(this.velocityFilteredPct, 100),
             velocityFilteredRawPct: this.velocityFilteredPct,
-            displacementPct: Math.round(displacementPct * 100) / 100,
+            displacementPct: roundTo(displacementPct, 100),
             displacementRawPct: displacementPct,
             signal,
             trend,

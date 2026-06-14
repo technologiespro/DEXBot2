@@ -22,6 +22,7 @@ const { generateHTML } = require('../../market_adapter/lp_chart_core');
 const { toIntervalLabel } = require('../../market_adapter/interval_utils');
 const { loadCandleFile } = require('../math_utils');
 const { MARKET_ADAPTER } = require('../../modules/constants');
+const { ensureDir } = require('../../modules/utils/fs_utils');
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
@@ -223,7 +224,7 @@ function generateChart(options = {} as Record<string, any>) {
 
     logger.log(`Generating chart (${amaResults.length} AMAs)...`);
     const html = generateHTML(enrichedMeta, candleArrays, amaResults);
-    fs.mkdirSync(path.dirname(outFile), { recursive: true });
+    ensureDir(path.dirname(outFile));
     fs.writeFileSync(outFile, html, 'utf8');
 
     logger.log(`\nChart saved: ${path.relative(process.cwd(), outFile)}`);

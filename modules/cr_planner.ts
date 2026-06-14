@@ -3,6 +3,7 @@
 const { toFiniteNumber } = require('./order/format');
 const { resolveConfigValue } = require('./order/utils/math');
 const { DEFAULT_TARGET_CR } = require('./constants');
+const { roundToDecimals } = require('./utils/math_utils');
 
 interface CrPolicy {
     minCollateralRatio?: number;
@@ -45,13 +46,6 @@ function resolveCollateralLimit(value: unknown, referenceAmount: unknown): numbe
         return resolved >= 0 ? resolved : null;
     }
     return resolved > 0 ? resolved : null;
-}
-
-function roundToPlaces(value: unknown, places: number = 8): number | null {
-    const num = Number(value);
-    if (!Number.isFinite(num)) return null;
-    const factor = 10 ** places;
-    return Math.round(num * factor) / factor;
 }
 
 function clampIncreaseToTotalMax(rawIncrease: unknown, currentTotal: unknown, maxTotal: unknown): number {
@@ -259,8 +253,8 @@ function buildDebtFirstCrPlan({
         currentDebtAmount,
         currentCollateralAmount,
         feedPrice,
-        debtDelta: roundToPlaces(debtDelta, 8),
-        collateralDelta: roundToPlaces(collateralDelta, 8),
+        debtDelta: roundToDecimals(debtDelta, 8),
+        collateralDelta: roundToDecimals(collateralDelta, 8),
         needsGridReset: true,
         resetReason: 'cr-adjustment',
     };
@@ -310,7 +304,7 @@ function buildCollateralFallbackPlan({
         currentDebtAmount,
         currentCollateralAmount,
         feedPrice,
-        collateralDelta: roundToPlaces(collateralDelta, 8),
+        collateralDelta: roundToDecimals(collateralDelta, 8),
         needsGridReset: true,
         resetReason: 'cr-adjustment',
     };

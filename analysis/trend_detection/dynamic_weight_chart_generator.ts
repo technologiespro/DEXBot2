@@ -6,6 +6,7 @@ const {
 } = require('./kalman_velocity_smoothing');
 const { getAmaWarmupBars } = require('../../market_adapter/core/strategies/ama');
 const { escapeHtml, serializeJsonForScript, toEpochSeconds, UPLOT_SHARED_SCRIPT } = require('../chart_utils');
+const { roundTo } = require('../../modules/utils/math_utils');
 
 function generateHTML(data, title = 'Dynamic Weight Research') {
     const results = data.allResults || [];
@@ -667,7 +668,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     currentMults[i] = finalMult;
                     const gatedOff = Math.abs(blendedOff * finalMult) < outputThreshold ? 0 : (blendedOff * finalMult);
                     const off = gatedOff * currentGain;
-                    combinedOff[i] = Math.round(off * 1000) / 1000;
+                    combinedOff[i] = roundTo(off, 1000);
                     combinedSell[i] = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_SELL - off) * 100) / 100));
                     combinedBuy[i]  = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_BUY + off) * 100) / 100));
                     currentOutputAxisMax = Math.max(currentOutputAxisMax, Math.abs(off));

@@ -30,6 +30,7 @@ const serial = require('../modules/bitshares-native/serial');
 const ecc = require('../modules/bitshares-native/crypto/ecc');
 const { NODE_MANAGEMENT } = require('../modules/constants');
 const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
+const { ensureDir, writeJSON } = require('../modules/utils/fs_utils');
 
 const PARENT = path.dirname(__dirname);
 const rootDir = resolveProjectRoot(PARENT);
@@ -220,8 +221,8 @@ async function main(): Promise<void> {
         details,
     };
 
-    fs.mkdirSync(path.dirname(outPath), { recursive: true });
-    fs.writeFileSync(outPath, JSON.stringify(report, null, 2) + '\n');
+    ensureDir(path.dirname(outPath));
+    writeJSON(outPath, report);
 
     console.log(`\nReport written: ${outPath}`);
     console.log(`Result: passed=${passed} transactionCount=${validCount}`);

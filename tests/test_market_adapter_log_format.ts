@@ -11,6 +11,7 @@ const {
 } = require('../market_adapter/log_format');
 const { DEFAULT_CONFIG, MARKET_ADAPTER } = require('../modules/constants');
 const { DEFAULT_AMA } = require('../market_adapter/market_adapter');
+const { fixedTo } = require('../modules/utils/math_utils');
 
 console.log('Running market adapter log format tests');
 
@@ -98,7 +99,7 @@ function testBuildAsymmetricBoundsLogFormatsPercentages() {
 
 function testBuildStartupDefaultsLogReflectsExplicitOnlyDynamicBase() {
     const text = buildStartupDefaultsLog(DEFAULT_AMA, DEFAULT_CONFIG, MARKET_ADAPTER);
-    const expectedFallback = `weightFallback=${Number(DEFAULT_CONFIG.weightDistribution.sell).toFixed(2)}/${Number(DEFAULT_CONFIG.weightDistribution.buy).toFixed(2)}`;
+    const expectedFallback = `weightFallback=${fixedTo(DEFAULT_CONFIG.weightDistribution.sell, 2)}/${fixedTo(DEFAULT_CONFIG.weightDistribution.buy, 2)}`;
 
     assert.ok(text.includes('dynamicBase=explicit-only'), 'startup defaults should document explicit-only dynamic base weights');
     assert.ok(text.includes(expectedFallback), 'startup defaults should include fallback weights');

@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const fsPromises = require('fs/promises');
+const { safeUnlink } = require('../../modules/utils/fs_utils');
 
 function loadLockInfo(lockPath: any) {
     try {
@@ -73,7 +74,7 @@ function acquireFileLockSync(lockPath: any, opts: any = {}) {
 
             const alive = isLikelyMarketAdapterProcess(Number(info.pid));
             if (stale || !alive) {
-                try { fs.unlinkSync(lockPath); } catch (_: any) {}
+                safeUnlink(lockPath)
                 continue;
             }
 
@@ -88,7 +89,7 @@ function releaseFileLockSync(lock: any) {
     if (!lock) return;
     try { if (lock.heartbeat) clearInterval(lock.heartbeat); } catch (_: any) {}
     try { if (typeof lock.fd === 'number') fs.closeSync(lock.fd); } catch (_: any) {}
-    try { if (lock.lockPath) fs.unlinkSync(lock.lockPath); } catch (_: any) {}
+    if (lock.lockPath) safeUnlink(lock.lockPath)
 }
 
 function sleepSync(ms: any) {
@@ -118,7 +119,7 @@ function acquirePathLockSync(filePath: any, opts: any = {}) {
             try {
                 const stat = fs.statSync(lockPath);
                 if (Date.now() - stat.mtimeMs > staleMs) {
-                    try { fs.unlinkSync(lockPath); } catch (_: any) {}
+                    safeUnlink(lockPath)
                     continue;
                 }
             } catch (_: any) {

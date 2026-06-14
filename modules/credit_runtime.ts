@@ -16,6 +16,7 @@ const {
     resolveTargetCollateralRatio,
 } = require('./cr_planner');
 const { FEE_PARAMETERS } = require('./constants');
+const { roundToDecimals } = require('./utils/math_utils');
 const { resolveProjectRoot } = require('./launcher/runtime_entry');
 
 const CREDIT_FEE_RATE_DENOM = 1_000_000;
@@ -67,13 +68,6 @@ function normalizeNumberArray(value) {
     return Array.isArray(value)
         ? value.map((item) => String(item)).filter(Boolean)
         : [];
-}
-
-function roundToPlaces(value, places = 6) {
-    const num = Number(value);
-    if (!Number.isFinite(num)) return null;
-    const factor = 10 ** places;
-    return Math.round(num * factor) / factor;
 }
 
 function toGrapheneCollateralRatio(value) {
@@ -2271,13 +2265,13 @@ class CreditRuntime {
 
         return {
             action: 'increase_credit_debt',
-            currentCollateralAmount: roundToPlaces(currentCollateralAmount, 8),
-            collateralIncreaseAmount: roundToPlaces(collateralIncreaseAmount, 8),
-            minCollateralIncrease: roundToPlaces(minCollateralIncrease, 8),
-            currentDebtAmount: roundToPlaces(currentDebtAmount, 8),
-            maxBorrowAmount: maxBorrowAmount !== null ? roundToPlaces(maxBorrowAmount, 8) : null,
-            remainingBorrowCapacity: remainingBorrowCapacity !== null ? roundToPlaces(remainingBorrowCapacity, 8) : null,
-            assignedCollateralBudget: roundToPlaces(assignedCollateralBudget, 8),
+            currentCollateralAmount: roundToDecimals(currentCollateralAmount, 8),
+            collateralIncreaseAmount: roundToDecimals(collateralIncreaseAmount, 8),
+            minCollateralIncrease: roundToDecimals(minCollateralIncrease, 8),
+            currentDebtAmount: roundToDecimals(currentDebtAmount, 8),
+            maxBorrowAmount: maxBorrowAmount !== null ? roundToDecimals(maxBorrowAmount, 8) : null,
+            remainingBorrowCapacity: remainingBorrowCapacity !== null ? roundToDecimals(remainingBorrowCapacity, 8) : null,
+            assignedCollateralBudget: roundToDecimals(assignedCollateralBudget, 8),
         };
     }
 

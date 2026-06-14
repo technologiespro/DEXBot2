@@ -45,6 +45,7 @@ setCachedModule(path.resolve(__dirname, '../modules/chain_orders.ts'), {
 });
 
 const CreditRuntime = require('../modules/credit_runtime');
+const { readJSON } = require('../modules/utils/fs_utils');
 
 async function testCollateralDistribution() {
     console.log('Testing collateral distribution logic...');
@@ -299,7 +300,7 @@ async function testStatePersistenceWithPositions() {
     const statePath = path.join(baseDir, 'persist-test.json');
     assert.ok(fs.existsSync(statePath), 'state file should be written');
 
-    const persisted = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    const persisted = readJSON(statePath);
     assert.ok(persisted.positions, 'persisted state should contain positions');
     assert.ok(persisted.positions['1.3.1:1.3.0'], 'USD position should be persisted');
     assert.strictEqual(persisted.positions['1.3.1:1.3.0'].assignedCollateralBudget, 10000);

@@ -7,6 +7,7 @@ const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache
 console.log('Running chain_keys vault tests');
 
 const chainKeys = require('../modules/chain_keys');
+const { readJSON, writeJSON } = require('../modules/utils/fs_utils');
 
 function writeModernVault(keysFile, password, accounts = {}) {
     const vaultSalt = Buffer.from('00112233445566778899aabbccddeeff', 'hex');
@@ -29,7 +30,7 @@ function writeModernVault(keysFile, password, accounts = {}) {
         };
     }
 
-    fs.writeFileSync(keysFile, JSON.stringify(data, null, 2));
+    writeJSON(keysFile, data);
     return secret;
 }
 
@@ -184,7 +185,7 @@ async function testInteractiveSessionPersistsModernState() {
         try {
             await isolatedChainKeys.main();
 
-            const persisted = JSON.parse(fs.readFileSync(keysFile, 'utf8'));
+            const persisted = readJSON(keysFile);
             assert.strictEqual(persisted.vaultVersion, 2, 'interactive session should keep modern vault metadata');
             assert.ok(persisted.accounts.alice.encryptedKey.startsWith('v2:'), 'existing records should stay in v2 format');
             assert.ok(persisted.accounts.bob.encryptedKey.startsWith('v2:'), 'new records should use v2 encryption');
