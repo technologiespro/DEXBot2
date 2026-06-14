@@ -39,7 +39,7 @@ async function testClawSkillMarkdown() {
   assert.ok(hermesMarkdown.includes('The shared Claw MCP server registers raw tool ids such as `claw_manifest`'));
   assert.strictEqual(hermesMarkdown.includes('mcp_claw_claw_manifest'), false);
   assert.ok(openfangMarkdown.includes('## OpenFang Setup'));
-  assert.ok(openfangMarkdown.includes('openfang_bridge.ts'));
+  assert.ok(openfangMarkdown.includes('openfang_bridge.js'));
   assert.ok(openfangMarkdown.includes('bitshares-claw'));
   assert.ok(nanoMarkdown.includes('## NanoBot Setup'));
   assert.ok(nanoMarkdown.includes('The stdio transport uses newline-delimited JSON-RPC messages on `stdin` and `stdout`.'));
@@ -47,7 +47,7 @@ async function testClawSkillMarkdown() {
   assert.ok(picoMarkdown.includes('The stdio transport uses newline-delimited JSON-RPC messages on `stdin` and `stdout`.'));
   assert.ok(nanoclawMarkdown.includes('## NanoClaw Setup'));
   assert.ok(nanoclawMarkdown.includes('bitshares-claw'));
-  assert.ok(nanoclawMarkdown.includes('nanoclaw_bridge.ts'));
+  assert.ok(nanoclawMarkdown.includes('nanoclaw_bridge.js'));
 }
 
 function testZeroClawSkillMarkdownRejects() {
@@ -80,7 +80,7 @@ async function testZeroClawSkillToml() {
   assert.ok(toml.includes('--profile-root'));
   assert.strictEqual(description.repositoryRoot, path.resolve(repoRoot));
   assert.strictEqual(description.profileRoot, path.resolve(profileRoot));
-  assert.strictEqual(description.bridgeScript, path.join(repoRoot, 'scripts', 'zeroclaw_bridge.ts').replace(/\\/g, '/'));
+  assert.strictEqual(description.bridgeScript, path.join(repoRoot, 'scripts', 'zeroclaw_bridge.js').replace(/\\/g, '/'));
   assert.strictEqual(description.output, toml);
 }
 
@@ -106,7 +106,7 @@ async function testNullClawSkillToml() {
   assert.ok(toml.includes('--profile-root'));
   assert.strictEqual(description.repositoryRoot, path.resolve(repoRoot));
   assert.strictEqual(description.profileRoot, path.resolve(profileRoot));
-  assert.strictEqual(description.bridgeScript, path.join(repoRoot, 'scripts', 'nullclaw_bridge.ts').replace(/\\/g, '/'));
+  assert.strictEqual(description.bridgeScript, path.join(repoRoot, 'scripts', 'nullclaw_bridge.js').replace(/\\/g, '/'));
   assert.strictEqual(description.output, toml);
 }
 

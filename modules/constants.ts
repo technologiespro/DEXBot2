@@ -508,7 +508,10 @@ let CREDENTIAL_PROMPTS = {
     // retries. The vault unlock throws MasterPasswordError after this many
     // failed attempts. The check is enforced both in _promptPassword and at
     // the top of the authenticate() loop as defense-in-depth.
-    MAX_MASTER_PASSWORD_ATTEMPTS: 3,
+    // 5 attempts: scrypt N=2^17 makes each guess expensive (~1s), so 5
+    // attempts absorbs legitimate typos without meaningfully weakening
+    // brute-force resistance.
+    MAX_MASTER_PASSWORD_ATTEMPTS: 5,
 };
 
 // BTS blockchain precision constant.

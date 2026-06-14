@@ -88,12 +88,10 @@ function getCredentialReadyFilePath(options: ReadyFilePathOptions = {}) {
 
 function ensureCredentialRuntimeDirSync(options: RuntimeDirOptions = {}) {
     const runtimeDir = getCredentialRuntimeDir(options);
+    // mode: 0o700 in mkdirSync is sufficient; the redundant chmodSync that
+    // previously followed was a no-op.  assertPrivatePathSecurity verifies
+    // the resulting mode as a post-condition.
     fs.mkdirSync(runtimeDir, { recursive: true, mode: 0o700 });
-    try {
-        fs.chmodSync(runtimeDir, 0o700);
-    } catch (err: any) {
-        debugLog(`Unable to chmod runtime dir ${runtimeDir}`, err);
-    }
     assertPrivatePathSecurity(runtimeDir, { expectedType: 'dir', requiredMode: 0o700 });
     return runtimeDir;
 }

@@ -108,6 +108,7 @@ const {
     executeOperationsViaCredentialDaemon,
     BroadcastUncertainError,
 } = require('./dexbot_credential_client');
+const { getCredentialReadyFilePath } = require('./credential_runtime');
 
 const Logger = require('./logger');
 const chainOrdersLogger = new Logger('ChainOrders');
@@ -489,10 +490,10 @@ async function executeViaDaemonToken(accountName, signingToken, operations) {
                 try {
                     const PARENT = path.dirname(__dirname);
                     const ROOT = path.basename(PARENT) === BUILD_DIR ? path.dirname(PARENT) : PARENT;
-                    const readyFile = path.join(ROOT, 'profiles', 'runtime', 'credential-daemon.ready');
+                    const readyFile = getCredentialReadyFilePath({ root: ROOT });
                     if (fs.existsSync(readyFile)) {
                         const daemonInfo = JSON.parse(fs.readFileSync(readyFile, 'utf8'));
-                        if (daemonInfo && daemonInfo.pid) {
+                        if (daemonInfo && typeof daemonInfo.pid === 'number') {
                             process.kill(daemonInfo.pid, 'SIGHUP');
                             chainOrdersLogger.log(`[credential-daemon] Sent SIGHUP (pid ${daemonInfo.pid}) to reload policy config`);
                         }

@@ -15,6 +15,13 @@ const { BitShares } = require('./bitshares_client');
 const { isPositiveInt } = require('./order/utils/math');
 const { parseJsonWithComments } = require('./order/utils/system');
 const { FEE_PARAMETERS, BUILD_DIR } = require('./constants');
+const { getCredentialReadyFilePath, assertPrivatePathSecurity } = require('./credential_runtime');
+const Logger = require('./logger');
+
+// Module-scope logger for library-style helpers that don't own a process
+// logger.  The class honours PM2 auto-quiet and routes to a log file when one
+// is configured, matching the rest of the codebase.
+const policyLogger = new Logger('credential-policy');
 
 const MODULE_DIR = path.dirname(__dirname);
 const PROJECT_ROOT = path.basename(MODULE_DIR) === BUILD_DIR ? path.dirname(MODULE_DIR) : MODULE_DIR;
@@ -174,6 +181,29 @@ function readPolicyConfigDetailed(filePath: string): { status: string; config: a
 }
 
 /**
+ * Check that a policy config file has restrictive permissions (0o600).
+ * MIGRATION: Auto-remediates legacy 0o644 mode with a warning, matching
+ * the behavior of checkKeysFileSecurity in chain_keys.ts.
+ *
+ * @param {string} filePath - Path to daemon-policies.json
+ */
+function checkPolicyFileSecurity(filePath: string) {
+    if (!fs.existsSync(filePath)) return;
+    try {
+        assertPrivatePathSecurity(filePath, { expectedType: 'file', requiredMode: 0o600 });
+    } catch (err: any) {
+        const stat = fs.lstatSync(filePath);
+        const mode = stat.mode & 0o777;
+        if (mode === 0o644 && !stat.isSymbolicLink()) {
+            fs.chmodSync(filePath, 0o600);
+            policyLogger.warn(`[security] Auto-fixed ${filePath} permissions from 0o644 to 0o600. Run: chmod 600 profiles/daemon-policies.json`);
+            return;
+        }
+        throw err;
+    }
+}
+
+/**
  * Ensure daemon-policies.json exists before the credential daemon starts.
  * Missing files are initialized to a minimal strict-compatible policy; invalid
  * existing files still fail closed and are not overwritten.
@@ -219,7 +249,7 @@ function loadPolicyConfig(filePath: string, options: { forceReload?: boolean } =
 
     const detailed = readPolicyConfigDetailed(filePath);
     if (detailed.status !== 'ok') {
-        console.warn(`[policy] ${detailed.error} — using builtin defaults`);
+        policyLogger.warn(`[policy] ${detailed.error} — using builtin defaults`);
         policyCache.set(filePath, null);
         return null;
     }
@@ -1298,6 +1328,16 @@ function evaluateExecutable(exePath: string, context: PolicyContext): Promise<{ 
 
 /**
  * Load the botHmacSecret for an account from the policy config file.
+ *
+ * CONCURRENCY NOTE (M1): If two bot processes call this simultaneously for
+ * the same account before either has written, both will generate independent
+ * secrets.  The second atomic rename clobbers the first, leaving both bots
+ * holding the second bot's secret.  The first bot's HMAC will then mismatch
+ * until it retries (triggering another reload).  This is a brief disruption
+ * window, not a security breach — both bots are legitimate.  If strict
+ * per-bot isolation is required, use flock(2) on the policy file or switch
+ * to a per-bot key-derivation from a shared master secret.
+ *
  * @param {string} accountName - The account name
  * @param {string} policyConfigPath - Path to daemon-policies.json
  * @param {Object} [options] - Optional configuration
@@ -1305,10 +1345,20 @@ function evaluateExecutable(exePath: string, context: PolicyContext): Promise<{ 
  */
 function loadBotHmacSecret(accountName: string, policyConfigPath: string, options: { quiet?: boolean; silent?: boolean } = {}): string | null {
     const quiet = options.quiet === true || options.silent === true;
-    const info = (...args) => {
-        if (!quiet) console.log(...args);
+    // Route through the module-scope policyLogger so output honours the
+    // process-wide log level, file rotation, and PM2 auto-quiet rules.
+    // `quiet` (per-call) suppresses routine info; security-relevant warns
+    // and the auto-provision event still surface regardless.
+    const info = (msg: string) => {
+        if (!quiet) policyLogger.info(msg);
     };
-    let config = loadPolicyConfig(policyConfigPath);
+    const warn = (msg: string) => {
+        policyLogger.warn(msg);
+    };
+    // Always reload from disk to avoid serving a stale cached entry when
+    // another process (or this process in an earlier call) already
+    // auto-provisioned a new secret and signalled the daemon via SIGHUP.
+    let config = loadPolicyConfig(policyConfigPath, { forceReload: true });
     if (!config) config = {};
     if (!config.accounts) config.accounts = {};
     if (!config.accounts[accountName]) config.accounts[accountName] = {};
@@ -1319,21 +1369,59 @@ function loadBotHmacSecret(accountName: string, policyConfigPath: string, option
         const newSecret = crypto.randomBytes(32).toString('hex');
         config.accounts[accountName].botHmacSecret = newSecret;
 
-        fs.writeFileSync(policyConfigPath, JSON.stringify(config, null, 2), 'utf8');
-        info(`[policy] Auto-provisioned strict botHmacSecret for ${accountName}`);
-
+        // Atomic write: write to temp file with 0o600, then rename.
+        // This prevents truncated files on crash and ensures the file is
+        // never world-readable regardless of the process umask.
+        const tmpPath = `${policyConfigPath}.${process.pid}.${Date.now()}.${crypto.randomBytes(8).toString('hex')}.tmp`;
         try {
-            // Check if credential daemon is running to reload config via SIGHUP
-            const readyFile = path.join(PROJECT_ROOT, 'profiles', 'runtime', 'credential-daemon.ready');
-            if (fs.existsSync(readyFile)) {
-                const daemonInfo = JSON.parse(fs.readFileSync(readyFile, 'utf8'));
-                if (daemonInfo && daemonInfo.pid) {
-                    process.kill(daemonInfo.pid, 'SIGHUP');
-                    info(`[policy] Sent SIGHUP to credential daemon (pid ${daemonInfo.pid}) to activate new secret`);
-                }
+            const fd = fs.openSync(tmpPath, 'w', 0o600);
+            try {
+                const json = JSON.stringify(config, null, 2);
+                fs.writeSync(fd, json, 0, 'utf8');
+                fs.fsyncSync(fd);
+            } finally {
+                fs.closeSync(fd);
+            }
+            fs.renameSync(tmpPath, policyConfigPath);
+        } catch (err) {
+            try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
+            throw err;
+        }
+        warn(`[policy] SECURITY: Auto-provisioned strict botHmacSecret for ${accountName} — first-time secret generation`);
+
+        // Best-effort SIGHUP to the credential daemon so the new secret is
+        // picked up immediately, without waiting for the fs.watch debounce
+        // (500ms) or a SIGHUP from the operator.  Three distinct failure
+        // modes are handled separately:
+        //   - ready file missing/empty: daemon is not running, nothing to do
+        //   - ready file malformed (old format, partial write): warn and skip
+        //   - process.kill error (ESRCH=process gone, EPERM=not allowed):
+        //     warn — the fs.watch safety net will still pick up the change
+        try {
+            const readyFile = getCredentialReadyFilePath({ root: PROJECT_ROOT });
+            const raw = fs.readFileSync(readyFile, 'utf8');
+            if (!raw.trim()) {
+                info(`[policy] Ready file ${readyFile} is empty; daemon may not be running`);
+                secret = newSecret;
+                return secret;
+            }
+            const daemonInfo = JSON.parse(raw);
+            if (daemonInfo && typeof daemonInfo.pid === 'number') {
+                process.kill(daemonInfo.pid, 'SIGHUP');
+                info(`[policy] Sent SIGHUP to credential daemon (pid ${daemonInfo.pid}) to activate new secret`);
+            } else {
+                warn(`[policy] Ready file ${readyFile} has no numeric pid field; skipping SIGHUP`);
             }
         } catch (e: any) {
-            info(`[policy] Note: Could not send SIGHUP to daemon: ${e.message}`);
+            if (e && e.code === 'ENOENT') {
+                info(`[policy] Ready file not present; daemon not running, SIGHUP skipped`);
+            } else if (e instanceof SyntaxError) {
+                warn(`[policy] Ready file is malformed JSON (${e.message}); SIGHUP skipped, fs.watch will pick up the change`);
+            } else if (e && (e.code === 'ESRCH' || e.code === 'EPERM')) {
+                warn(`[policy] SIGHUP to daemon failed (${e.code}: ${e.message}); fs.watch will pick up the change`);
+            } else {
+                warn(`[policy] Unexpected error signalling daemon (${e && e.message}); fs.watch will pick up the change`);
+            }
         }
         secret = newSecret;
     }
@@ -1390,6 +1478,7 @@ function verifySourceHmac(request: any, policyConfig: any): { valid: boolean; re
 export = {
     POLICY_DENIED_PREFIX,
     BUILTIN_DEFAULT_POLICY,
+    checkPolicyFileSecurity,
     ensurePolicyConfig,
     loadPolicyConfig,
     loadRequiredPolicyConfig,

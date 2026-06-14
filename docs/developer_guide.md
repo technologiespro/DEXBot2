@@ -1844,7 +1844,6 @@ Control bot behavior via environment variables (useful for advanced setups):
 
 | Variable | Description |
 |----------|-------------|
-| `DAEMON_PASSWORD` | Optional advanced override for direct `credential-daemon.ts` startup; normal launchers use a one-shot local bootstrap channel instead |
 | `BOT_NAME` / `LIVE_BOT_NAME` | Select a specific bot from `profiles/bots.json` by name |
 | `PREFERRED_ACCOUNT` | Override the preferred account for the selected bot |
 | `RUN_LOOP_MS` | Polling interval in ms (default: `5000`) |

@@ -91,7 +91,11 @@ const { TIMING, BUILD_DIR, CREDENTIAL_PROMPTS } = require('./constants');
 const {
     getCredentialReadyFilePath,
     getCredentialSocketPath,
+    assertPrivatePathSecurity,
 } = require('./credential_runtime');
+const Logger = require('./logger');
+
+const chainKeysLogger = new Logger('chain-keys');
 
 const VAULT_VERSION = 2;
 const VAULT_SALT_BYTES = 16;
@@ -397,9 +401,20 @@ function validatePrivateKey(key) {
     }
 
     // PVT-style private key used by some Graphene-based chains (e.g. PVT_K1_<data>)
-    // Example shape: PVT_K1_base58...
+    // Strip prefix and base58check-decode to verify checksum and payload length.
+    // This catches typos before the key is encrypted to disk.
     if (/^PVT_(?:K1_)?[A-Za-z0-9_-]+$/.test(k)) {
-        return { valid: true };
+        try {
+            const stripped = k.replace(/^PVT_(?:K1_)?/, '');
+            const payload = base58check.decode(stripped);
+            if (payload && payload.length === 32) {
+                return { valid: true };
+            }
+            // Graphene PVT_K1_ keys are 32 bytes of key material
+            return { valid: false, reason: `PVT_K1_ key decoded to ${payload.length} bytes, expected 32` };
+        } catch (err: any) {
+            return { valid: false, reason: `PVT_K1_ key has invalid base58check encoding: ${err.message}` };
+        }
     }
 
     // Hex private key (64 hex chars) - accept optionally
@@ -439,6 +454,36 @@ function setupModernVault(accountsData, password) {
     accountsData.vaultVerifier = createVaultVerifier(vaultKey);
     delete accountsData.masterPasswordHash;
     return createVaultSecret(vaultKey);
+}
+
+/**
+ * Check that the keys file has restrictive permissions (0o600) and is owned by
+ * the current user.  Returns silently if the file doesn't exist yet (it will be
+ * created correctly by saveAccounts).
+ *
+ * MIGRATION: If the file has the legacy 0o644 mode (from before the atomic-write
+ * fix), auto-remediate to 0o600 and log a warning.  This prevents the first run
+ * after upgrade from crashing with "Unexpected permissions".
+ *
+ * Should be called early in every entry point that may read or write keys.json.
+ */
+function checkKeysFileSecurity() {
+    if (!fs.existsSync(PROFILES_KEYS_FILE)) return;
+    try {
+        assertPrivatePathSecurity(PROFILES_KEYS_FILE, { expectedType: 'file', requiredMode: 0o600 });
+    } catch (err: any) {
+        // Auto-remediate legacy 0o644 mode (the state per the security audit)
+        const stat = fs.lstatSync(PROFILES_KEYS_FILE);
+        const mode = stat.mode & 0o777;
+        if (mode === 0o644 && !stat.isSymbolicLink()) {
+            fs.chmodSync(PROFILES_KEYS_FILE, 0o600);
+            chainKeysLogger.warn(`[security] Auto-fixed ${PROFILES_KEYS_FILE} permissions from 0o644 to 0o600. Run: chmod 600 profiles/keys.json`);
+            return;
+        }
+        // For any other security issue (symlink, wrong owner, unexpected mode),
+        // fail closed — this is a real security violation, not a migration artifact.
+        throw err;
+    }
 }
 
 /**
@@ -625,9 +670,7 @@ async function changeMasterPassword(accountsData, currentSecret) {
         return currentSecret;
     }
 
-    const oldSecret = hasModernVault(accountsData)
-        ? deriveModernSecretFromPassword(oldPassword, accountsData)
-        : deriveModernSecretFromPassword(oldPassword, accountsData);
+    const oldSecret = deriveModernSecretFromPassword(oldPassword, accountsData);
 
     const newPassword = await readPassword('Enter new master password:     ');
     if (newPassword === '\x1b') return currentSecret;
@@ -644,28 +687,37 @@ async function changeMasterPassword(accountsData, currentSecret) {
         return currentSecret;
     }
 
-    const decryptedKeys = {};
+    const decryptedKeys: Record<string, string> = {};
     try {
         for (const [name, account] of Object.entries(accountsData.accounts)) {
             decryptedKeys[name] = decrypt((account as any).encryptedKey, oldSecret);
         }
     } catch (error: any) {
+        // Clear any partially-decrypted keys before returning
+        for (const key of Object.keys(decryptedKeys)) delete decryptedKeys[key];
         console.log('Failed to decrypt stored keys with the current master password:', error.message);
         return currentSecret;
     }
 
     const newSecret = setupModernVault(accountsData, newPassword);
-        for (const [name, account] of Object.entries(accountsData.accounts)) {
-            (account as any).encryptedKey = encrypt(decryptedKeys[name], newSecret);
-        }
+    for (const [name, account] of Object.entries(accountsData.accounts)) {
+        (account as any).encryptedKey = encrypt(decryptedKeys[name], newSecret);
+        delete decryptedKeys[name];
+    }
+    // V8 strings are immutable and cannot be zeroed; deleting the references
+    // allows GC to collect them.  The real protection is that the window
+    // between decrypt and re-encrypt is now minimized to the loop body.
     saveAccounts(accountsData);
     console.log('Master password updated successfully.');
     return newSecret;
 }
 
 /**
- * Save accounts data to profiles/keys.json.
- * Creates directory if needed.
+ * Save accounts data to profiles/keys.json atomically with restrictive permissions.
+ * Writes to a temp file in the same directory, fsyncs, then renames over the target.
+ * The file is always created with mode 0o600 so that even if the calling process
+ * inherited a permissive umask (e.g. 0o022), the key material is never world-readable.
+ *
  * @param {Object} data - Accounts data to save
  */
 function saveAccounts(data) {
@@ -693,7 +745,24 @@ function saveAccounts(data) {
         delete serialized.vaultVersion;
     }
 
-    fs.writeFileSync(PROFILES_KEYS_FILE, JSON.stringify(serialized, null, 2));
+    // Atomic write: write to temp file with 0o600, then rename over target.
+    // This prevents truncated files on crash and ensures the file is never
+    // world-readable regardless of the process umask.
+    const tmpPath = `${PROFILES_KEYS_FILE}.${process.pid}.${Date.now()}.${crypto.randomBytes(8).toString('hex')}.tmp`;
+    try {
+        const fd = fs.openSync(tmpPath, 'w', 0o600);
+        try {
+            const json = JSON.stringify(serialized, null, 2);
+            fs.writeSync(fd, json, 0, 'utf8');
+            fs.fsyncSync(fd);
+        } finally {
+            fs.closeSync(fd);
+        }
+        fs.renameSync(tmpPath, PROFILES_KEYS_FILE);
+    } catch (err) {
+        try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
+        throw err;
+    }
 }
 
 /**
@@ -1039,6 +1108,7 @@ export = {
     validatePrivateKey,
     loadAccounts,
     saveAccounts,
+    checkKeysFileSecurity,
     encrypt,
     decrypt,
     deriveVaultKey,

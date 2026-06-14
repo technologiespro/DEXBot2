@@ -1051,7 +1051,7 @@ function readInput(prompt: string, options: { hideEchoBack?: boolean; mask?: str
             const buf = escBuf;
             escBuf = '';
             // Standalone ESC
-            if (buf === '\x1b') { cleanup(); stdout.write('\n'); return resolve('\x1b'); }
+            if (buf === '\x1b') { cleanup(); stdout.write('\r\x1b[K\n'); return resolve('\x1b'); }
             // CSI sequence: ESC [ <params> <final>
             if (buf.length >= 3 && buf[1] === '[') {
                 const seq = buf.substring(2);
@@ -1064,7 +1064,7 @@ function readInput(prompt: string, options: { hideEchoBack?: boolean; mask?: str
 
         function handleChar(ch) {
             if (ch === '\r' || ch === '\n' || ch === '\u0004') { cleanup(); stdout.write('\n'); return resolve(input.trim()); }
-            if (ch === '\u0003') { cleanup(); process.exit(); }
+            if (ch === '\u0003') { cleanup(); stdout.write('\r\x1b[K\n'); process.exit(); }
 
             // Backspace
             if (ch === '\u007f' || ch === '\u0008') {

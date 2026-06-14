@@ -82,6 +82,12 @@
  *
  * ===============================================================================
  */
+
+// Restrict default file permissions: files created by this process default to
+// 0o600 (owner-only) unless explicitly opened with a wider mode.  Protects
+// keys.json and daemon-policies.json from world-readable exposure.
+process.umask(0o077);
+
 const { BitShares, waitForConnected, setSuppressConnectionLog } = require('./modules/bitshares_client');
 const fs = require('fs');
 const path = require('path');
@@ -101,9 +107,17 @@ const {
 const { buildRuntimeScriptArgs } = require('./modules/launcher/runtime_entry');
 const { buildMarketAdapterWhitelistNpmArgs } = require('./modules/cli_whitelist_args');
 const { BUILD_DIR } = require('./modules/constants');
+const credentialPolicy = require('./modules/credential_policy');
 
 // Setup graceful shutdown handlers
 setupGracefulShutdown();
+
+// Verify keys file permissions early — refuse to run if keys.json is
+// world-readable (would indicate a prior run with a permissive umask).
+if (typeof chainKeys.checkKeysFileSecurity === 'function') chainKeys.checkKeysFileSecurity();
+// Same migration-aware check for daemon-policies.json.
+const _policyRoot = path.basename(__dirname) === BUILD_DIR ? path.dirname(__dirname) : __dirname;
+if (typeof credentialPolicy.checkPolicyFileSecurity === 'function') credentialPolicy.checkPolicyFileSecurity(path.join(_policyRoot, 'profiles', 'daemon-policies.json'));
 
 // Note: accountOrders is now per-bot only. Each bot has its own AccountOrders instance
 // created in DEXBot.start() in modules/dexbot_class.ts. This eliminates shared-file race conditions.

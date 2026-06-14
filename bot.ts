@@ -46,6 +46,11 @@
  *    - Runs indefinitely (PM2 manages restart/stop/monitoring)
  */
 
+// Restrict default file permissions: files created by this process default to
+// 0o600 (owner-only) unless explicitly opened with a wider mode.  Protects
+// keys.json and daemon-policies.json from world-readable exposure.
+process.umask(0o077);
+
 const fs = require('fs');
 const path = require('path');
 const { createPm2AwareLogger } = require('./modules/logger');
@@ -59,6 +64,13 @@ const credentialPolicy = require('./modules/credential_policy');
 
 // Setup graceful shutdown handlers
 setupGracefulShutdown();
+
+// Verify keys file permissions early — refuse to run if keys.json is
+// world-readable (would indicate a prior run with a permissive umask).
+if (typeof chainKeys.checkKeysFileSecurity === 'function') chainKeys.checkKeysFileSecurity();
+// Same migration-aware check for daemon-policies.json.
+const _policyRoot = path.basename(__dirname) === BUILD_DIR ? path.dirname(__dirname) : __dirname;
+if (typeof credentialPolicy.checkPolicyFileSecurity === 'function') credentialPolicy.checkPolicyFileSecurity(path.join(_policyRoot, 'profiles', 'daemon-policies.json'));
 
 const ROOT = path.basename(__dirname) === BUILD_DIR ? path.dirname(__dirname) : __dirname;
 const PROFILES_BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');

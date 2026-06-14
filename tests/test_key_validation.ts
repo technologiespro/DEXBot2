@@ -19,8 +19,18 @@ const cases = [
     },
     {
         name: 'valid_pvt_k1',
-        key: 'PVT_K1_123abcDEF',
+        key: 'PVT_K1_2orKbL5bpzCATED1FtaR4RYuAshZFM6UBW1cD3VJ1D4fcEPf4',
         valid: true,
+    },
+    {
+        name: 'invalid_pvt_k1_checksum',
+        key: 'PVT_K1_2orKbL5bpzCATED1FtaR4RYuAshZFM6UBW1cD3VJ1D4fcEPf5',
+        valid: false,
+    },
+    {
+        name: 'invalid_pvt_k1_wrong_length',
+        key: 'PVT_K1_2orKbL5',
+        valid: false,
     },
     {
         name: 'valid_hex',

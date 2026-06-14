@@ -117,6 +117,10 @@ let policyConfig: any = null;
 let activeSessions: Map<string, { accountName: string; createdAt: number }> = new Map();
 let auditLogPath: any = null;
 let auditLogQueue: Promise<void> = Promise.resolve();
+// Policy-file watcher (cleared on shutdown so we don't leak the inotify FD
+// or fire a debounced reload after secrets have been zeroed).
+let policyWatcher: import('fs').FSWatcher | null = null;
+let policyWatchDebounce: ReturnType<typeof setTimeout> | null = null;
 
 function debugLog(message: string, err: any = null) {
     const suffix = err && err.message ? `: ${err.message}` : '';
@@ -231,22 +235,18 @@ function appendAuditLog(entry: any) {
         fs.appendFile(auditLogPath, line, (err: any) => {
             if (err) {
                 debugLog('Audit log write failed', err);
-                resolve();
-                return;
             }
-
-            performAuditLogPrune().finally(() => resolve());
+            resolve();
         });
     }));
 }
 
 async function resolveVaultSecret() {
-    const envSecret = process.env.DAEMON_PASSWORD;
-    if (envSecret) {
-        delete process.env.DAEMON_PASSWORD;
-        daemonLogger.log?.('[credential-daemon] Resolving vault secret from direct daemon environment');
-        return normalizeBootstrapCredential(envSecret);
-    }
+    // NOTE: The DAEMON_PASSWORD env-var path was removed.  No launcher in this
+    // codebase ever sets it, and /proc/<pid>/environ retains deleted env values
+    // in cleartext for the lifetime of the process — making it a high-value
+    // extraction target for any local same-uid process.  All callers should use
+    // the one-shot bootstrap socket (DEXBOT_CRED_BOOTSTRAP_PATH_FILE) instead.
 
     // Try the bootstrap path file first (stable path, no PM2 env leak).
     // The launcher writes the one-shot bootstrap socket path to this file
@@ -499,15 +499,16 @@ async function initialize() {
             accountsData.accounts = null;
         }
 
-        // Load policy config
+        // Load policy config — auto-remediate legacy 0o644 permissions first
         const policyConfigPath = path.join(PROJECT_ROOT, 'profiles', 'daemon-policies.json');
+        credentialPolicy.checkPolicyFileSecurity(policyConfigPath);
         policyConfig = credentialPolicy.loadRequiredPolicyConfig(policyConfigPath);
 
         // Set audit log path
         const auditLogDir = path.join(PROJECT_ROOT, 'profiles', 'logs');
         if (!fs.existsSync(auditLogDir)) {
             try {
-                fs.mkdirSync(auditLogDir, { recursive: true });
+                fs.mkdirSync(auditLogDir, { recursive: true, mode: 0o700 });
             } catch (err: any) {
                 debugLog(`Failed to create audit log directory ${auditLogDir}: ${err.message}`);
             }
@@ -527,6 +528,15 @@ async function initialize() {
         const nodeRefreshInterval = setInterval(refreshNodeList, getCredentialDaemonNodeRefreshIntervalMs(settings));
         if (typeof nodeRefreshInterval.unref === 'function') {
             nodeRefreshInterval.unref();
+        }
+
+        // Audit log prune on a timer (M5): replaces inline pruning on every
+        // append, which caused read+rewrite of the entire file on each signed
+        // operation.  Hourly prune is sufficient for the 7-day retention window.
+        const AUDIT_LOG_PRUNE_INTERVAL_MS = 60 * 60 * 1000;
+        const auditPruneInterval = setInterval(() => { pruneAuditLog(); }, AUDIT_LOG_PRUNE_INTERVAL_MS);
+        if (typeof auditPruneInterval.unref === 'function') {
+            auditPruneInterval.unref();
         }
 
         // Register SIGHUP handler for policy and node list reload.
@@ -549,6 +559,36 @@ async function initialize() {
             refreshNodeList();
         });
 
+        // Watch policy config file for external changes (e.g. auto-provision
+        // of botHmacSecret by a bot process).  fs.watch fires multiple events
+        // per atomic rename, so debounce with a 500ms settle window.
+        // This is the safety net that makes C2 fixes work end-to-end: the bot
+        // writes a new secret, sends SIGHUP, and even if SIGHUP is lost or
+        // delayed, the daemon picks up the change within 500ms.
+        try {
+            policyWatcher = fs.watch(policyConfigPath, { persistent: false }, (eventType: string) => {
+                if (policyWatchDebounce) clearTimeout(policyWatchDebounce);
+                policyWatchDebounce = setTimeout(() => {
+                    policyWatchDebounce = null;
+                    try {
+                        const newConfig = credentialPolicy.loadRequiredPolicyConfig(policyConfigPath);
+                        policyConfig = newConfig;
+                        debugLog(`Policy config reloaded via fs.watch (${eventType})`);
+                    } catch (err: any) {
+                        daemonLogger.error?.(`[credential-daemon] fs.watch policy reload failed: ${err.message}`);
+                        // Do NOT shut down on watch-triggered reload failure — the
+                        // existing in-memory config is still valid.  The SIGHUP
+                        // handler's stricter fail-closed applies only to explicit
+                        // operator-initiated reloads.
+                    }
+                }, 500);
+            });
+        } catch (watchErr: any) {
+            // fs.watch can fail on exotic filesystems; log but don't crash.
+            // SIGHUP and the audit-log timer still work.
+            debugLog(`Could not watch policy config file ${policyConfigPath}`, watchErr);
+        }
+
         ensureCredentialRuntimeDirSync({ root: PROJECT_ROOT, runtimeDir: RUNTIME_DIR, socketPath: SOCKET_PATH, readyFilePath: READY_FILE });
         daemonLogger.log?.(`[credential-daemon] Runtime socket path: ${SOCKET_PATH}`);
         daemonLogger.log?.(`[credential-daemon] Ready file path: ${READY_FILE}`);
@@ -568,16 +608,28 @@ async function initialize() {
                 fs.chmodSync(SOCKET_PATH, 0o600);
                 assertPrivatePathSecurity(SOCKET_PATH, { expectedType: 'socket', requiredMode: 0o600 });
             } catch (err: any) {
-                debugLog(`Unable to chmod socket ${SOCKET_PATH}`, err);
+                daemonLogger.error?.(`[credential-daemon] FATAL: Insecure socket permissions on ${SOCKET_PATH}: ${err.message}`);
+                shutdown(1, 'insecure socket permissions');
+                return;
             }
-            // Create ready file to signal startup completion
+            // Create ready file to signal startup completion.
+            // Open with explicit 0o600 mode to avoid the TOCTOU window between
+            // writeFileSync and chmodSync (the file is never world-readable).
+            // Write JSON with pid so callers can send SIGHUP to trigger policy reload.
             try {
-                fs.writeFileSync(READY_FILE, Date.now().toString());
-                fs.chmodSync(READY_FILE, 0o600);
+                const readyPayload = JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() });
+                const fd = fs.openSync(READY_FILE, 'w', 0o600);
+                try {
+                    fs.writeSync(fd, readyPayload, 0, 'utf8');
+                } finally {
+                    fs.closeSync(fd);
+                }
                 assertPrivatePathSecurity(READY_FILE, { expectedType: 'file', requiredMode: 0o600 });
                 daemonLogger.log?.(`[credential-daemon] Ready: listening on ${SOCKET_PATH}`);
             } catch (err: any) {
-                debugLog(`Unable to update ready file permissions ${READY_FILE}`, err);
+                daemonLogger.error?.(`[credential-daemon] FATAL: Insecure ready-file permissions on ${READY_FILE}: ${err.message}`);
+                shutdown(1, 'insecure ready-file permissions');
+                return;
             }
         });
 
@@ -998,6 +1050,19 @@ function shutdown(exitCode = 0, reason = 'shutdown') {
     if (server) {
         try { server.close(); } catch (_) {}
     }
+
+    // Cancel any pending policy-watch debounce and close the inotify handle.
+    // If we don't, a reload could fire AFTER secrets have been zeroed, or
+    // the watcher could keep the event loop alive briefly during shutdown.
+    if (policyWatchDebounce) {
+        clearTimeout(policyWatchDebounce);
+        policyWatchDebounce = null;
+    }
+    if (policyWatcher) {
+        try { policyWatcher.close(); } catch (_) {}
+        policyWatcher = null;
+    }
+
     daemonLogger.log?.('[credential-daemon] Server closed');
     daemonLogger.flush().finally(() => process.exit(exitCode));
 }
