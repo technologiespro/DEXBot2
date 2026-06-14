@@ -857,7 +857,14 @@ async function handleCLICommands() {
                 try {
                     const pid = Number(fs.readFileSync(MONOLITHIC_PID_FILE, 'utf8').trim());
                     if (Number.isInteger(pid) && pid > 0) {
-                        try { process.kill(pid, 0); unlockRunning = true; } catch (_) {}
+                        try { process.kill(pid, 0); unlockRunning = true; } catch (err: any) {
+                            if (err.code === 'EACCES') {
+                                console.warn('[dexbot]', `process.kill(${pid}, 0) EACCES — process exists but permission denied`);
+                                unlockRunning = true;
+                            } else if (err.code !== 'ESRCH') {
+                                console.warn('[dexbot]', `process.kill(${pid}, 0) unexpected error: ${err.message}`);
+                            }
+                        }
                     }
                 } catch (_) {}
             }

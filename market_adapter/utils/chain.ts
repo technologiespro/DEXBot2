@@ -36,7 +36,9 @@ async function findPoolByAssets(assetAId: any, assetBId: any, options: any = {})
         try {
             const pool = await BitShares.db.get_liquidity_pool_by_asset_ids(assetAId, assetBId);
             if (pool?.id) return pool;
-        } catch (_: any) {}
+        } catch (_: any) {
+            console.warn(`[chain] get_liquidity_pool_by_asset_ids failed for ${assetAId}/${assetBId}`);
+        }
     }
 
     if (typeof BitShares.db?.get_liquidity_pools_by_assets === 'function') {
@@ -64,7 +66,9 @@ async function findPoolByAssets(assetAId: any, assetBId: any, options: any = {})
                     return bal(y) - bal(x);
                 })[0];
             }
-        } catch (_: any) {}
+        } catch (_: any) {
+            console.warn(`[chain] get_liquidity_pools_by_assets failed for ${assetAId}/${assetBId}`);
+        }
     }
 
     const listFn = BitShares.db?.list_liquidity_pools ?? BitShares.db?.get_liquidity_pools;

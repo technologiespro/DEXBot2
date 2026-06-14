@@ -1,4 +1,4 @@
-const { roundTo } = require('../../../modules/utils/math_utils');
+const { roundTo, roundToDecimals } = require('../../../modules/utils/math_utils');
 'use strict';
 
 /**
@@ -70,7 +70,7 @@ function adjustCollateralRatio(trendData: any, minRatio = 1.5, maxRatio = 2.0) {
     return {
         targetRatio,
         action,
-        adjustment: Math.round((targetRatio - midpoint) * 1000) / 1000,
+        adjustment: roundToDecimals(targetRatio - midpoint, 3),
     };
 }
 

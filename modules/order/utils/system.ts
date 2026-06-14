@@ -56,7 +56,7 @@ const OrderUtils = require('./order');
 const CODE_ROOT = path.join(__dirname, '..', '..', '..');
 const ROOT = resolveProjectRoot(CODE_ROOT);
 const Logger = require('../../logger');
-const { ensureDir } = require('../../utils/fs_utils');
+const { ensureDir, readJSON } = require('../../utils/fs_utils');
 const systemLogger = new Logger('System');
 
 // ================================================================================
@@ -506,8 +506,7 @@ async function deriveLiquidityPoolTokenValue(BitShares: any, shareAssetRef: stri
 function loadAmaCenterSnapshot(botKey: string): any {
     try {
         const gridPriceFile = path.join(ROOT, 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
-        const raw = fs.readFileSync(gridPriceFile, 'utf8');
-        const data = JSON.parse(raw);
+        const data = readJSON(gridPriceFile);
         const gridCenterPrice = Number(data?.gridCenterPrice ?? data?.centerPrice);
         const amaCenterPrice = Number(data?.amaCenterPrice);
         if (!Number.isFinite(gridCenterPrice) || gridCenterPrice <= 0) {

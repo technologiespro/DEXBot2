@@ -621,7 +621,7 @@ class Accountant {
 
           const state = mgr._recoveryState;
           const now = Date.now();
-          const retryIntervalMs = Math.max(0, Number(PIPELINE_TIMING.RECOVERY_RETRY_INTERVAL_MS) || 0);
+          const retryIntervalMs = Math.max(0, Number(PIPELINE_TIMING.RECOVERY_RETRY_INTERVAL_MS));
           const maxAttemptsRaw = Number(PIPELINE_TIMING.MAX_RECOVERY_ATTEMPTS);
           const hasAttemptLimit = Number.isFinite(maxAttemptsRaw) && maxAttemptsRaw > 0;
 

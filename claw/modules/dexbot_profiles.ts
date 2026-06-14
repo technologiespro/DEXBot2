@@ -435,7 +435,7 @@ function validateBotSettingsState(bot: Record<string, any> = {}) {
   if (Number.isFinite(increment) && Number.isFinite(spread)) {
     const minSpread = increment * GRID_LIMITS.MIN_SPREAD_FACTOR;
     if (spread + Number.EPSILON < minSpread) {
-      errors.push(`targetSpreadPercent must be >= ${GRID_LIMITS.MIN_SPREAD_FACTOR}x incrementPercent (${Number(minSpread.toFixed(6))})`);
+      errors.push(`targetSpreadPercent must be >= ${GRID_LIMITS.MIN_SPREAD_FACTOR}x incrementPercent (${minSpread.toFixed(6)})`);
     }
   }
 

@@ -2340,7 +2340,7 @@ class DEXBot {
      * @returns {number} Positive maximum number of fill-driven rotations per broadcast cycle
      */
     _getMaxFillBatchSize() {
-        return Math.max(1, FILL_PROCESSING.MAX_FILL_BATCH_SIZE || 1);
+        return Math.max(1, FILL_PROCESSING.MAX_FILL_BATCH_SIZE);
     }
 
     /**

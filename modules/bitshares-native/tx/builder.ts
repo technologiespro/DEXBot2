@@ -138,7 +138,7 @@ function createTransactionBuilder(chainClient: ChainClientRef) {
                         return;
                     }
                 }
-            } catch (_: any) {}
+            } catch (err: any) { console.warn('[builder]', 'fetchRefBlock (get_objects) failed:', err.message); }
 
             try {
                 const dgp = await chainClient.db.get_dynamic_global_properties();

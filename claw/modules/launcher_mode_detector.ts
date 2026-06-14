@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { loadSettingsFile, resolveRawBotEntries } = require('../../modules/bot_settings');
 const { normalizeProfileDir } = require('./launcher_paths');
-const { ensureDir, writeJSON } = require('../../modules/utils/fs_utils');
+const { ensureDir, readJSON, writeJSON } = require('../../modules/utils/fs_utils');
 
 const LEGACY_MODE_ALIASES = {
   'unlock-start': 'unlock',
@@ -41,8 +41,7 @@ function loadConfig(options: Record<string, any> = {}) {
 
   try {
     if (fs.existsSync(configPath)) {
-      const content = fs.readFileSync(configPath, 'utf8');
-      return JSON.parse(content);
+      return readJSON(configPath);
     }
   } catch (err: any) {
     // Ignore parse errors, return empty

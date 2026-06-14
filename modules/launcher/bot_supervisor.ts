@@ -8,7 +8,7 @@ const { buildScopedChildEnv } = require('./child_env');
 const { buildRuntimeScriptPath, isDistCodeRoot, resolveProjectRoot } = require('./runtime_entry');
 const { normalizeBotEntries, resolveRawBotEntries, loadSettingsFile } = require('../bot_settings');
 const { UPDATER, BUILD_DIR, LAUNCHER } = require('../constants');
-const { ensureDir, safeUnlink } = require('../utils/fs_utils');
+const { ensureDir, readJSON, safeUnlink } = require('../utils/fs_utils');
 
 const CODE_ROOT = path.resolve(__dirname, '..', '..');
 const ROOT = resolveProjectRoot(CODE_ROOT);
@@ -316,8 +316,7 @@ function isNodeProcessWithExactScript(pid, scriptSegments) {
 
 function readMarketAdapterLockPid() {
     try {
-        const raw = fs.readFileSync(MARKET_ADAPTER_LOCK_FILE, 'utf8');
-        const info = JSON.parse(raw);
+        const info = readJSON(MARKET_ADAPTER_LOCK_FILE);
         const pid = Number(info.pid);
         return Number.isInteger(pid) && pid > 0 ? pid : null;
     } catch (_: any) {

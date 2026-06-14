@@ -58,7 +58,7 @@ function findMarketProfile(profiles: any, meta: any = {}) {
 
 function resolveAmaDefaults({ meta, data, marketProfiles }: any = {}) {
     const amaDefaultsSource = MARKET_ADAPTER.AMAS?.AMA3
-        || MARKET_ADAPTER.AMAS?.[MARKET_ADAPTER.DEFAULT_AMA_KEY || 'AMA3']
+        || MARKET_ADAPTER.AMAS?.[MARKET_ADAPTER.DEFAULT_AMA_KEY]
         || { erPeriod: 781, fastPeriod: 5.2, slowPeriod: 112.7 };
     const profile = findMarketProfile(marketProfiles, meta);
     const profileAmaKey = profile?.defaultAma && profile.amas && profile.amas[profile.defaultAma]

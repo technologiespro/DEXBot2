@@ -13,7 +13,7 @@ const { ensureDir, readJSON } = require('../../modules/utils/fs_utils');
 
 const DEFAULT_CHART_DIR = path.join(__dirname, '..', 'charts');
 const DEFAULT_CHART_FILE = path.join(DEFAULT_CHART_DIR, 'tradingview_chart.html');
-const DEFAULT_AMA = MARKET_ADAPTER.AMAS?.AMA3 || MARKET_ADAPTER.AMAS?.[MARKET_ADAPTER.DEFAULT_AMA_KEY || 'AMA3'] || {
+const DEFAULT_AMA = MARKET_ADAPTER.AMAS?.AMA3 || MARKET_ADAPTER.AMAS?.[MARKET_ADAPTER.DEFAULT_AMA_KEY] || {
     erPeriod: 781,
     fastPeriod: 5.2,
     slowPeriod: 112.7,

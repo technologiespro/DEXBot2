@@ -643,7 +643,7 @@ async function listenForFills(accountRef, callback) {
                         if (typeof BitShares.unsubscribe === 'function') {
                             await BitShares.unsubscribe('account', entry.bsCallback, accountName);
                         }
-                    } catch (e: any) { }
+                    } catch (e: any) { chainOrdersLogger.warn(`Unsubscribe failed: ${e.message}`); }
                     accountSubscriptions.delete(accountName);
                 }
             });

@@ -607,7 +607,7 @@ async function askTargetSpreadPercent(promptText: string, defaultValue?: any, in
     const safeIncrement = Number.isFinite(incrementPercent) ? incrementPercent : 0;
     const safeMinSpreadFactor = Number.isFinite(minSpreadFactor) ? minSpreadFactor : 2.1;
     const minRequired = safeIncrement * safeMinSpreadFactor;
-    const minRequiredLabel = Number(minRequired.toFixed(6));
+    const minRequiredLabel = minRequired.toFixed(6);
     const effectiveDefault = Number.isFinite(defaultValue) ? Math.max(defaultValue, minRequired) : defaultValue;
     const suffix = effectiveDefault !== undefined && effectiveDefault !== null ? ` [${effectiveDefault.toFixed(2)}]` : '';
     const raw = (await readInput(`${promptText} (>= ${minRequiredLabel})${suffix}: `)).trim();
@@ -999,7 +999,7 @@ async function promptBotData(base = {}) {
                         : 2.1;
                     const minRequiredSpread = data.incrementPercent * spreadFactor;
                     if (data.targetSpreadPercent + Number.EPSILON < minRequiredSpread) {
-                        console.log(`\x1b[38;5;160mError: targetSpreadPercent (${data.targetSpreadPercent}) must be >= ${spreadFactor}x incrementPercent (${Number(minRequiredSpread.toFixed(6))}).\x1b[0m`);
+                        console.log(`\x1b[38;5;160mError: targetSpreadPercent (${data.targetSpreadPercent}) must be >= ${spreadFactor}x incrementPercent (${minRequiredSpread.toFixed(6)}).\x1b[0m`);
                         break;
                     }
                 }

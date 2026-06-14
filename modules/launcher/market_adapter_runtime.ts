@@ -6,7 +6,7 @@ const { spawn } = require('child_process');
 const { buildScopedChildEnv } = require('./child_env');
 const { MARKET_ADAPTER } = require('../constants');
 const { resolveProjectRoot, buildRuntimeScriptPath } = require('./runtime_entry');
-const { safeUnlink } = require('../utils/fs_utils');
+const { readJSON, safeUnlink } = require('../utils/fs_utils');
 
 const DEFAULT_CODE_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_ROOT = resolveProjectRoot(DEFAULT_CODE_ROOT);
@@ -20,8 +20,7 @@ const DEFAULT_STALE_LOCK_MS = (
 
 function loadLockInfo(lockPath: string): any {
     try {
-        const raw = fs.readFileSync(lockPath, 'utf8');
-        const parsed = JSON.parse(raw);
+        const parsed = readJSON(lockPath);
         return parsed && typeof parsed === 'object' ? parsed : {};
     } catch (_: any) {
         return {};

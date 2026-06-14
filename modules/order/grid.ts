@@ -192,8 +192,8 @@ class Grid {
         // BTS-holding side reserves fees for both buy and sell target counts.
         const isBtsSide = (isBuy && manager.config.assetB === 'BTS') || (!isBuy && manager.config.assetA === 'BTS');
         if (isBtsSide && budget > 0) {
-            const targetBuy = Math.max(0, manager.config.activeOrders?.buy || 1);
-            const targetSell = Math.max(0, manager.config.activeOrders?.sell || 1);
+            const targetBuy = Math.max(0, manager.config.activeOrders?.buy ?? 1);
+            const targetSell = Math.max(0, manager.config.activeOrders?.sell ?? 1);
             const totalTarget = targetBuy + targetSell;
 
             const btsFees = calculateOrderCreationFees(
@@ -207,8 +207,8 @@ class Grid {
 
         // Non-BTS pair: reserve proportional share for BTS fee budget
         if (!isBtsSide && budget > 0) {
-            const targetBuy = Math.max(0, manager.config.activeOrders?.buy || 1);
-            const targetSell = Math.max(0, manager.config.activeOrders?.sell || 1);
+            const targetBuy = Math.max(0, manager.config.activeOrders?.buy ?? 1);
+            const targetSell = Math.max(0, manager.config.activeOrders?.sell ?? 1);
             const totalTarget = targetBuy + targetSell;
             const formulaBudget = calculateOrderCreationFees(
                 manager.config.assetA,

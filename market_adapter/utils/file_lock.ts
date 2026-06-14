@@ -2,12 +2,11 @@
 
 const fs = require('fs');
 const fsPromises = require('fs/promises');
-const { safeUnlink } = require('../../modules/utils/fs_utils');
+const { readJSON, safeUnlink } = require('../../modules/utils/fs_utils');
 
 function loadLockInfo(lockPath: any) {
     try {
-        const raw = fs.readFileSync(lockPath, 'utf8');
-        const parsed = JSON.parse(raw);
+        const parsed = readJSON(lockPath);
         return parsed && typeof parsed === 'object' ? parsed : {};
     } catch (_: any) {
         return {};

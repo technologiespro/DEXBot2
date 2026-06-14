@@ -21,7 +21,7 @@ const { cloneWeightDistribution, calculateOrderCreationFees, calculateSwapInAmou
 const { updateDynamicGridSnapshotSync } = require('../market_adapter/utils/dynamic_grid_snapshot');
 const { reconcileGridOrders } = require('./order/grid_reconcile');
 const { formatUnmatchedChainOrder, getSideBudget } = require('./order/utils/order');
-const { ensureDir } = require('./utils/fs_utils');
+const { ensureDir, safeUnlink } = require('./utils/fs_utils');
 
 const CODE_ROOT = path.join(__dirname, '..');
 const ROOT = resolveProjectRoot(CODE_ROOT);
@@ -130,8 +130,8 @@ function _hasBudgetForSide(manager, config, side) {
         if (!funds) return true;
         const allocated = side === 'buy' ? (funds.allocatedBuy || 0) : (funds.allocatedSell || 0);
         if (allocated <= 0) return false;
-        const targetBuy = Math.max(0, config?.activeOrders?.buy || 1);
-        const targetSell = Math.max(0, config?.activeOrders?.sell || 1);
+        const targetBuy = Math.max(0, config?.activeOrders?.buy ?? 1);
+        const targetSell = Math.max(0, config?.activeOrders?.sell ?? 1);
         const totalTarget = targetBuy + targetSell;
         const budget = getSideBudget(side, funds, config, totalTarget);
         return budget > 0;
@@ -850,10 +850,8 @@ function performGridResync(options: {
                 self._log('Recorded grid reset metadata for dynamic grid state.', 'info');
             }
 
-            if (fs.existsSync(self.triggerFile)) {
-                fs.unlinkSync(self.triggerFile);
-                self._log('Removed trigger file.');
-            }
+            safeUnlink(self.triggerFile);
+            self._log('Removed trigger file.');
         } catch (err: any) {
             self._log(`Error during triggered resync: ${err.message}`, 'error');
         } finally {
@@ -1781,7 +1779,7 @@ async function checkBtsBalanceAndAcquire() {
     if (this.config.dryRun) return;
     if (this.config.assetA === 'BTS' || this.config.assetB === 'BTS') return;
 
-    const cooldownMs = (TIMING.BTS_ACQUIRE_COOLDOWN_MIN || 60) * 60 * 1000;
+    const cooldownMs = TIMING.BTS_ACQUIRE_COOLDOWN_MIN * 60 * 1000;
     const now = Date.now();
 
     // Prune every expired entry in the map, not just the current bot's.
@@ -1801,8 +1799,8 @@ async function checkBtsBalanceAndAcquire() {
 
     if (!this.manager || !this.manager.btsBalance) return;
 
-    const targetBuy = Math.max(0, this.config.activeOrders?.buy || 1);
-    const targetSell = Math.max(0, this.config.activeOrders?.sell || 1);
+    const targetBuy = Math.max(0, this.config.activeOrders?.buy ?? 1);
+    const targetSell = Math.max(0, this.config.activeOrders?.sell ?? 1);
     const totalTarget = targetBuy + targetSell;
 
     const minBtsVal = calculateOrderCreationFees(

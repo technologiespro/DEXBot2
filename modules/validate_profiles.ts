@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const { createBotKey } = require('./account_orders');
+const { readJSON } = require('./utils/fs_utils');
 
 const CODE_ROOT = path.join(__dirname, '..');
 const ROOT = resolveProjectRoot(CODE_ROOT);
@@ -98,15 +99,11 @@ function matchProfileToBot(bot: any, profile: any): number {
 
 function loadJsonFile(filePath: string): { data: any; ok: boolean; error?: string } {
     try {
-        if (!fs.existsSync(filePath)) {
-            return { data: null, ok: true };
-        }
-        const raw = fs.readFileSync(filePath, 'utf8');
-        if (!raw || !raw.trim()) {
-            return { data: null, ok: true };
-        }
-        return { data: JSON.parse(raw), ok: true };
+        const data = readJSON(filePath);
+        return { data, ok: true };
     } catch (err: any) {
+        if (err?.code === 'ENOENT') return { data: null, ok: true };
+        if (err instanceof SyntaxError) return { data: null, ok: true };
         return { data: null, ok: false, error: `${filePath}: ${err.message}` };
     }
 }

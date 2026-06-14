@@ -4,7 +4,7 @@ const ecc = require('./bitshares-native/crypto/ecc');
 const { NATIVE_CLIENT } = require('./constants');
 const Logger = require('./logger');
 
-const DEFAULT_ADDRESS_PREFIX = NATIVE_CLIENT.CHAIN.ADDRESS_PREFIX || 'BTS';
+const DEFAULT_ADDRESS_PREFIX = NATIVE_CLIENT.CHAIN.ADDRESS_PREFIX;
 const logger = new Logger('authority-resolver');
 
 /**

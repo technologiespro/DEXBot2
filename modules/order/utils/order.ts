@@ -865,7 +865,7 @@ function validateIndexes(grid, indexes) {
 // SECTION 9: ORDER COMPARISON & DELTA
 // ================================================================================
 
-const ORDER_RELATIVE_TOLERANCE = (Number(GRID_LIMITS.RELATIVE_ORDER_UPDATE_THRESHOLD_PERCENT) || 0) / 100;
+const ORDER_RELATIVE_TOLERANCE = Number(GRID_LIMITS.RELATIVE_ORDER_UPDATE_THRESHOLD_PERCENT) / 100;
 
 function getDecimalPlaces(value) {
     const numeric = Number(value);

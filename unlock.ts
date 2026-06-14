@@ -1394,8 +1394,7 @@ function isExpectedMonolithicBotPid(pid: number, botInfo: { pid?: number; startt
 
 function readMarketAdapterStatus(): { pid: number | null; alive: boolean; uptime: string; mem: string } {
     try {
-        const raw = fs.readFileSync(MARKET_ADAPTER_LOCK_FILE, 'utf8');
-        const info = JSON.parse(raw);
+        const info = readJSON(MARKET_ADAPTER_LOCK_FILE);
         const pid = Number(info.pid);
         if (!Number.isInteger(pid) || pid <= 0) {
             return { pid: null, alive: false, uptime: '-', mem: '-' };

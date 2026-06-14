@@ -71,7 +71,7 @@ class StrategyEngine {
     constructor(manager: any) {
         this.manager = manager;
         this._settledFeeEvents = new Map();
-        this._feeEventTtlMs = Number(PIPELINE_TIMING.FEE_EVENT_DEDUP_TTL_MS) || (6 * 60 * 60 * 1000);
+        this._feeEventTtlMs = Number(PIPELINE_TIMING.FEE_EVENT_DEDUP_TTL_MS);
         this._pruneCallCount = 0;
     }
 
@@ -336,7 +336,7 @@ class StrategyEngine {
         updatedSlots.forEach((s) => this.manager.logger.log(`  Slot ${s.id}: price=${s.price}, size=${s.size ?? 'n/a'}, type=${s.type}`, 'debug'));
 
         // 3. Calculate Ideal Sizes (Budgeting)
-        const totalTarget = Math.max(0, config.activeOrders?.buy || 1) + Math.max(0, config.activeOrders?.sell || 1);
+        const totalTarget = Math.max(0, config.activeOrders?.buy ?? 1) + Math.max(0, config.activeOrders?.sell ?? 1);
         const budgetBuy = getSideBudget('buy', funds, config, totalTarget);
         const budgetSell = getSideBudget('sell', funds, config, totalTarget);
         
@@ -345,8 +345,8 @@ class StrategyEngine {
         const allSellSlots = updatedSlots.filter(o => o.type === ORDER_TYPES.SELL);
 
         // Apply Window Discipline (activeOrders count)
-        const targetCountBuy = Math.max(1, (config.activeOrders?.buy || 1));
-        const targetCountSell = Math.max(1, (config.activeOrders?.sell || 1));
+        const targetCountBuy = Math.max(1, (config.activeOrders?.buy ?? 1));
+        const targetCountSell = Math.max(1, (config.activeOrders?.sell ?? 1));
 
         // Sort Closest-First for windowing
         const buySlots = allBuySlots

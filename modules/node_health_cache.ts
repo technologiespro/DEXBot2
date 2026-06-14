@@ -3,6 +3,7 @@ const path = require('path');
 const { NODE_MANAGEMENT } = require('./constants');
 const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const { writeJsonFileAtomic } = require('./bots_file_lock');
+const { readJSON } = require('./utils/fs_utils');
 
 const MODULE_DIR = path.dirname(__dirname);
 const PROJECT_ROOT = resolveProjectRoot(MODULE_DIR);
@@ -106,9 +107,7 @@ function readHealthCache(options: HealthCacheOptions = {}): NodeHealthCachePaylo
     const now = Number.isFinite(options.now) ? options.now! : Date.now();
 
     try {
-        if (!fs.existsSync(file)) return null;
-        const raw = fs.readFileSync(file, 'utf8');
-        const payload: NodeHealthCachePayload = JSON.parse(raw);
+        const payload: NodeHealthCachePayload = readJSON(file);
         if (!payload || payload.version !== 1 || !Array.isArray(payload.nodes)) return null;
         if (!Number.isFinite(payload.updatedAtMs)) return null;
         if (maxAgeMs >= 0 && now - payload.updatedAtMs > maxAgeMs) return null;

@@ -1307,7 +1307,9 @@ class MarketAdapterService {
                             fillGapsToRequestedRange: false,
                             apiKey: null,
                         }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana orderbook bootstrap failed');
-                    } catch (_: any) {}
+                    } catch (_: any) {
+                        if (typeof deps.logger?.warn === 'function') deps.logger.warn(`[market_adapter] ${ctx.botKey}: kibana orderbook bootstrap failed`);
+                    }
 
                     if (Array.isArray(kibanaCandles) && kibanaCandles.length > 0) {
                         nextCandles = kibanaCandles;
@@ -1332,7 +1334,9 @@ class MarketAdapterService {
                                     { fillCandleGaps: deps.fillCandleGaps }
                                 ), cfg.sourceRetries, cfg.retryDelayMs, 'native market history bootstrap failed');
                             }
-                        } catch (_: any) {}
+                        } catch (_: any) {
+                            if (typeof deps.logger?.warn === 'function') deps.logger.warn(`[market_adapter] ${ctx.botKey}: native market history bootstrap failed`);
+                        }
 
                         if (Array.isArray(nativeCandles) && nativeCandles.length > 0) {
                             nextCandles = nativeCandles;
@@ -1362,7 +1366,9 @@ class MarketAdapterService {
                                 { fillCandleGaps: deps.fillCandleGaps }
                             ), cfg.sourceRetries, cfg.retryDelayMs, 'native market history fetch failed');
                         }
-                    } catch (_: any) {}
+                    } catch (_: any) {
+                        if (typeof deps.logger?.warn === 'function') deps.logger.warn(`[market_adapter] ${ctx.botKey}: native market history fetch failed`);
+                    }
 
                     if (Array.isArray(nativeCandles) && nativeCandles.length > 0) {
                         nextCandles = deps.mergeCandles(nextCandles, nativeCandles);
@@ -1724,7 +1730,9 @@ class MarketAdapterService {
                         kibanaBackfillCount = historicalCandles.length;
                         sourceLabel = `${sourceLabel}+kibana-backfill`;
                     }
-                } catch (_: any) {}
+                } catch (_: any) {
+                    if (typeof deps.logger?.warn === 'function') deps.logger.warn(`[market_adapter] ${ctx.botKey}: kibana historical backfill failed`);
+                }
             }
 
             nextCandles = deps.pruneCandles(nextCandles, rawKeepCount);

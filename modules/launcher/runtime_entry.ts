@@ -1,9 +1,5 @@
 const path = require('path');
-const { BUILD_DIR } = require('../constants');
-
-function isDistCodeRoot(codeRoot: string) {
-    return path.basename(codeRoot) === BUILD_DIR;
-}
+const { isDistRuntime: isDistCodeRoot } = require('../utils/build_dir');
 
 /**
  * Resolve the DEXBot2 project root from any directory path inside the

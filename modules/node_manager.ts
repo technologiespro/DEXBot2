@@ -47,6 +47,7 @@ const Logger = require('./logger');
 const { NODE_MANAGEMENT } = require('./constants');
 const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const { writeJsonFileAtomic } = require('./bots_file_lock');
+const { readJSON } = require('./utils/fs_utils');
 const {
     resolveHealthCacheFile,
     writeHealthCache,
@@ -173,9 +174,7 @@ class NodeManager {
      */
     private loadBlacklistState(): void {
         try {
-            if (!fs.existsSync(this.blacklistStateFile)) return;
-            const raw = fs.readFileSync(this.blacklistStateFile, 'utf8');
-            const state: Record<string, any> = JSON.parse(raw);
+            const state: Record<string, any> = readJSON(this.blacklistStateFile);
             if (!state || typeof state !== 'object') return;
             for (const [nodeUrl, entry] of Object.entries(state)) {
                 if (!entry || entry.status !== 'blacklisted') continue;
@@ -451,7 +450,7 @@ class NodeManager {
                         } else {
                             ws.close();
                         }
-                    } catch (_: any) {}
+                    } catch (err: any) { this.logger.warn(`WebSocket cleanup failed: ${err.message}`); }
                 }
                 settle(reject, new Error(`Connection timeout after ${timeoutMs}ms`));
             }, timeoutMs);

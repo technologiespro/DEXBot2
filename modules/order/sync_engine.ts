@@ -1332,7 +1332,7 @@ class SyncEngine {
             const accountIdOrName = mgr.accountId || mgr.account || null;
             if (!accountIdOrName) return;
 
-            try { await this.initializeAssets(); } catch (err: any) { }
+            try { await this.initializeAssets(); } catch (err: any) { mgr.logger.log(`[SYNC] initializeAssets failed: ${err.message}`, 'warn'); }
             const assetAId = mgr.assets?.assetA?.id;
             const assetBId = mgr.assets?.assetB?.id;
             if (!assetAId || !assetBId) return;

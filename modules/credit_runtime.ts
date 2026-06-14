@@ -18,6 +18,7 @@ const {
 const { FEE_PARAMETERS, DEFAULT_TARGET_CR } = require('./constants');
 const { roundToDecimals } = require('./utils/math_utils');
 const { resolveProjectRoot } = require('./launcher/runtime_entry');
+const { readJSON } = require('./utils/fs_utils');
 
 const CREDIT_FEE_RATE_DENOM = 1_000_000;
 const ZERO_ASSET_ID = '1.3.0';
@@ -384,8 +385,7 @@ class CreditRuntime {
         }
 
         try {
-            const raw = fs.readFileSync(this.statePath, 'utf8');
-            const parsed = raw ? JSON.parse(raw) : {};
+            const parsed = readJSON(this.statePath);
             this.state = this._stateWithDefaults(parsed);
         } catch (err: any) {
             this.warn(`credit runtime: failed to load ${this.statePath}: ${err.message}`);

@@ -343,8 +343,8 @@ function resolveBotCfg(bot, globalCfg) {
     return merged;
 }
 
-const DEFAULT_AMA_KEY = String(MARKET_ADAPTER.DEFAULT_AMA_KEY || 'AMA3').toUpperCase();
-const BUILTIN_AMAS = MARKET_ADAPTER.AMAS || {};
+const DEFAULT_AMA_KEY = String(MARKET_ADAPTER.DEFAULT_AMA_KEY).toUpperCase();
+const BUILTIN_AMAS = MARKET_ADAPTER.AMAS;
 const DEFAULT_AMA = BUILTIN_AMAS[DEFAULT_AMA_KEY] || BUILTIN_AMAS.AMA3 || { erPeriod: 781, fastPeriod: 5.2, slowPeriod: 112.7 };
 const AMA_KEYWORDS = new Set(['ama', 'ama1', 'ama2', 'ama3', 'ama4']);
 const AMA_PRESET_KEYS = ['AMA1', 'AMA2', 'AMA3', 'AMA4'];

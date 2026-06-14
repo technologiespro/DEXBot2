@@ -2,7 +2,7 @@
 
 const { toIntervalLabel } = require('./interval_utils');
 const { escapeHtml, serializeJsonForScript } = require('../analysis/chart_utils');
-const { fixedTo, roundTo } = require('../modules/utils/math_utils');
+const { fixedTo, roundTo, roundToDecimals } = require('../modules/utils/math_utils');
 
 function formatPct(v: any) {
     const num = Number(v);
@@ -35,8 +35,8 @@ function generateHTML(meta: any, candles: any, amaResults: any) {
     const intervalLabel = toIntervalLabel(intervalSeconds);
 
     const ts = candles.map((c) => Math.round(Number(c[0]) / 1000));
-    const closes = candles.map((c) => Math.round(Number(c[4]) * 1e6) / 1e6);
-    const volumes = candles.map((c) => Math.round(Number(c[5] ?? 0) * 1e4) / 1e4);
+    const closes = candles.map((c) => roundToDecimals(Number(c[4]), 6));
+    const volumes = candles.map((c) => roundToDecimals(Number(c[5] ?? 0), 4));
 
     const primary = amaResults[0];
     const primaryValues = Array.isArray(primary.values) ? primary.values : [];
@@ -232,7 +232,7 @@ function generateHTML(meta: any, candles: any, amaResults: any) {
     closes,
     volumes,
     amaMeta,
-    amaArrays: amaResults.map((a: any) => (Array.isArray(a.values) ? a.values.map((v: any) => Math.round(Number(v) * 1e6) / 1e6) : [])),
+    amaArrays: amaResults.map((a: any) => (Array.isArray(a.values) ? a.values.map((v: any) => roundToDecimals(Number(v), 6)) : [])),
 })}</script>
 
 <script>
@@ -417,7 +417,7 @@ function makeVolumeSplits(scaleMin, scaleMax, foundIncr, foundSpace) {
     if (scaleMax <= scaleMin) return [];
 
     const start = roundTo(scaleMin, 100);
-    const mid = Math.round(((scaleMin + scaleMax) / 2) * 100) / 100;
+    const mid = roundToDecimals((scaleMin + scaleMax) / 2, 2);
     const end = roundTo(scaleMax, 100);
     const splits = [start];
 
@@ -538,7 +538,7 @@ const amaDevArrays = amaArrays.map((values, i) =>
     closes.map((p, idx) => {
         const v = values[idx];
         if (!Number.isFinite(v) || v === 0) return null;
-        return Math.round(((p - v) / v) * 10000) / 100;
+        return roundToDecimals(((p - v) / v) * 100, 2);
     })
 );
 

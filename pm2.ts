@@ -82,8 +82,8 @@ const { buildScopedChildEnv } = require('./modules/launcher/child_env');
 const { createPasswordBootstrapServer } = require('./modules/launcher/credential_bootstrap');
 const { parsePm2Args } = require('./modules/launcher/launch_modes');
 const { setupGracefulShutdown } = require('./modules/graceful_shutdown');
-const { UPDATER, TIMING, BUILD_DIR } = require('./modules/constants');
-const { resolveProjectRoot } = require('./modules/launcher/runtime_entry');
+const { UPDATER, TIMING } = require('./modules/constants');
+const { resolveProjectRoot, isDistCodeRoot, buildRuntimeScriptPath } = require('./modules/launcher/runtime_entry');
 const { ensureDir, safeUnlink } = require('./modules/utils/fs_utils');
 
 // Setup graceful shutdown handlers
@@ -208,10 +208,9 @@ function buildEcosystemApps(bots: any, { includeUpdater = true }: { includeUpdat
     });
 
     if (needsMarketAdapter(bots)) {
-        const isDev = path.basename(CODE_ROOT) !== BUILD_DIR;
         apps.unshift({
             name: 'dexbot-adapter',
-            script: path.join(CODE_ROOT, 'market_adapter', 'market_adapter' + (isDev ? '.ts' : '.js')),
+            script: buildRuntimeScriptPath(CODE_ROOT, ['market_adapter', 'market_adapter']),
             cwd: ROOT,
             watch: false,
             autorestart: true,
@@ -225,7 +224,7 @@ function buildEcosystemApps(bots: any, { includeUpdater = true }: { includeUpdat
             max_restarts: 13,
             min_uptime: 60000,
             restart_delay: 3000,
-            ...(isDev ? { node_args: ['--import', 'tsx'] } : {})
+            ...(isDistCodeRoot(CODE_ROOT) ? {} : { node_args: ['--import', 'tsx'] })
         });
     }
 

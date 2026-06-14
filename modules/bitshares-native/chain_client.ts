@@ -98,14 +98,14 @@ function createChainClient(config: ChainClientConfig = {}) {
             try {
                 const props = await transport.call('call', [_dbApiId, 'get_chain_properties', []]);
                 if (props && props.address_prefix) addressPrefix = props.address_prefix;
-            } catch (_: any) {}
+            } catch (err: any) { console.warn('[chain_client]', 'get_chain_properties failed:', err.message); }
 
             try {
                 const globals = await transport.call('call', [_dbApiId, 'get_global_properties', []]);
                 if (globals && globals.parameters && globals.parameters.core_asset) {
                     coreAsset = globals.parameters.core_asset;
                 }
-            } catch (_: any) {}
+            } catch (err: any) { console.warn('[chain_client]', 'get_global_properties failed:', err.message); }
 
             try {
                 // login_api.get_config() returns application_options (which

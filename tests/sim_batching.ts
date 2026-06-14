@@ -3,7 +3,7 @@ const FILL_PROCESSING = {
 };
 
 function simulateBatching(totalFills) {
-    const maxBatch = Math.max(1, FILL_PROCESSING.MAX_FILL_BATCH_SIZE || 1);
+    const maxBatch = Math.max(1, FILL_PROCESSING.MAX_FILL_BATCH_SIZE);
 
     const useUnifiedPlan = totalFills <= maxBatch;
     

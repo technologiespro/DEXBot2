@@ -63,6 +63,7 @@ const Format = require('./order/format');
 const { toFiniteNumber } = Format;
 
 const { ensureDir } = require('./order/utils/system');
+const { readJSON } = require('./utils/fs_utils');
 
 const Logger = require('./logger');
 const accountOrdersLogger = new Logger('AccountOrders');
@@ -216,13 +217,12 @@ class AccountOrders {
    */
   _readFile(filePath) {
     try {
-      if (!fs.existsSync(filePath)) return null;
-      const raw = fs.readFileSync(filePath, 'utf8');
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
+      const parsed = readJSON(filePath);
       if (typeof parsed === 'object' && parsed !== null) return parsed;
     } catch (err: any) {
-      accountOrdersLogger.warn(`Failed to read ${filePath} - ${err.message}`);
+      if (err?.code !== 'ENOENT' && !(err instanceof SyntaxError)) {
+        accountOrdersLogger.warn(`Failed to read ${filePath} - ${err.message}`);
+      }
     }
     return null;
   }

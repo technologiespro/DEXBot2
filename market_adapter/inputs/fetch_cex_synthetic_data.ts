@@ -184,7 +184,7 @@ function computeRequiredCandles(amaConfig = null, cfg = null) {
         ama.slowPeriod,
         cfg?.amaSlope?.lookbackBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
         ama.fastPeriod,
-        MARKET_ADAPTER.AMA_ER_SMOOTH_PERIOD || 0
+        MARKET_ADAPTER.AMA_ER_SMOOTH_FAST_PERIOD
     );
     const analysisKeepCount = warmupBars + 1;
     return Math.max(DEFAULT_BOOTSTRAP_LOOKBACK_HOURS, analysisKeepCount);
