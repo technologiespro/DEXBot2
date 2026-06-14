@@ -348,6 +348,7 @@ async function loadCurrentPrivateKey(accountName: any) {
         vaultSecret,
         sessionAccountKeys,
         sessionSecret,
+        chainClient: _nativeChainClient,
     });
 }
 

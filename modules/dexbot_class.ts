@@ -2219,7 +2219,7 @@ class DEXBot {
                 let privateKey = null;
 
                 if (vaultSecret) {
-                    privateKey = chainKeys.getPrivateKey(this.config.preferredAccount, vaultSecret);
+                    privateKey = await chainKeys.resolvePrivateKey(this.config.preferredAccount, vaultSecret, BitShares);
                 } else if (await chainKeys.isDaemonResponsive()) {
                     try {
                         const sessionId = await chainKeys.probeAccountInDaemon(this.config.preferredAccount);
@@ -2239,7 +2239,7 @@ class DEXBot {
 
                 if (!privateKey) {
                     const unlockSecret = await chainKeys.authenticate();
-                    privateKey = chainKeys.getPrivateKey(this.config.preferredAccount, unlockSecret);
+                    privateKey = await chainKeys.resolvePrivateKey(this.config.preferredAccount, unlockSecret, BitShares);
                 }
 
                 this.privateKey = privateKey;

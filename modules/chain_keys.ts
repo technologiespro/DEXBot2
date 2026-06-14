@@ -96,6 +96,7 @@ const {
 } = require('./credential_runtime');
 const Logger = require('./logger');
 const { ensureDir, safeUnlink } = require('./utils/fs_utils');
+const { resolvePrivateKey: resolveAuthKey } = require('./authority_resolver');
 
 const chainKeysLogger = new Logger('chain-keys');
 
@@ -611,6 +612,39 @@ function getPrivateKey(accountName, vaultSecret) {
 
     return decrypt(account.encryptedKey, vaultSecret);
 }
+
+/**
+ * Resolve a signing key for an account, following on-chain authority structures
+ * (account_auths, key_auths) when no direct key is stored.
+ *
+ * @param {string} accountName - Target account to sign for
+ * @param {Object|Buffer} vaultSecret - Derived vault secret
+ * @param {object} chainClient - Native chain client with db.get_full_accounts
+ * @returns {Promise<string>} Private key WIF string
+ * @throws {Error} If no key can be found through direct lookup or authority resolution
+ */
+async function resolvePrivateKey(accountName, vaultSecret, chainClient) {
+    const pubKeyCache = new Map();
+
+    const tryGetKey = async (name) => {
+        try {
+            return getPrivateKey(name, vaultSecret);
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const listNames = () => {
+        try {
+            const data = loadAccounts();
+            return data && data.accounts ? Object.keys(data.accounts) : [];
+        } catch (e) {
+            return [];
+        }
+    };
+
+    return resolveAuthKey(accountName, chainClient, tryGetKey, listNames, 0, pubKeyCache);
+}
 /**
  * Display stored account names to console.
  * @param {Object} accounts - Accounts object from loadAccounts()
@@ -1123,6 +1157,7 @@ export = {
     main,
     authenticate,
     getPrivateKey,
+    resolvePrivateKey,
     isMasterPasswordFailure,
     MasterPasswordError,
     isDaemonReady,

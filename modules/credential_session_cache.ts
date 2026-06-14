@@ -19,6 +19,7 @@ interface CacheSessionKeyOptions {
 
 interface LoadDaemonKeyOptions {
     chainKeys?: typeof chainKeys;
+    chainClient?: any;
 }
 
 interface SessionState {
@@ -99,6 +100,30 @@ async function loadDaemonPrivateKey(accountName: string, sessionState: SessionSt
             cacheSessionPrivateKey(accountName, privateKey, sessionState, { chainKeys: chainKeysImpl });
             return privateKey;
         } catch (err: any) {
+            // Authority resolution fallback: when no direct key is stored for this
+            // account, try walking on-chain account_auths / key_auths.
+            if (options.chainClient && typeof chainKeysImpl.resolvePrivateKey === 'function') {
+                try {
+                    const privateKey = await chainKeysImpl.resolvePrivateKey(
+                        accountName,
+                        currentVaultSecret,
+                        options.chainClient
+                    );
+                    cacheSessionPrivateKey(accountName, privateKey, sessionState, { chainKeys: chainKeysImpl });
+                    return privateKey;
+                } catch (resolutionErr: any) {
+                    if (sessionAccountKeys && typeof sessionAccountKeys.delete === 'function') {
+                        sessionAccountKeys.delete(accountName);
+                    }
+                    const combined = new Error(
+                        `No signing key for '${accountName}'.\n` +
+                        `  Vault lookup: ${err.message}\n` +
+                        `  Authority resolution: ${resolutionErr.message}`
+                    );
+                    combined.cause = resolutionErr;
+                    throw combined;
+                }
+            }
             if (sessionAccountKeys && typeof sessionAccountKeys.delete === 'function') {
                 sessionAccountKeys.delete(accountName);
             }

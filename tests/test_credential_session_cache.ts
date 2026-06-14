@@ -97,8 +97,89 @@ async function testLiveLookupRefreshesSessionCache() {
     );
 }
 
+async function testAuthorityResolutionFallback() {
+    const state = {
+        accounts: {
+            alice: { encryptedKey: 'vault:alice:v1', privateKey: 'alice-private-v1' },
+        },
+    };
+    const chainKeys = createChainKeysStub(state);
+    const vaultSecret = { kind: 'dexbot-vault-secret', vaultKeyHex: 'vault-key' };
+    const sessionState = buildSessionAccountCache({
+        accounts: {
+            alice: { encryptedKey: state.accounts.alice.encryptedKey },
+        },
+    }, vaultSecret, { chainKeys });
+
+    const daemonState = {
+        vaultSecret,
+        sessionAccountKeys: sessionState.cache,
+        sessionSecret: sessionState.sessionSecret,
+    };
+
+    const mockChainClient = { db: { get_full_accounts: async () => [] } };
+    const chainKeysWithResolution = {
+        ...chainKeys,
+        resolvePrivateKey: async (accountName, _vault, _chain) => {
+            if (accountName === 'delegated') return 'delegated-resolved-key';
+            throw new Error('No signing key found');
+        },
+    };
+
+    const key = await loadDaemonPrivateKey('delegated', daemonState, {
+        chainKeys: chainKeysWithResolution,
+        chainClient: mockChainClient,
+    });
+    assert.strictEqual(key, 'delegated-resolved-key', 'should return key from authority resolution fallback');
+    console.log('  ✓ authority resolution fallback returns resolved key');
+}
+
+async function testCombinedErrorWhenBothPathsFail() {
+    const state = {
+        accounts: {
+            alice: { encryptedKey: 'vault:alice:v1', privateKey: 'alice-private-v1' },
+        },
+    };
+    const chainKeys = createChainKeysStub(state);
+    const vaultSecret = { kind: 'dexbot-vault-secret', vaultKeyHex: 'vault-key' };
+    const sessionState = buildSessionAccountCache({
+        accounts: {
+            alice: { encryptedKey: state.accounts.alice.encryptedKey },
+        },
+    }, vaultSecret, { chainKeys });
+
+    const daemonState = {
+        vaultSecret,
+        sessionAccountKeys: sessionState.cache,
+        sessionSecret: sessionState.sessionSecret,
+    };
+
+    const mockChainClient = { db: { get_full_accounts: async () => [] } };
+    const chainKeysWithResolution = {
+        ...chainKeys,
+        resolvePrivateKey: async () => {
+            throw new Error('Authority resolution: no single entry meets threshold');
+        },
+    };
+
+    try {
+        await loadDaemonPrivateKey('nobody', daemonState, {
+            chainKeys: chainKeysWithResolution,
+            chainClient: mockChainClient,
+        });
+        assert.fail('should have thrown');
+    } catch (e: any) {
+        assert.ok(e.message.includes('Vault lookup'), `error should include vault lookup message, got: ${e.message}`);
+        assert.ok(e.message.includes('Authority resolution'), `error should include authority resolution message, got: ${e.message}`);
+        assert.ok(e.message.includes('nobody'), 'error should mention account name');
+    }
+    console.log('  ✓ combined error includes both vault and resolution messages');
+}
+
 (async () => {
     await testLiveLookupRefreshesSessionCache();
+    await testAuthorityResolutionFallback();
+    await testCombinedErrorWhenBothPathsFail();
     console.log('credential session cache tests passed');
     process.exit(0);
 })().catch((err) => {
