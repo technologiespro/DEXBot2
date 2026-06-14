@@ -64,7 +64,7 @@ const fsPromises = require('fs').promises;
 const path = require('path');
 const readline = require('readline');
 const Format = require('./format');
-const { TIMING } = require('../constants');
+const { TIMING, DEFAULT_CONFIG } = require('../constants');
 const { resolveProjectRoot } = require('../launcher/runtime_entry');
 const Logger = require('../logger');
 const exportLogger = new Logger('Export');
@@ -265,14 +265,14 @@ async function writeSettingsJSON(botConfig, botName, outputPath) {
             strategy: botConfig.strategy || 'grid_trading',
             market: botConfig.market || `${botConfig.assetA}/${botConfig.assetB}`,
             parameters: {
-                start_price: botConfig.startPrice || 'pool',
-                min_price: botConfig.minPrice || '3x',
-                max_price: botConfig.maxPrice || '3x',
-                increment_percent: botConfig.incrementPercent || 0.5,
-                target_spread_percent: botConfig.targetSpreadPercent || 2,
-                active_orders: botConfig.activeOrders || { buy: 20, sell: 20 },
-                bot_funds: botConfig.botFunds || { buy: '100%', sell: '100%' },
-                weight_distribution: botConfig.weightDistribution || { sell: 0.5, buy: 0.5 },
+                start_price: botConfig.startPrice || DEFAULT_CONFIG.startPrice,
+                min_price: botConfig.minPrice || DEFAULT_CONFIG.minPrice,
+                max_price: botConfig.maxPrice || DEFAULT_CONFIG.maxPrice,
+                increment_percent: botConfig.incrementPercent || DEFAULT_CONFIG.incrementPercent,
+                target_spread_percent: botConfig.targetSpreadPercent || DEFAULT_CONFIG.targetSpreadPercent,
+                active_orders: botConfig.activeOrders || DEFAULT_CONFIG.activeOrders,
+                bot_funds: botConfig.botFunds || DEFAULT_CONFIG.botFunds,
+                weight_distribution: botConfig.weightDistribution || DEFAULT_CONFIG.weightDistribution,
                 dry_run: botConfig.dryRun || false,
                 active: botConfig.active !== false
             },

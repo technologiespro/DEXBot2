@@ -1412,7 +1412,7 @@ class DEXBot {
             // stop that would require a bot restart.
             const backoffMs = this._computeFillConsumerBackoffMs(failures);
             const elapsedSec = this._consumeFailureFirstAt
-                ? Math.round((Date.now() - this._consumeFailureFirstAt) / 1000)
+                ? Math.round((Date.now() - this._consumeFailureFirstAt) / TIMING.MILLISECONDS_PER_SECOND)
                 : null;
             const elapsed = elapsedSec !== null ? `${elapsedSec}s` : 'unknown';
             // Escalate log level on sustained failure so operators monitoring
@@ -1429,7 +1429,7 @@ class DEXBot {
                     : 'warn';
             this._log(
                 `[FILL-QUEUE] Fill consumer has failed ${failures} consecutive times over ${elapsed}; ` +
-                `backing off ${Math.round(backoffMs / 1000)}s before retry. ` +
+                `backing off ${Math.round(backoffMs / TIMING.MILLISECONDS_PER_SECOND)}s before retry. ` +
                 `Queue: ${this._incomingFillQueue.length} fills.`,
                 sustainedLevel
             );
@@ -1442,7 +1442,7 @@ class DEXBot {
                     this._consecutiveConsumeFailures++;
                     const newFailures = this._consecutiveConsumeFailures;
                     const newElapsedSec = this._consumeFailureFirstAt
-                        ? Math.round((Date.now() - this._consumeFailureFirstAt) / 1000)
+                        ? Math.round((Date.now() - this._consumeFailureFirstAt) / TIMING.MILLISECONDS_PER_SECOND)
                         : null;
                     const resumeLevel = (newFailures >= 20 || (newElapsedSec !== null && newElapsedSec >= 900))
                         ? 'critical'
@@ -1452,7 +1452,7 @@ class DEXBot {
                     this._log(
                         `Fill consumer resume after backoff failed ` +
                         `(${newFailures} total, ` +
-                        `next backoff ${Math.round(this._computeFillConsumerBackoffMs(newFailures) / 1000)}s): ` +
+                        `next backoff ${Math.round(this._computeFillConsumerBackoffMs(newFailures) / TIMING.MILLISECONDS_PER_SECOND)}s): ` +
                         `${err.message}`,
                         resumeLevel
                     );
@@ -3276,9 +3276,9 @@ class DEXBot {
             size,
             type,
             this.manager.assets,
-            GRID_LIMITS.MIN_ORDER_SIZE_FACTOR || 50,
+            GRID_LIMITS.MIN_ORDER_SIZE_FACTOR,
             this._resolveIdealSizeForValidation(orderLike, fallbackSize),
-            GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE || 5
+            GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE
         );
     }
 
@@ -3426,7 +3426,7 @@ class DEXBot {
         try {
             await chainKeys.pingDaemon(
                 token.accountName,
-                Math.min(5000, TIMING.DAEMON_STARTUP_TIMEOUT_MS || 5000),
+                Math.min(TIMING.DAEMON_PING_TIMEOUT_MS, TIMING.DAEMON_STARTUP_TIMEOUT_MS),
                 { socketPath: token.socketPath }
             );
         } catch (err: any) {
@@ -3581,7 +3581,7 @@ class DEXBot {
             this._credentialDaemonWatchdogInterval.unref();
         }
         void probe();
-        this._log(`Credential daemon watchdog started (${Math.round(intervalMs / 1000)}s interval)`);
+        this._log(`Credential daemon watchdog started (${Math.round(intervalMs / TIMING.MILLISECONDS_PER_SECOND)}s interval)`);
     }
 
     /**
@@ -4820,7 +4820,7 @@ class DEXBot {
             clearInterval(this._creditWatchdogInterval);
             this._creditWatchdogInterval = null;
         }
-        const intervalMs = intervalMin * 60 * 1000;
+        const intervalMs = intervalMin * 60 * TIMING.MILLISECONDS_PER_SECOND;
         this._creditWatchdogInterval = setInterval(async () => {
             try {
                 await runtime.runCreditWatchdog();

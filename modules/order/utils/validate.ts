@@ -187,8 +187,8 @@ function validateGridForPersistence(orders, accountTotals) {
  * @returns {Object} Required funds { buyInt, sellInt, buy, sell }
  */
 function calculateRequiredFunds(grid: any, precisions: Record<string, any> = {}) {
-    const buyPrecision = toFiniteNumber(precisions.buyPrecision, 8);
-    const sellPrecision = toFiniteNumber(precisions.sellPrecision, 8);
+    const buyPrecision = precisions.buyPrecision;
+    const sellPrecision = precisions.sellPrecision;
 
     let buyRequiredInt = 0;
     let sellRequiredInt = 0;
@@ -225,8 +225,8 @@ function calculateRequiredFunds(grid: any, precisions: Record<string, any> = {})
  * @returns {Object} Validation result
  */
 function validateWorkingGridFunds(workingGrid: any, projectedFunds: any, precisions: Record<string, any> = {}, assets: any = null) {
-    const buyPrecision = toFiniteNumber(precisions.buyPrecision, assets?.assetB?.precision || 8);
-    const sellPrecision = toFiniteNumber(precisions.sellPrecision, assets?.assetA?.precision || 8);
+    const buyPrecision = precisions.buyPrecision ?? assets?.assetB?.precision;
+    const sellPrecision = precisions.sellPrecision ?? assets?.assetA?.precision;
     
     const required = calculateRequiredFunds(workingGrid, { buyPrecision, sellPrecision });
     
@@ -315,7 +315,7 @@ function checkFundDrift(orders: Map<string, any>, accountTotals: any, assets: an
 
     const precisionSlackBuy = getPrecisionSlack(buyPrecision);
     const precisionSlackSell = getPrecisionSlack(sellPrecision);
-    const percentTolerance = (GRID_LIMITS.FUND_INVARIANT_PERCENT_TOLERANCE || 0.1) / 100;
+    const percentTolerance = GRID_LIMITS.FUND_INVARIANT_PERCENT_TOLERANCE / 100;
 
     const allowedDriftBuy = Math.max(precisionSlackBuy, actualBuy * percentTolerance);
     const allowedDriftSell = Math.max(precisionSlackSell, actualSell * percentTolerance);

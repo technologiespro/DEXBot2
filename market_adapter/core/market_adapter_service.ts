@@ -89,7 +89,7 @@ function computeGridPriceOffsetPlan(bot: any, amaSlope: any){
     const targetSpreadPercentRaw = Number(bot?.targetSpreadPercent);
     const targetSpreadPercent = Number.isFinite(targetSpreadPercentRaw) && targetSpreadPercentRaw > 0
         ? targetSpreadPercentRaw
-        : Number(DEFAULT_CONFIG.targetSpreadPercent) || 2;
+        : Number(DEFAULT_CONFIG.targetSpreadPercent);
     const maxGridPriceOffsetPct = targetSpreadPercent / 2;
     const trend = amaSlope?.trend;
     const rawSlopeOffset = Number(amaSlope?.rawSlopeOffset);

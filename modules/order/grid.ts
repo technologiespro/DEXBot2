@@ -828,7 +828,7 @@ class Grid {
      * @returns {import('./types').SideUpdateFlags}
      */
     static checkAndUpdateGridIfNeeded(manager) {
-        const threshold = GRID_LIMITS.GRID_REGENERATION_PERCENTAGE || 1;
+        const threshold = GRID_LIMITS.GRID_REGENERATION_PERCENTAGE;
         const chainSnap = manager.getChainFundsSnapshot();
         const gridBuy = Number(manager.funds?.total?.grid?.buy || 0);
         const gridSell = Number(manager.funds?.total?.grid?.sell || 0);
@@ -1623,8 +1623,11 @@ class Grid {
         );
 
         // Need at least some funds on a side to justify correction
-        const buyPrecision = manager.assets?.assetB?.precision ?? 8;
-        const sellPrecision = manager.assets?.assetA?.precision ?? 8;
+        const buyPrecision = manager.assets?.assetB?.precision;
+        const sellPrecision = manager.assets?.assetA?.precision;
+        if (buyPrecision === undefined || sellPrecision === undefined) {
+            throw new Error(`CRITICAL: Asset precision unavailable for grid correction check`);
+        }
         const buyMinUnit = 1 / Math.pow(10, buyPrecision);
         const sellMinUnit = 1 / Math.pow(10, sellPrecision);
 

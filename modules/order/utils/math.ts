@@ -67,7 +67,7 @@
  * ===============================================================================
  */
 
-const { ORDER_TYPES, FEE_PARAMETERS, DEFAULT_CONFIG, BTS_PRECISION } = require('../../constants');
+const { ORDER_TYPES, FEE_PARAMETERS, DEFAULT_CONFIG, BTS_PRECISION, GRID_LIMITS } = require('../../constants');
 const Format = require('../format');
 const { isValidNumber, toFiniteNumber, isNumeric } = Format;
 const Logger = require('../../logger');
@@ -732,7 +732,7 @@ function getMinOrderSize(orderType, assets, factor = 50) {
  * @returns {number} Dust factor (e.g., 0.05 for 5%)
  */
 function getDustThresholdFactor(dustThresholdPercent = 5) {
-    return (dustThresholdPercent / 100) || 0.05;
+    return dustThresholdPercent / 100;
 }
 
 /**
@@ -771,7 +771,7 @@ function getDoubleDustThreshold(idealSize, dustThresholdPercent = 5) {
  * @returns {number} Minimum order size in asset units
  */
 function getMinAbsoluteOrderSize(orderType, assets, minFactor = 50) {
-    return getMinOrderSize(orderType, assets, minFactor || 50);
+    return getMinOrderSize(orderType, assets, minFactor);
 }
 
 /**
@@ -795,8 +795,7 @@ function validateOrderSize(orderSize, orderType, assets, minFactor = 50, idealSi
          if ((orderType === ORDER_TYPES.SELL) && assets.assetA) precision = assets.assetA.precision;
          else if ((orderType === ORDER_TYPES.BUY) && assets.assetB) precision = assets.assetB.precision;
      }
-     // Fallback to 8 if precision not found
-     const displayPrecision = precision || 8;
+      const displayPrecision = precision;
      
      if (orderSizeFloat < minAbsoluteSize) {
          return { isValid: false, reason: `Order size (${Format.formatAmountByPrecision(orderSizeFloat, displayPrecision)}) below absolute minimum (${Format.formatAmountByPrecision(minAbsoluteSize, displayPrecision)})`, minAbsoluteSize, minDustSize: null };
@@ -1080,10 +1079,10 @@ function calculateSwapInAmount(targetReceive, poolReserveOut, poolReserveIn) {
  * @param {Object} GRID_LIMITS - Grid limits constants (optional, uses defaults)
  * @returns {number} Number of gap slots
  */
-function calculateGapSlots(incrementPercent: any, targetSpreadPercent: any, GRID_LIMITS: { MIN_SPREAD_FACTOR?: number; MIN_SPREAD_ORDERS?: number } = {}) {
-    const DEFAULT_INCREMENT = Number(DEFAULT_CONFIG.incrementPercent) || 0.5;
-    const MIN_SPREAD_FACTOR = GRID_LIMITS.MIN_SPREAD_FACTOR || 2.1;
-    const MIN_SPREAD_ORDERS = GRID_LIMITS.MIN_SPREAD_ORDERS || 2;
+function calculateGapSlots(incrementPercent: any, targetSpreadPercent: any, gridLimits: { MIN_SPREAD_FACTOR?: number; MIN_SPREAD_ORDERS?: number } = {}) {
+    const DEFAULT_INCREMENT = Number(DEFAULT_CONFIG.incrementPercent);
+    const MIN_SPREAD_FACTOR = gridLimits.MIN_SPREAD_FACTOR ?? GRID_LIMITS.MIN_SPREAD_FACTOR;
+    const MIN_SPREAD_ORDERS = gridLimits.MIN_SPREAD_ORDERS ?? GRID_LIMITS.MIN_SPREAD_ORDERS;
 
     const safeIncrement = (Number.isFinite(incrementPercent) && incrementPercent > 0) ? incrementPercent : DEFAULT_INCREMENT;
     const step = 1 + (safeIncrement / 100);

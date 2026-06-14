@@ -390,12 +390,12 @@ class Logger {
             }
         }
 
-        const buyPrecision = manager.config?.assetB?.precision || 8;
-        const sellPrecision = manager.config?.assetA?.precision || 8;
-        const availableBuy = Number.isFinite(Number(manager.funds?.available?.buy))
+        const buyPrecision = manager.config?.assetB?.precision;
+        const sellPrecision = manager.config?.assetA?.precision;
+        const availableBuy = (Number.isFinite(Number(manager.funds?.available?.buy)) && buyPrecision !== undefined)
             ? Format.formatAmountByPrecision(manager.funds.available.buy, buyPrecision)
             : 'N/A';
-        const availableSell = Number.isFinite(Number(manager.funds?.available?.sell))
+        const availableSell = (Number.isFinite(Number(manager.funds?.available?.sell)) && sellPrecision !== undefined)
             ? Format.formatAmountByPrecision(manager.funds.available.sell, sellPrecision)
             : 'N/A';
 
@@ -415,8 +415,12 @@ class Logger {
     _logDetailedFunds(manager: any, headerContext = '') {
         const buyName = manager.config?.assetB || 'quote';
         const sellName = manager.config?.assetA || 'base';
-        const buyPrecision = manager.config?.assetB?.precision || 8;
-        const sellPrecision = manager.config?.assetA?.precision || 8;
+        const buyPrecision = manager.config?.assetB?.precision;
+        const sellPrecision = manager.config?.assetA?.precision;
+        if (buyPrecision === undefined || sellPrecision === undefined) {
+            this.log(`[Funds] Detailed funds unavailable: missing precision for ${buyName}/${sellName}`, 'debug');
+            return;
+        }
         const c = this.colors;
         const debug = c.debug;
         const reset = c.reset;
@@ -480,8 +484,12 @@ class Logger {
 
         const buyName = manager.config?.assetB || 'quote';
         const sellName = manager.config?.assetA || 'base';
-        const buyPrecision = manager.config?.assetB?.precision || 8;
-        const sellPrecision = manager.config?.assetA?.precision || 8;
+        const buyPrecision = manager.config?.assetB?.precision;
+        const sellPrecision = manager.config?.assetA?.precision;
+        if (buyPrecision === undefined || sellPrecision === undefined) {
+            this.log(`[Status] Status summary unavailable: missing precision for ${buyName}/${sellName}`, 'debug');
+            return;
+        }
 
         const gridBuy = Number.isFinite(Number(manager.funds?.available?.buy))
             ? Format.formatAmountByPrecision(manager.funds.available.buy, buyPrecision)

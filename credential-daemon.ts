@@ -69,7 +69,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const chainKeys = require('./modules/chain_keys');
-const { TIMING, NODE_MANAGEMENT } = require('./modules/constants');
+const { TIMING, NODE_MANAGEMENT, DAEMON_ERRORS } = require('./modules/constants');
 const { readGeneralSettings } = require('./modules/general_settings');
 const { orderNodesForSettings } = require('./modules/node_health_cache');
 const credentialPolicy = require('./modules/credential_policy');
@@ -758,7 +758,7 @@ function processRequest(requestStr: string, socket: any) {
 
             // Session validation
             if (!checkSessionValid(accountName, sessionId)) {
-                const reason = 'invalid or expired session';
+                const reason = DAEMON_ERRORS.SESSION_EXPIRED;
                 appendAuditLog({
                     event: 'sign_denied',
                     accountName,
@@ -783,7 +783,7 @@ function processRequest(requestStr: string, socket: any) {
                     reason: 'source: ' + hmacResult.reason,
                     timestamp: new Date().toISOString(),
                 });
-                return sendError(socket, credentialPolicy.POLICY_DENIED_PREFIX + 'invalid source authentication');
+                return sendError(socket, credentialPolicy.POLICY_DENIED_PREFIX + DAEMON_ERRORS.SOURCE_AUTH_DENIED);
             }
             if (hmacResult.skipped) {
                 debugLog(`[warn] no botHmacSecret configured for ${accountName} — source authentication skipped`);
@@ -870,7 +870,7 @@ function processRequest(requestStr: string, socket: any) {
 
             // Session validation
             if (!checkSessionValid(accountName, sessionId)) {
-                const reason = 'invalid or expired session';
+                const reason = DAEMON_ERRORS.SESSION_EXPIRED;
                 appendAuditLog({
                     event: 'sign_denied',
                     accountName,
@@ -891,7 +891,7 @@ function processRequest(requestStr: string, socket: any) {
                     reason: 'source: ' + hmacResult.reason,
                     timestamp: new Date().toISOString(),
                 });
-                return sendError(socket, credentialPolicy.POLICY_DENIED_PREFIX + 'invalid source authentication');
+                return sendError(socket, credentialPolicy.POLICY_DENIED_PREFIX + DAEMON_ERRORS.SOURCE_AUTH_DENIED);
             }
             if (hmacResult.skipped) {
                 debugLog(`[warn] no botHmacSecret configured for ${accountName} — source authentication skipped`);

@@ -86,7 +86,7 @@ function populateOrders(manager, side, count = 10) {
     }
 }
 
-const threshold = GRID_LIMITS.GRID_REGENERATION_PERCENTAGE || 3;
+const threshold = GRID_LIMITS.GRID_REGENERATION_PERCENTAGE;
 
 async function testThresholdExceeded() {
     console.log('\n--- Test 1: Available funds exceed regeneration threshold ---');

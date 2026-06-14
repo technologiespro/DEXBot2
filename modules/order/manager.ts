@@ -1361,7 +1361,7 @@ class OrderManager {
         return {
             isBlocked: this._pipelineBlockedSince !== null,
             blockedDurationMs: blockedDuration,
-            hasStalled: blockedDuration > (PIPELINE_TIMING.TIMEOUT_MS || 300000),
+            hasStalled: blockedDuration > PIPELINE_TIMING.TIMEOUT_MS,
             recoveryAttempted: this._recoveryAttempted,
             correctionsPending: this.ordersNeedingPriceCorrection.length,
             gridSidesUpdated: this._gridSidesUpdated?.size || 0

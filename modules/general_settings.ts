@@ -8,13 +8,12 @@
 const fs = require('fs');
 const path = require('path');
 const { writeJsonFileAtomic } = require('./bots_file_lock');
+const { BUILD_DIR, isDistRuntime } = require('./utils/build_dir');
 
 // Resolve profiles directory correctly whether running from source (modules/)
 // or compiled output (dist/modules/)
-// NOTE: Uses hardcoded 'dist' intentionally — this module is loaded by
-// constants.ts (circular dep), so it cannot import BUILD_DIR from there.
 const PARENT_DIR = path.dirname(__dirname);
-const ROOT = path.basename(PARENT_DIR) === 'dist' ? path.dirname(PARENT_DIR) : PARENT_DIR;
+const ROOT = isDistRuntime(PARENT_DIR) ? path.dirname(PARENT_DIR) : PARENT_DIR;
 const PROFILES_DIR = path.join(ROOT, 'profiles');
 const SETTINGS_FILE = path.join(PROFILES_DIR, 'general.settings.json');
 

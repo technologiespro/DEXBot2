@@ -108,7 +108,7 @@ class Accountant {
         this._logThrottleState = new Map();
     }
 
-    _logThrottled(key, message, level = 'warn', intervalMs = 30000) {
+    _logThrottled(key, message, level = 'warn', intervalMs = TIMING.LOG_THROTTLE_INTERVAL_MS) {
         const now = Date.now();
         const state = this._logThrottleState.get(key) || { lastAt: 0, suppressed: 0, lastMessage: null };
 
@@ -489,7 +489,7 @@ class Accountant {
           }
          const precisionSlackBuy = getPrecisionSlack(buyPrecision);
          const precisionSlackSell = getPrecisionSlack(sellPrecision);
-         const PERCENT_TOLERANCE = (GRID_LIMITS.FUND_INVARIANT_PERCENT_TOLERANCE || 0.1) / 100;
+         const PERCENT_TOLERANCE = GRID_LIMITS.FUND_INVARIANT_PERCENT_TOLERANCE / 100;
 
          let hasViolation = false;
 
@@ -510,8 +510,7 @@ class Accountant {
             this._logThrottled(
                 'fund-invariant-buy',
                 `CRITICAL: Fund invariant violation (BUY): blockchainTotal (${Format.formatAmountByPrecision(actualBuy, buyPrecision)}) != trackedTotal (${Format.formatAmountByPrecision(expectedBuy, buyPrecision)}) (diff: ${Format.formatAmountByPrecision(diffBuy, buyPrecision)}, allowed: ${Format.formatAmountByPrecision(allowedBuyTolerance, buyPrecision)})`,
-                'error',
-                30000
+                'error'
             );
         }
 
@@ -526,8 +525,7 @@ class Accountant {
             this._logThrottled(
                 'fund-invariant-sell',
                 `CRITICAL: Fund invariant violation (SELL): blockchainTotal (${Format.formatAmountByPrecision(actualSell, sellPrecision)}) != trackedTotal (${Format.formatAmountByPrecision(expectedSell, sellPrecision)}) (diff: ${Format.formatAmountByPrecision(diffSell, sellPrecision)}, allowed: ${Format.formatAmountByPrecision(allowedSellTolerance, sellPrecision)})`,
-                'error',
-                30000
+                'error'
             );
         }
 
@@ -641,7 +639,7 @@ class Accountant {
               // which may indicate a persistent issue that self-corrects just long enough
               // to trigger decay, then recurs. Pattern: repeated "decayed" messages.
               mgr.logger?.log?.(
-                  `[RECOVERY] Attempt count decayed (${state.attemptCount} -> 0) after ${Math.round((now - state.lastFailureAt) / 1000)}s idle`,
+                  `[RECOVERY] Attempt count decayed (${state.attemptCount} -> 0) after ${Math.round((now - state.lastFailureAt) / TIMING.MILLISECONDS_PER_SECOND)}s idle`,
                   'info'
               );
               state.attemptCount = 0;
@@ -652,8 +650,7 @@ class Accountant {
               this._logThrottled(
                   'recovery-max-attempts',
                   `[RECOVERY] Skipping recovery: max attempts reached (${state.attemptCount}/${maxAttemptsRaw})`,
-                  'warn',
-                  30000
+                  'warn'
               );
               return false;
           }
@@ -725,8 +722,7 @@ class Accountant {
                       this._logThrottled(
                           'structural-resync-already-requested',
                           '[RECOVERY] Structural grid resync already scheduled; suppressing duplicate request.',
-                          'warn',
-                          30000
+                          'warn'
                       );
                   }
               }
@@ -1119,8 +1115,11 @@ class Accountant {
         const totalSell = (mgr.accountTotals?.sell || 0);
 
         // Add slack for precision rounding errors
-        const slackBuy = getPrecisionSlack(mgr.assets?.assetB?.precision || 8);
-        const slackSell = getPrecisionSlack(mgr.assets?.assetA?.precision || 8);
+        if (mgr.assets?.assetB?.precision === undefined || mgr.assets?.assetA?.precision === undefined) {
+            throw new Error(`CRITICAL: Asset precision unavailable for slack calculation`);
+        }
+        const slackBuy = getPrecisionSlack(mgr.assets?.assetB?.precision);
+        const slackSell = getPrecisionSlack(mgr.assets?.assetA?.precision);
 
         const buyShortfall = Math.max(0, requiredBuy - (totalBuy + slackBuy));
         const sellShortfall = Math.max(0, requiredSell - (totalSell + slackSell));

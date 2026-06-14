@@ -24,7 +24,7 @@ function blockchainToFloat(amount, precision) {
 
 function formatNumber(n, precision) {
     // Format with grouping (commas) and dot decimal. Cap displayed decimals to 4
-    const pd = Math.max(0, Math.min(4, precision || 4));
+    const pd = Math.max(0, Math.min(4, precision));
     try {
         return new Intl.NumberFormat('en-US', { minimumFractionDigits: pd, maximumFractionDigits: pd }).format(Number(n));
     } catch (e) {
@@ -39,8 +39,7 @@ async function getAssetPrecision(assetId) {
         assetPrecisions[assetId] = asset.precision;
         return asset.precision;
     } catch (e) {
-        console.error(`Failed to get precision for ${assetId}:`, e && e.message ? e.message : e);
-        return 5; // reasonable default
+        throw new Error(`Failed to get precision for ${assetId}: ${e?.message ?? e}`);
     }
 }
 
@@ -85,7 +84,7 @@ async function main() {
     const rows = [];
     for (const k of Object.keys(balancesMap || {})) {
         const info = balancesMap[k] || {};
-        rows.push({ aid: info.assetId || k, symbol: info.symbol || k, precision: info.precision || 0, freeRaw: info.freeRaw || 0, lockedRaw: info.lockedRaw || 0, freeHuman: info.free || 0, lockedHuman: info.locked || 0, totalHuman: info.total || 0, btsValue: null, priceInBTS: null });
+        rows.push({ aid: info.assetId || k, symbol: info.symbol || k, precision: info.precision, freeRaw: info.freeRaw || 0, lockedRaw: info.lockedRaw || 0, freeHuman: info.free || 0, lockedHuman: info.locked || 0, totalHuman: info.total || 0, btsValue: null, priceInBTS: null });
     }
 
     // Sort by total descending for table and visualization

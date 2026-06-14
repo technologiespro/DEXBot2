@@ -212,6 +212,8 @@ let TIMING = {
     // Connection and initialization timeouts
     CONNECTION_TIMEOUT_MS: 30000,  // 30 seconds - BitShares client connection establishment timeout
     DAEMON_STARTUP_TIMEOUT_MS: 60000,  // 60 seconds - Private key daemon startup timeout
+    RETRY_BACKOFF_CAP_MS: 30000,  // 30 seconds - Max exponential backoff delay for connection retries
+    DAEMON_PING_TIMEOUT_MS: 5000,      // 5 seconds - Private key daemon ping/healthcheck timeout
 
     // Main loop and polling defaults
     RUN_LOOP_DEFAULT_MS: 5000,  // 5 seconds - default open-orders sync cycle delay (env override: OPEN_ORDERS_SYNC_LOOP_MS)
@@ -231,6 +233,11 @@ let TIMING = {
     // Prevents lock expiration during extended reconciliations or batch operations.
     // Default: 250ms (4 refreshes per second minimum during long operations).
     LOCK_REFRESH_MIN_MS: 250,
+
+    // LOG_THROTTLE_INTERVAL_MS: Default throttle interval for _logThrottled
+    // in accounting.ts et al. Prevents repeated identical log messages from
+    // flooding the log during sustained error conditions.
+    LOG_THROTTLE_INTERVAL_MS: 30000,
 
     // CREDENTIAL_BROADCAST_TIMEOUT_MS: Outer timeout for a credential-daemon broadcast
     // request, enforced by the bot socket client (modules/dexbot_credential_client.ts).
@@ -388,7 +395,13 @@ let GRID_LIMITS = {
     // order equality checks in COW delta planning.
     // Example: 0.1 means two values are considered equal when diff < 0.1% of magnitude.
     // Note: Final blockchain update filtering still happens with integer precision checks.
-    RELATIVE_ORDER_UPDATE_THRESHOLD_PERCENT: 0.1
+    RELATIVE_ORDER_UPDATE_THRESHOLD_PERCENT: 0.1,
+
+    // PRICE_DRIFT_TOLERANCE_MULTIPLIER: Tolerance multiplier for matching
+    // chain-order price drift against planned grid slots in sync_engine.ts.
+    // Drift beyond strict tolerance but within multiplier × tolerance is
+    // tagged as "price-drift-orphan" instead of rejected outright.
+    PRICE_DRIFT_TOLERANCE_MULTIPLIER: 4,
 };
 
 // Increment percentage bounds for grid configuration
@@ -488,11 +501,9 @@ let CR_ZONES = Object.freeze({
 const DEFAULT_TARGET_CR = (CR_ZONES.RED_LOW + CR_ZONES.RED_HIGH) / 2;
 
 // Build output directory name (relative to project root).
-// Matches tsconfig.json outDir. Used at runtime to decide whether to load
-// compiled .js or source .ts entry points. Change here if outDir ever changes.
-// WARNING: modules/general_settings.ts has a hardcoded 'dist' (circular dep).
-// Keep in sync manually if this value changes.
-const BUILD_DIR = 'dist';
+// Centralized in modules/utils/build_dir.ts to avoid circular dependency with
+// general_settings.ts (both constants.ts and general_settings.ts import it).
+const { BUILD_DIR } = require('./utils/build_dir');
 
 const DAEMON_ERRORS = Object.freeze({
     SESSION_EXPIRED: 'invalid or expired session',
@@ -528,7 +539,9 @@ let API_LIMITS = {
     // Depth of order book to fetch for market price derivation
     ORDERBOOK_DEPTH: 5,
     // Maximum number of limit orders per batch request
-    LIMIT_ORDERS_BATCH: 100
+    LIMIT_ORDERS_BATCH: 100,
+    // Maximum page for LP history API queries (market adapter)
+    LP_API_MAX_PAGE: 101,
 };
 
 // Fill processing configuration
@@ -573,6 +586,8 @@ let FILL_PROCESSING = {
 };
 
 // Cleanup and maintenance parameters
+// NOTE: CLEANUP_PROBABILITY is defined here but currently unused.
+// Reserved for future cleanup-scheduling feature.
 let MAINTENANCE = {
     // Probability of running cleanup operation on any cycle (0.1 = 10%)
     CLEANUP_PROBABILITY: 0.1
@@ -691,7 +706,12 @@ let PIPELINE_TIMING = {
     // Used when RECOVERY_RETRY_INTERVAL_MS is not configured.
     // After this idle time, recovery attempt count resets to prevent permanent exhaustion.
     // Default: 3 minutes (180000 ms).
-    RECOVERY_DECAY_FALLBACK_MS: 3 * 60 * 1000
+    RECOVERY_DECAY_FALLBACK_MS: 3 * 60 * 1000,
+
+    // RETRY defaults for generic withRetry() utility and similar patterns.
+    RETRY_MAX_ATTEMPTS: 3,
+    RETRY_BASE_DELAY_MS: 1000,
+    RETRY_MAX_DELAY_MS: 10000,
 };
 
 // Market Adapter Configuration
@@ -1132,9 +1152,24 @@ let LAUNCHER = {
         // process state.
         DAEMON_SIGKILL_DEADLINE_MS: 10000,
     },
+
+    // SUPERVISOR: Centralized defaults for bot_supervisor.ts.
+    // Previously hardcoded locally in the supervisor module.
+    SUPERVISOR: {
+        MAX_RESTARTS: 13,
+        MIN_UPTIME_MS: 24 * 60 * 60 * 1000,
+        RESTART_DELAY_MS: 3000,
+        SHUTDOWN_TIMEOUT_MS: 5000,
+        STAGGER_DELAY_MS: 500,
+        MAX_MEMORY_MB: 250,
+        MEMORY_CHECK_INTERVAL_MS: 60000,
+        STATUS_LOG_INTERVAL_MS: 300000,
+        MAX_CRON_LOOKAHEAD_MINUTES: 366 * 24 * 60,
+    },
 };
 
 // Copy-on-Write (COW) Grid performance thresholds
+// NOTE: Currently unused — reserved for future COW performance monitoring.
 let COW_PERFORMANCE = {
     MAX_REBALANCE_PLANNING_MS: 100,
     MAX_COMMIT_MS: 50,
@@ -1200,8 +1235,9 @@ let NATIVE_CLIENT = {
         ADDRESS_PREFIX: 'BTS',
 
         // BitShares mainnet chain ID.
-        // Also referenced at NODE_MANAGEMENT.EXPECTED_CHAIN_ID for node validation.
-        CHAIN_ID: '4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a8dad512c8',
+        // References NODE_MANAGEMENT.EXPECTED_CHAIN_ID (defined above) to avoid
+        // duplicating the same hex literal across two locations.
+        CHAIN_ID: NODE_MANAGEMENT.EXPECTED_CHAIN_ID,
 
         // 100% and 1% in Graphene basis points (bps).
         // Used for fee calculations, credit-offer rates, and collateral ratio checks.
@@ -1229,6 +1265,7 @@ let NATIVE_CLIENT = {
         CREDIT_DEAL_REPAY:    73,
         CREDIT_DEAL_UPDATE:   76,
         LIMIT_ORDER_UPDATE:   77,
+        LIQUIDITY_POOL:       63,
     },
 
     // -------------------------------------------------------------------------
@@ -1597,6 +1634,7 @@ Object.freeze(NODE_MANAGEMENT);
 Object.freeze(PIPELINE_TIMING);
 Object.freeze(UPDATER);
 Object.freeze(LAUNCHER.MONOLITHIC);
+Object.freeze(LAUNCHER.SUPERVISOR);
 Object.freeze(LAUNCHER);
 Object.freeze(COW_PERFORMANCE);
 Object.freeze(LOGGING_CONFIG);

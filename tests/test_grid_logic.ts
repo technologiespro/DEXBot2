@@ -96,9 +96,9 @@ async function runTests() {
             const gap = Grid.calculateGapSlots(undefined, 0);
 
             const step = 1 + (DEFAULT_CONFIG.incrementPercent / 100);
-            const minSpreadPercent = DEFAULT_CONFIG.incrementPercent * (GRID_LIMITS.MIN_SPREAD_FACTOR || 2.1);
+            const minSpreadPercent = DEFAULT_CONFIG.incrementPercent * GRID_LIMITS.MIN_SPREAD_FACTOR;
             const requiredSteps = Math.ceil(Math.log(1 + (minSpreadPercent / 100)) / Math.log(step));
-            const expected = Math.max(GRID_LIMITS.MIN_SPREAD_ORDERS || 2, requiredSteps - 1);
+            const expected = Math.max(GRID_LIMITS.MIN_SPREAD_ORDERS, requiredSteps - 1);
 
             assert.strictEqual(gap, expected, 'Gap slots should use DEFAULT_CONFIG.incrementPercent as fallback');
         } finally {

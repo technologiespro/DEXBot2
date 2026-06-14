@@ -3,6 +3,7 @@ const path = require('path');
 const { resolveProjectRoot } = require('../../modules/launcher/runtime_entry');
 const { PositionManager, DEFAULT_STATE_PATH } = require('./position_manager');
 const { waitForConnected } = require('./bitshares_client');
+const { PIPELINE_TIMING } = require('../../modules/constants');
 
 const PW_PARENT_DIR = path.dirname(path.dirname(__dirname));
 const PW_PROJECT_ROOT = resolveProjectRoot(PW_PARENT_DIR);
@@ -17,7 +18,7 @@ function parsePositionManagerWatchArgs(argv: string[] = [], env = process.env) {
     healthPath: DEFAULT_HEALTH_PATH,
     maxConsecutiveFailures: DEFAULT_MAX_CONSECUTIVE_FAILURES,
     statePath: DEFAULT_STATE_PATH,
-    syncIntervalMs: 300000
+    syncIntervalMs: PIPELINE_TIMING.TIMEOUT_MS
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -80,7 +81,7 @@ function createPositionManagerWatcher(options: Record<string, any> = {}) {
     statePath: options.statePath || DEFAULT_STATE_PATH,
     syncIntervalMs: Number.isFinite(Number(options.syncIntervalMs)) && Number(options.syncIntervalMs) > 0
       ? Number(options.syncIntervalMs)
-      : 300000
+      : PIPELINE_TIMING.TIMEOUT_MS
   };
 
   const manager = new PositionManager({ statePath: resolvedOptions.statePath });

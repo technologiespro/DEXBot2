@@ -127,13 +127,13 @@ class StrategyEngine {
     _buildFeeEventId(filledOrder) {
         // Use integer blockchain representation for size to avoid float imprecision.
         // Precision is derived from order side and manager assets.
-        let precision = 8;
+        let precision;
         try {
             if (this.manager?.assets && filledOrder?.type) {
                 precision = getPrecisionByOrderType(this.manager.assets, filledOrder.type);
             }
         } catch (_) {
-            precision = 8;
+            // Precision not available — floatToBlockchainInt will throw
         }
 
         const sizeInt = floatToBlockchainInt(Number(filledOrder?.size || 0), precision);

@@ -55,7 +55,7 @@ const DEFAULT_CONFIG: {
 };
 
 const FETCH_TIMEOUT_MS = MARKET_ADAPTER.KIBANA_REQUEST_TIMEOUT_MS;
-const FETCH_MAX_ATTEMPTS = 3;
+const FETCH_MAX_ATTEMPTS = MARKET_ADAPTER.RUNTIME_DEFAULTS.sourceRetries;
 const FETCH_MANIFEST_VERSION = 1;
 
 const { PROJECT_ROOT } = require('../utils/paths');
@@ -178,7 +178,7 @@ function normalizeLookbackRange(config, nowMs = Date.now()) {
     }
 
     const bucketMs = Number(config.intervalSeconds) * 1000;
-    const safeBucketMs = Number.isFinite(bucketMs) && bucketMs > 0 ? bucketMs : 3600000;
+    const safeBucketMs = Number.isFinite(bucketMs) && bucketMs > 0 ? bucketMs : MARKET_ADAPTER.RUNTIME_DEFAULTS.intervalSeconds * 1000;
     const endMs = Math.floor(nowMs / safeBucketMs) * safeBucketMs;
     const startMs = endMs - (lookbackHours * 3600 * 1000);
     return {
@@ -592,11 +592,15 @@ async function run() {
         }
 
         const [idA, idB] = assetIds;
-        const precA = cliPrecA ?? 5;
-        const precB = cliPrecB ?? 5;
+        if (cliPrecA == null || cliPrecB == null) {
+            console.error(`Precisions required in manual mode. Use --precA and --precB.`);
+            process.exit(1);
+        }
+        const precA = cliPrecA;
+        const precB = cliPrecB;
 
-        console.log(`  Asset A: ${idA} (precision ${precA}${cliPrecA == null ? ' — default, use --precA to override' : ''})`);
-        console.log(`  Asset B: ${idB} (precision ${precB}${cliPrecB == null ? ' — default, use --precB to override' : ''})`);
+        console.log(`  Asset A: ${idA} (precision ${precA})`);
+        console.log(`  Asset B: ${idB} (precision ${precB})`);
 
         assetA = { id: idA, precision: precA, symbol: idA };
         assetB = { id: idB, precision: precB, symbol: idB };

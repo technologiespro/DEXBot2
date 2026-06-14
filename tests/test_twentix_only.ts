@@ -2,8 +2,10 @@ const { BitShares } = require('../modules/bitshares_client');
 
 function blockchainToFloat(intValue, precision) {
     if (intValue === null || intValue === undefined) return 0;
-    const p = Number(precision || 0);
-    return Number(intValue) / Math.pow(10, p);
+    if (precision === undefined || precision === null || !Number.isFinite(Number(precision))) {
+        throw new Error(`Invalid precision for blockchainToFloat: ${precision}`);
+    }
+    return Number(intValue) / Math.pow(10, Number(precision));
 }
 
 (async () => {

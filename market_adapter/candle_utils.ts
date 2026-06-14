@@ -4,7 +4,10 @@ const fs = require('fs');
 const path = require('path');
 
 function rawToHuman(rawAmount: any, precision: any) {
-    return Number(rawAmount || 0) / Math.pow(10, Number(precision || 0));
+    if (precision === undefined || precision === null || !Number.isFinite(Number(precision))) {
+        throw new Error(`Invalid precision for rawToHuman: ${precision}`);
+    }
+    return Number(rawAmount || 0) / Math.pow(10, Number(precision));
 }
 
 function tradeToBPerA(trade: any, assetA: any, assetB: any) {

@@ -246,7 +246,7 @@ function createFillCallback(chainOrders) {
         }
 
         if (this.manager && !this.config.dryRun && Array.isArray(fills) && fills.length > 0) {
-            const maxQueueDepth = Number(NATIVE_CLIENT?.SUBSCRIPTIONS?.MAX_INCOMING_FILL_QUEUE || 1000);
+            const maxQueueDepth = NATIVE_CLIENT.SUBSCRIPTIONS.MAX_INCOMING_FILL_QUEUE;
             if (this._incomingFillQueue.length + fills.length > maxQueueDepth) {
                 const message = `Incoming fill queue back-pressure: ${this._incomingFillQueue.length} queued + ${fills.length} incoming exceeds limit ${maxQueueDepth}`;
                 this._warn(message);

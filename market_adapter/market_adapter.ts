@@ -56,7 +56,7 @@ const path = require('path');
 
 const { parseJsonWithComments, sleep, ensureDir } = require('../modules/order/utils/system');
 const { readGeneralSettings } = require('../modules/general_settings');
-const { DEFAULT_CONFIG, MARKET_ADAPTER } = require('../modules/constants');
+const { DEFAULT_CONFIG, MARKET_ADAPTER, NATIVE_CLIENT, API_LIMITS, TIMING } = require('../modules/constants');
 const { createBotKey } = require('../modules/account_orders');
 const { calculateAMA } = require('./core/strategies/ama');
 const {
@@ -118,8 +118,8 @@ const MARKET_ADAPTER_SOURCE = path.relative(ROOT, __filename).replace(/^dist[\\\
 const MARKET_PROFILES_FILE = path.join(PROFILES_DIR, 'market_profiles.json');
 const MARKET_ADAPTER_SETTINGS_FILE = path.join(PROFILES_DIR, 'market_adapter_settings.json');
 
-const LP_OP_TYPE = 63;
-const API_MAX_PAGE = 101;
+const LP_OP_TYPE = NATIVE_CLIENT.OPERATIONS.LIQUIDITY_POOL;
+const API_MAX_PAGE = API_LIMITS.LP_API_MAX_PAGE;
 const RUNTIME_DEFAULTS = MARKET_ADAPTER.RUNTIME_DEFAULTS;
 
 const DEFAULTS = {
@@ -1403,7 +1403,7 @@ async function main() {
                 } catch (err) {
                     lastErr = err;
                     if (attempt < maxRetries) {
-                        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 30000);
+                        const delay = Math.min(1000 * Math.pow(2, attempt - 1), TIMING.RETRY_BACKOFF_CAP_MS);
                         logger.warn(`Connection attempt ${attempt}/${maxRetries} failed: ${err.message}; retrying in ${delay}ms`);
                         await sleep(delay);
                     }

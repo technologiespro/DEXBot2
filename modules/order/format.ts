@@ -21,9 +21,9 @@
  * SECTION 1: ASSET FORMATTING (5 functions)
  *   1. formatAmount8(value) - Format to 8 decimals (blockchain standard)
  *   2. formatAmount(value, decimals) - Format with custom decimal places
- *   3. formatAmountByPrecision(value, precision, fallbackPrecision) - Format using chain precision
+ *   3. formatAmountByPrecision(value, precision) - Format using chain precision
  *   4. formatAmountStrict(value, precision) - Format using chain precision; returns 'N/A' if either arg is non-finite
- *   5. formatSizeByOrderType(value, orderType, assets, fallbackPrecision) - Format order size by BUY/SELL asset precision
+ *   5. formatSizeByOrderType(value, orderType, assets) - Format order size by BUY/SELL asset precision
  *
  * SECTION 2: PRICE FORMATTING (3 functions)
  *   6. formatPrice(value) - Format to 8 decimals (maximum precision)
@@ -76,33 +76,35 @@ function formatAmount(value: number, decimals: number = 8): string {
 
 /**
  * Format asset amount using an explicit blockchain precision.
+ * Throws if precision is invalid — no silent fallback.
  *
  * @param {number} value - The value to format
  * @param {number} precision - Asset precision to apply
- * @param {number} [fallbackPrecision=8] - Fallback decimals when precision is invalid
  * @returns {string} Formatted value
  */
-function formatAmountByPrecision(value: number, precision: number | undefined, fallbackPrecision: number = 8): string {
-	const decimals = precision !== undefined && Number.isInteger(precision) && precision >= 0 ? precision : fallbackPrecision;
-	return safeFormat(value, decimals);
+function formatAmountByPrecision(value: number, precision: number | undefined): string {
+	if (precision === undefined || !Number.isInteger(precision) || precision < 0) {
+		throw new Error(`Invalid precision for formatAmountByPrecision: ${precision}`);
+	}
+	return safeFormat(value, precision);
 }
 
 /**
  * Format an order size using market-side precision.
  * BUY size is in assetB units, SELL size is in assetA units.
+ * Throws if precision is unavailable — no silent fallback.
  *
  * @param {number} value - The value to format
  * @param {string} orderType - Order side ('buy' or 'sell')
  * @param {Object} assets - Asset metadata with assetA/assetB precision
- * @param {number} [fallbackPrecision=8] - Fallback decimals
  * @returns {string} Formatted value
  */
-function formatSizeByOrderType(value: number, orderType: string, assets: { assetA?: { precision?: number }; assetB?: { precision?: number } }, fallbackPrecision: number = 8): string {
+function formatSizeByOrderType(value: number, orderType: string, assets: { assetA?: { precision?: number }; assetB?: { precision?: number } }): string {
 	const side = String(orderType || '').toLowerCase();
 	const buyPrecision = assets?.assetB?.precision;
 	const sellPrecision = assets?.assetA?.precision;
 	const precision = side === 'buy' ? buyPrecision : side === 'sell' ? sellPrecision : undefined;
-	return formatAmountByPrecision(value, precision, fallbackPrecision);
+	return formatAmountByPrecision(value, precision);
 }
 
 /**

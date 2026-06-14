@@ -88,7 +88,7 @@
  * ===============================================================================
  */
 
-const { ORDER_TYPES, ORDER_STATES, TIMING, BTS_PRECISION } = require('../constants');
+const { ORDER_TYPES, ORDER_STATES, TIMING, BTS_PRECISION, GRID_LIMITS } = require('../constants');
 const Format = require('./format');
 const { toFiniteNumber } = Format;
 const {
@@ -203,7 +203,7 @@ function describeNearestAdoptionCandidates(mgr, chainOrder, precision, calcToler
     }).join('; ');
 }
 
-const PRICE_DRIFT_TOLERANCE_MULTIPLIER = 4;
+const PRICE_DRIFT_TOLERANCE_MULTIPLIER = GRID_LIMITS.PRICE_DRIFT_TOLERANCE_MULTIPLIER;
 
 /**
  * Find the closest same-side (or spread) candidate slot for a chain order and

@@ -47,7 +47,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { API_LIMITS, TIMING, ORDER_TYPES, ORDER_STATES, COW_ACTIONS, FEE_PARAMETERS, BTS_PRECISION } = require('../../constants');
+const { API_LIMITS, TIMING, ORDER_TYPES, ORDER_STATES, COW_ACTIONS, FEE_PARAMETERS, BTS_PRECISION, PIPELINE_TIMING } = require('../../constants');
 const { resolveProjectRoot } = require('../../launcher/runtime_entry');
 const Format = require('../format');
 const { toFiniteNumber, isValidNumber } = Format;
@@ -1141,7 +1141,7 @@ async function readPassword(prompt: string): Promise<string> { return readInput(
  * @throws {Error} If all attempts fail, throws the final error
  */
 async function withRetry<T>(fn: () => Promise<T>, options: { maxAttempts?: number; baseDelayMs?: number; maxDelayMs?: number; logger?: { log?: Function } | null; operationName?: string } = {}): Promise<T> {
-    const { maxAttempts = 3, baseDelayMs = 1000, maxDelayMs = 10000, logger = null, operationName = 'operation' } = options;
+    const { maxAttempts = PIPELINE_TIMING.RETRY_MAX_ATTEMPTS, baseDelayMs = PIPELINE_TIMING.RETRY_BASE_DELAY_MS, maxDelayMs = PIPELINE_TIMING.RETRY_MAX_DELAY_MS, logger = null, operationName = 'operation' } = options;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
             return await fn();

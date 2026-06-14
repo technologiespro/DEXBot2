@@ -7,7 +7,7 @@ const { spawn, execSync } = require('child_process');
 const { buildScopedChildEnv } = require('./child_env');
 const { buildRuntimeScriptPath, isDistCodeRoot, resolveProjectRoot } = require('./runtime_entry');
 const { normalizeBotEntries, resolveRawBotEntries, loadSettingsFile } = require('../bot_settings');
-const { UPDATER, BUILD_DIR } = require('../constants');
+const { UPDATER, BUILD_DIR, LAUNCHER } = require('../constants');
 const { ensureDir, safeUnlink } = require('../utils/fs_utils');
 
 const CODE_ROOT = path.resolve(__dirname, '..', '..');
@@ -18,19 +18,20 @@ const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const SOCKET_PATH = process.env.DEXBOT_SUPERVISOR_SOCKET || path.join(ROOT, 'profiles', 'supervisor.sock');
 const MARKET_ADAPTER_LOCK_FILE = path.join(ROOT, 'market_adapter', 'state', 'market_adapter.lock');
 
-const MAX_RESTARTS = 13;
-const MIN_UPTIME_MS = 86400000;
-const RESTART_DELAY_MS = 3000;
-const SHUTDOWN_TIMEOUT_MS = 5000;
-const STAGGER_DELAY_MS = 500;
-
-const MAX_MEMORY_MB = 250;
+const {
+    MAX_RESTARTS,
+    MIN_UPTIME_MS,
+    RESTART_DELAY_MS,
+    SHUTDOWN_TIMEOUT_MS,
+    STAGGER_DELAY_MS,
+    MAX_MEMORY_MB,
+    MEMORY_CHECK_INTERVAL_MS,
+    STATUS_LOG_INTERVAL_MS,
+    MAX_CRON_LOOKAHEAD_MINUTES,
+} = LAUNCHER.SUPERVISOR;
 const MAX_MEMORY_BYTES = MAX_MEMORY_MB * 1024 * 1024;
-const MEMORY_CHECK_INTERVAL_MS = 60000;
-const STATUS_LOG_INTERVAL_MS = 300000;
 
 const SUPERVISOR_PREFIX = '[supervisor]';
-const MAX_CRON_LOOKAHEAD_MINUTES = 366 * 24 * 60;
 
 function usesAmaGridPrice(bot) {
     const gridPrice = typeof bot?.gridPrice === 'string' ? bot.gridPrice.trim().toLowerCase() : '';

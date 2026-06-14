@@ -1125,13 +1125,13 @@ function getSideBudget(side, funds, config, totalTarget) {
 function calculateBudgetedSizes(slots, side, budget, weightDist, incrementPercent, assets) {
     const isBuy = side === 'buy';
 
-    let precision = 8;
+    let precision;
     if (assets?.assetA && assets?.assetB) {
         try {
             const { A: precA, B: precB } = MathUtils.getPrecisionsForManager(assets);
             precision = isBuy ? precB : precA;
         } catch (e: any) {
-            // Keep default precision 8 if manager asset structure is incomplete
+            // Precision not available — floatToBlockchainInt will throw
         }
     }
 
@@ -1140,7 +1140,7 @@ function calculateBudgetedSizes(slots, side, budget, weightDist, incrementPercen
     return MathUtils.allocateFundsByWeights(
         budget,
         slots.length,
-        weightDist || 0.5,
+        weightDist,
         incrementFactor,
         isBuy, // Reverse for BUY (Market-Close is last in array)
         0,

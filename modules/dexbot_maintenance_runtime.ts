@@ -181,7 +181,7 @@ async function maybeRunTargetedDriftReconciliation(context) {
     const lastSyncAt = Number(this._lastTargetedDriftSyncAt || 0);
     if (lastSyncAt > 0 && now - lastSyncAt < cooldownMs) {
         this._log(
-            `[TARGETED-SYNC] Deferring ${context} reconciliation for ${Math.ceil((cooldownMs - (now - lastSyncAt)) / 1000)}s: ${trigger.reason}`,
+            `[TARGETED-SYNC] Deferring ${context} reconciliation for ${Math.ceil((cooldownMs - (now - lastSyncAt)) / TIMING.MILLISECONDS_PER_SECOND)}s: ${trigger.reason}`,
             'debug'
         );
         return false;
@@ -788,7 +788,7 @@ function performGridResync(options: {
         self._log(
             `[MAINT-IDLE] Deferring grid resync until bot is idle` +
             (dustDelayMs !== null ? ` and pending dust timer completes` : '') +
-            ` (next check in ${Math.ceil(Math.max(dustDelayMs || 0, idleDelayMs) / 1000)}s)`,
+            ` (next check in ${Math.ceil(Math.max(dustDelayMs || 0, idleDelayMs) / TIMING.MILLISECONDS_PER_SECOND)}s)`,
             'info'
         );
         self._scheduleDustMaintenanceCheck?.();
@@ -1068,7 +1068,7 @@ function setupBlockchainFetchInterval() {
         return;
     }
 
-    const intervalMs = intervalMin * 60 * 1000;
+    const intervalMs = intervalMin * 60 * TIMING.MILLISECONDS_PER_SECOND;
     this._blockchainFetchInterval = setInterval(async () => {
         // Skip if shutdown has begun between the previous tick and now:
         // there is no point acquiring _fillProcessingLock or making
@@ -1321,9 +1321,9 @@ function scheduleDeferredGridResync(ctx, options = {}) {
                 const curDustMs = getPendingDustDelayMs(ctx);
                 const curIdleMs = getMaintenanceIdleDelayMs(ctx);
                 const reason = curDustMs !== null
-                    ? `dust timer pending (${Math.ceil(curDustMs / 1000)}s)`
+                    ? `dust timer pending (${Math.ceil(curDustMs / TIMING.MILLISECONDS_PER_SECOND)}s)`
                     : curIdleMs > 0
-                        ? `idle cooldown (${Math.ceil(curIdleMs / 1000)}s)`
+                        ? `idle cooldown (${Math.ceil(curIdleMs / TIMING.MILLISECONDS_PER_SECOND)}s)`
                         : 'grid resync rejected or failed';
                 ctx._warn(`Deferred trigger reset blocked: ${reason}; retaining existing grid state.`);
             }
@@ -1394,7 +1394,7 @@ async function executeMaintenanceLogic(context) {
             if (delayMs !== null) {
                 this._log(
                     `[DUST-CANCEL] Deferring ${context} structural maintenance until dust timer completes` +
-                    ` (next check in ${Math.ceil(delayMs / 1000)}s)`,
+                    ` (next check in ${Math.ceil(delayMs / TIMING.MILLISECONDS_PER_SECOND)}s)`,
                     'info'
                 );
                 scheduleDeferredGridResync(this);
@@ -1728,7 +1728,7 @@ async function runGridMaintenance(
         if (idleDelayMs > 0) {
             this._log(
                 `[MAINT-IDLE] Deferring ${context} grid maintenance until ` +
-                `${Math.ceil(idleDelayMs / 1000)}s of inactivity has passed`,
+                `${Math.ceil(idleDelayMs / TIMING.MILLISECONDS_PER_SECOND)}s of inactivity has passed`,
                 'debug'
             );
             scheduleMaintenanceAfterIdle(this, context, options);
