@@ -34,7 +34,11 @@ function readGeneralSettings({ fallback = null, onError = null }: { fallback?: a
         if (!raw || !raw.trim()) return fallback;
         return JSON.parse(raw);
     } catch (err: any) {
-        if (typeof onError === 'function') onError(err, SETTINGS_FILE);
+        if (typeof onError === 'function') {
+            onError(err, SETTINGS_FILE);
+        } else {
+            console.warn(`Failed to parse ${SETTINGS_FILE}: ${err.message}. Using defaults.`);
+        }
         return fallback;
     }
 }

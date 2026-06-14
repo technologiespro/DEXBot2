@@ -365,8 +365,8 @@ class Logger {
         if (!this.config.display?.fundStatus?.enabled && !forceDetailed) return;
 
         const isDebugMode = this.level === 'debug';
-        const buyName = manager.config?.assetB || 'quote';
-        const sellName = manager.config?.assetA || 'base';
+        const buyName = manager.config?.assetB?.symbol || manager.config?.assetB || 'quote';
+        const sellName = manager.config?.assetA?.symbol || manager.config?.assetA || 'base';
         const headerContext = context ? ` [${context}]` : '';
 
         const fundState = {
@@ -413,8 +413,8 @@ class Logger {
     }
 
     _logDetailedFunds(manager: any, headerContext = '') {
-        const buyName = manager.config?.assetB || 'quote';
-        const sellName = manager.config?.assetA || 'base';
+        const buyName = manager.config?.assetB?.symbol || manager.config?.assetB || 'quote';
+        const sellName = manager.config?.assetA?.symbol || manager.config?.assetA || 'base';
         const buyPrecision = manager.config?.assetB?.precision;
         const sellPrecision = manager.config?.assetA?.precision;
         if (buyPrecision === undefined || sellPrecision === undefined) {
@@ -482,8 +482,8 @@ class Logger {
         const partialOrders = manager.getOrdersByTypeAndState?.(null, ORDER_STATES.PARTIAL) || [];
         const virtualOrders = manager.getOrdersByTypeAndState?.(null, ORDER_STATES.VIRTUAL) || [];
 
-        const buyName = manager.config?.assetB || 'quote';
-        const sellName = manager.config?.assetA || 'base';
+        const buyName = manager.config?.assetB?.symbol || manager.config?.assetB || 'quote';
+        const sellName = manager.config?.assetA?.symbol || manager.config?.assetA || 'base';
         const buyPrecision = manager.config?.assetB?.precision;
         const sellPrecision = manager.config?.assetA?.precision;
         if (buyPrecision === undefined || sellPrecision === undefined) {

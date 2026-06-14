@@ -133,7 +133,16 @@ class StrategyEngine {
                 precision = getPrecisionByOrderType(this.manager.assets, filledOrder.type);
             }
         } catch (_) {
-            // Precision not available — floatToBlockchainInt will throw
+            // Precision not available — fall back to size string
+        }
+
+        if (typeof precision !== 'number') {
+            return filledOrder.historyId || [
+                filledOrder.orderId || filledOrder.id,
+                filledOrder.blockNum || 'na',
+                String(filledOrder?.size || 0),
+                filledOrder.isMaker === false ? 'taker' : 'maker'
+            ].join(':');
         }
 
         const sizeInt = floatToBlockchainInt(Number(filledOrder?.size || 0), precision);

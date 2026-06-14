@@ -37,7 +37,7 @@ logger.logOrderGrid(sampleOrders, 150);
 // Test logFundsStatus and displayStatus using a small manager-like stub
 const mgrStub = {
 	marketName: 'TEST/PAIR',
-	config: { assetA: 'BASE', assetB: 'QUOTE', market: 'TEST/PAIR' },
+	config: { assetA: { symbol: 'BASE', precision: 8 }, assetB: { symbol: 'QUOTE', precision: 4 }, market: 'TEST/PAIR' },
 	funds: { available: { buy: 1.2345, sell: 2.3456 }, committed: { buy: 0.5, sell: 0.25 }, total: { buy: 10, sell: 20 } },
 	currentSpreadCount: 2,
 	targetSpreadCount: 3,

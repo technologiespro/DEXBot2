@@ -903,8 +903,13 @@ function calculateOrderSizes(orders, config, sellFunds, buyFunds, minSellSize = 
 
     return orders.map(order => {
         let size = 0;
-        if (order.type === ORDER_TYPES.SELL) size = sellState.sizes[sellState.index++] || 0;
-        else if (order.type === ORDER_TYPES.BUY) size = buyState.sizes[buyState.index++] || 0;
+        if (order.type === ORDER_TYPES.SELL) {
+            if (sellState.index >= sellState.sizes.length) throw new Error(`calculateOrderSizes: sell index ${sellState.index} out of bounds (len=${sellState.sizes.length})`);
+            size = sellState.sizes[sellState.index++];
+        } else if (order.type === ORDER_TYPES.BUY) {
+            if (buyState.index >= buyState.sizes.length) throw new Error(`calculateOrderSizes: buy index ${buyState.index} out of bounds (len=${buyState.sizes.length})`);
+            size = buyState.sizes[buyState.index++];
+        }
         return { ...order, size };
     });
 }
@@ -1003,7 +1008,7 @@ function calculateGridSideDivergenceMetric(calculatedOrders, persistedOrders, si
  * @param {string} assetB - Second asset symbol (unused in calculation, kept for signature compat)
  * @param {number} totalOrders - Number of orders to create
  * @param {number} [feeMultiplier=BTS_RESERVATION_MULTIPLIER] - Multiplier for reservation (typically 5x)
- * @returns {number} Total fee amount (fallback if fee lookup fails)
+ * @returns {number} Total fee amount (fallback BTS_FALLBACK_FEE if fee lookup fails; warning logged)
  */
 function calculateOrderCreationFees(assetA, assetB, totalOrders, feeMultiplier = FEE_PARAMETERS.BTS_RESERVATION_MULTIPLIER) {
     try {
@@ -1011,7 +1016,10 @@ function calculateOrderCreationFees(assetA, assetB, totalOrders, feeMultiplier =
             const btsFeeData = getAssetFees('BTS');
             return btsFeeData.createFee * totalOrders * feeMultiplier;
         }
-    } catch (err: any) { return FEE_PARAMETERS.BTS_FALLBACK_FEE; }
+    } catch (err: any) {
+        mathLogger.warn(`calculateOrderCreationFees: fee cache unavailable for ${assetA}/${assetB}: ${err.message}. Using fallback fee.`);
+        return FEE_PARAMETERS.BTS_FALLBACK_FEE;
+    }
     return 0;
 }
 

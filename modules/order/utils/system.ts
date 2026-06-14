@@ -80,7 +80,9 @@ const lookupAsset = async (BitShares: any, s: string): Promise<any> => {
     if (BitShares?.assets) {
         try {
             cached = await BitShares.assets[s];
-        } catch (_: any) {}
+        } catch (_: any) {
+            systemLogger.debug(`lookupAsset: cache access failed for ${s}`);
+        }
     }
 
     if (cached?.id && typeof cached.precision === 'number') {
@@ -99,7 +101,9 @@ const lookupAsset = async (BitShares: any, s: string): Promise<any> => {
             if (r?.[0]?.id && typeof r[0].precision === 'number') {
                 return { ...(cached || {}), ...r[0] };
             }
-        } catch (e: any) {}
+        } catch (e: any) {
+            systemLogger.debug(`lookupAsset: method failed for ${s}: ${e.message}`);
+        }
     }
 
     throw new Error(`CRITICAL: Cannot fetch asset precision for '${s}'`);
@@ -133,14 +137,18 @@ const deriveMarketPrice = async (BitShares: any, symA: string, symB: string): Pr
                 const bestBid = isValidNumber(ob.bids?.[0]?.price) ? toFiniteNumber(ob.bids[0].price) : null;
                 const bestAsk = isValidNumber(ob.asks?.[0]?.price) ? toFiniteNumber(ob.asks[0].price) : null;
                 if (bestBid !== null && bestAsk !== null) mid = (bestBid + bestAsk) / 2;
-            } catch (e: any) {}
+            } catch (e: any) {
+                systemLogger.debug(`deriveMarketPrice: get_order_book failed for ${symA}/${symB}: ${e.message}`);
+            }
         }
 
         if (mid === null && typeof BitShares.db?.get_ticker === 'function') {
             try {
                 const t = await BitShares.db.get_ticker(baseId, quoteId);
                 mid = isValidNumber(t?.latest) ? toFiniteNumber(t.latest) : (isValidNumber(t?.latest_price) ? toFiniteNumber(t.latest_price) : null);
-            } catch (err: any) {}
+            } catch (err: any) {
+                systemLogger.debug(`deriveMarketPrice: get_ticker failed for ${symA}/${symB}: ${err.message}`);
+            }
         }
 
         // Return B/A orientation to match market price format
@@ -181,7 +189,9 @@ const derivePoolPrice = async (BitShares: any, symA: string, symB: string): Prom
             try {
                 chosen = await BitShares.db.get_liquidity_pool_by_asset_ids(aMeta.id, bMeta.id);
                 if (chosen) poolIdCache.set(cacheKey, chosen.id);
-            } catch (e: any) {}
+            } catch (e: any) {
+                systemLogger.debug(`derivePoolPrice: get_liquidity_pool_by_asset_ids failed: ${e.message}`);
+            }
         }
 
         if (!chosen && cachedPoolId && typeof BitShares.db?.get_objects === 'function') {
@@ -246,7 +256,9 @@ const derivePoolPrice = async (BitShares: any, symA: string, symB: string): Prom
             try {
                 const [full] = await BitShares.db.get_objects([chosen.id]);
                 if (full) chosen = full;
-            } catch (e: any) {}
+            } catch (e: any) {
+                systemLogger.debug(`derivePoolPrice: get_objects failed for pool ${chosen.id}: ${e.message}`);
+            }
         }
 
         let amtA = null, amtB = null;
@@ -341,12 +353,18 @@ async function resolveLiquidityPoolByShareAsset(BitShares: any, shareAssetRef: s
         return null;
     }
 
-    const shareAsset = await lookupAsset(BitShares, shareAssetRef).catch(() => null);
+    const shareAsset = await lookupAsset(BitShares, shareAssetRef).catch((e) => {
+        systemLogger.debug(`resolveLiquidityPoolByShareAsset: lookupAsset failed for ${shareAssetRef}: ${e.message}`);
+        return null;
+    });
     if (!shareAsset?.id) {
         return null;
     }
 
-    const response = await BitShares.db.get_liquidity_pools_by_share_asset([shareAsset.id], false, false).catch(() => null);
+    const response = await BitShares.db.get_liquidity_pools_by_share_asset([shareAsset.id], false, false).catch((e) => {
+        systemLogger.debug(`resolveLiquidityPoolByShareAsset: get_liquidity_pools_by_share_asset failed for ${shareAssetRef}: ${e.message}`);
+        return null;
+    });
     if (!Array.isArray(response)) {
         return null;
     }
@@ -365,7 +383,10 @@ async function resolveLiquidityPoolByShareAsset(BitShares: any, shareAssetRef: s
 async function getAssetCurrentSupply(BitShares: any, assetRef: any): Promise<any> {
     const asset = typeof assetRef === 'object' && assetRef !== null
         ? assetRef
-        : await lookupAsset(BitShares, assetRef).catch(() => null);
+        : await lookupAsset(BitShares, assetRef).catch((e) => {
+            systemLogger.debug(`getAssetCurrentSupply: lookupAsset failed for ${assetRef}: ${e.message}`);
+            return null;
+        });
     if (!asset) {
         return null;
     }
@@ -380,7 +401,10 @@ async function getAssetCurrentSupply(BitShares: any, assetRef: any): Promise<any
         return null;
     }
 
-    const objects = await BitShares.db.get_objects([dynamicId]).catch(() => null);
+    const objects = await BitShares.db.get_objects([dynamicId]).catch((e) => {
+        systemLogger.debug(`getAssetCurrentSupply: get_objects failed for ${dynamicId}: ${e.message}`);
+        return null;
+    });
     const dynamicData = Array.isArray(objects) ? objects[0] : null;
     const supply = toFiniteNumber(
         dynamicData?.current_supply?.amount
@@ -436,10 +460,16 @@ async function deriveLiquidityPoolTokenValue(BitShares: any, shareAssetRef: stri
 
         const priceA = String(assetA.id) === String(denominationAsset.id)
             ? 1
-            : await derivePrice(BitShares, assetA.id, denominationAsset.id, mode).catch(() => null);
+            : await derivePrice(BitShares, assetA.id, denominationAsset.id, mode).catch((e) => {
+                systemLogger.debug(`deriveLiquidityPoolTokenValue: derivePrice failed for ${assetA.id}/${denominationAsset.id}: ${e.message}`);
+                return null;
+            });
         const priceB = String(assetB.id) === String(denominationAsset.id)
             ? 1
-            : await derivePrice(BitShares, assetB.id, denominationAsset.id, mode).catch(() => null);
+            : await derivePrice(BitShares, assetB.id, denominationAsset.id, mode).catch((e) => {
+                systemLogger.debug(`deriveLiquidityPoolTokenValue: derivePrice failed for ${assetB.id}/${denominationAsset.id}: ${e.message}`);
+                return null;
+            });
 
         if (!isValidNumber(priceA) || !isValidNumber(priceB) || priceA <= 0 || priceB <= 0) {
             return null;
@@ -662,7 +692,10 @@ async function retryPersistenceIfNeeded(manager: any): Promise<boolean> {
         const success = result === true || (result && !result.skipped && result.isValid !== false);
         if (success) delete manager._persistenceWarning;
         return success;
-    } catch (e: any) { return false; }
+    } catch (e: any) {
+        systemLogger.warn(`retryPersistenceIfNeeded failed: ${e.message}`);
+        return false;
+    }
 }
 
 /**

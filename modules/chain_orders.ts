@@ -428,7 +428,9 @@ async function selectAccount() {
             if (candidateId && String(candidateId).startsWith('1.2.')) selectedId = candidateId;
             else if (full[0][1] && full[0][1].account && full[0][1].account.id) selectedId = full[0][1].account.id;
         }
-    } catch (e: any) { }
+    } catch (e: any) {
+        console.error(`Failed to resolve account ID for ${selectedAccount}: ${e.message}`);
+    }
 
     if (selectedId) {
         await setPreferredAccount(selectedId, selectedAccount);
@@ -1195,7 +1197,9 @@ async function getOnChainAssetBalances(accountRef, assets) {
                     const res = await BitShares.db.lookup_asset_symbols([String(a)]).catch(() => null);
                     if (res && res[0] && res[0].id) aid = res[0].id;
                 }
-            } catch (e: any) { }
+            } catch (e: any) {
+                chainOrdersLogger.warn(`lookup_asset_symbols failed for ${a}: ${e.message}`);
+            }
 
             // try to get precision and symbol
             let precision = null; let symbol = String(a);
@@ -1223,6 +1227,7 @@ async function getOnChainAssetBalances(accountRef, assets) {
 
         return out;
     } catch (err: any) {
+        chainOrdersLogger.error(`getOnChainAssetBalances failed: ${err.message}`);
         return {};
     }
 }

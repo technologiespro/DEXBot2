@@ -74,6 +74,8 @@ const Format = require('../format');
 const { isValidNumber, toFiniteNumber } = Format;
 const MathUtils = require('./math');
 const { blockchainToFloat, floatToBlockchainInt, quantizeFloat } = MathUtils;
+const Logger = require('../../logger');
+const orderLogger = new Logger('Order');
 
 // ================================================================================
 // SECTION 1: CHAIN ORDER MATCHING & RECONCILIATION
@@ -117,7 +119,10 @@ function parseChainOrder(chainOrder: any, assets: any) {
             const prec = (type === ORDER_TYPES.SELL) ? assets.assetA.precision : assets.assetB.precision;
             size = blockchainToFloat(toFiniteNumber(chainOrder.for_sale), prec);
         }
-    } catch (e: any) { return null; }
+    } catch (e: any) {
+        orderLogger.warn(`parseChainOrder failed for ${chainOrder?.id}: ${e.message}`);
+        return null;
+    }
 
     return { orderId: chainOrder.id, price, type, size };
 }
@@ -172,6 +177,9 @@ function findMatchingGridOrderByOpenOrder(parsedChainOrder: any, opts: any) {
         // Virtual/spread slots have size=0 — fall back to chain order's size so the
         // precision-based tolerance is meaningful instead of collapsing to 0.
         const effectiveSize = gridOrder.size > 0 ? gridOrder.size : chainSize;
+        // When calcToleranceFn returns null (e.g. zero-size virtual slot), fall back to
+        // exact matching (tolerance=0). This is intentional — virtual/spread slots should
+        // only match chain orders at exactly their grid price.
         const priceTolerance = calcToleranceFn?.(gridOrder.price, effectiveSize, parsedChainOrder.type) || 0;
         if (priceDiff > priceTolerance) continue;
 

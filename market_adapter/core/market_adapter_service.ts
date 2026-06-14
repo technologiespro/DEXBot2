@@ -372,8 +372,8 @@ class MarketAdapterService {
             const maxP = resolveConfiguredPriceBound(bot?.maxPrice, DEFAULT_CONFIG.maxPrice, startPrice, 'max');
             if (!Number.isFinite(minP) || !Number.isFinite(maxP)) return base;
             return Math.min(maxP, Math.max(minP, base));
-        } catch (_: any) {
-            return base;
+        } catch (err: any) {
+            throw new Error(`clampGridPriceToBounds: failed to resolve bounds: ${err.message}`);
         }
     }
 
@@ -388,7 +388,10 @@ class MarketAdapterService {
         try {
             minP = resolveConfiguredPriceBound(bot?.minPrice, DEFAULT_CONFIG.minPrice, centerPrice, 'min');
             maxP = resolveConfiguredPriceBound(bot?.maxPrice, DEFAULT_CONFIG.maxPrice, centerPrice, 'max');
-        } catch (_: any) {}
+        } catch (_: any) {
+            // Intentional: if bound resolution fails, minP/maxP stay null.
+            // computeAsymmetricBoundsMetrics handles null bounds with safe defaults.
+        }
         return computeAsymmetricBoundsMetrics({
             centerPrice,
             minPrice: minP,

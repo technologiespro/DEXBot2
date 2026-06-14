@@ -1426,8 +1426,7 @@ class SyncEngine {
                     const assetData = (side === 'A') ? persistedAssets?.assetA : persistedAssets?.assetB;
 
                     if (assetData && assetData.symbol === symbol && typeof assetData.precision === 'number') {
-                        mgr.logger.log(`Blockchain lookup failed for ${symbol}: ${err.message}. Using persisted fallback: id=${assetData.id}, precision=${assetData.precision}`, 'warn');
-                        return assetData;
+                        mgr.logger.log(`Blockchain lookup failed for ${symbol}: ${err.message}. Persisted data: id=${assetData.id}, precision=${assetData.precision} — refusing stale fallback`, 'error');
                     }
                 }
                 throw err;

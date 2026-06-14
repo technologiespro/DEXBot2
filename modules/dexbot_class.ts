@@ -729,14 +729,14 @@ class DEXBot {
                 this._log('Fetched blockchain account balances at startup');
             }
         } catch (err: any) {
-            this._warn(`Failed to fetch account totals at startup: ${err.message}`);
+            this._log(`Startup balance fetch FAILED: ${err.message}. Order sizing may be incorrect until next successful sync.`, 'error');
         }
 
         // Ensure fee cache is initialized before any fill processing that calls getAssetFees().
         try {
             await initializeFeeCache([this.config || {}], BitShares);
         } catch (err: any) {
-            this._warn(`Fee cache initialization failed: ${err.message}`);
+            this._log(`Fee cache initialization FAILED: ${err.message}. Fee calculations will use defaults until cache is refreshed.`, 'error');
         }
 
         const persistedGrid = this.accountOrders.loadBotGrid(this.config.botKey);
@@ -1375,7 +1375,7 @@ class DEXBot {
             return { syncResult, aborted, hasUnmatched, openOrders };
         } catch (err) {
             this._warn(`[SYNC-CHAIN] Open-orders sync failed during ${tag}: ${err.message}`);
-            return { syncResult: null, aborted: true, hasUnmatched: 0, openOrders: null };
+            return { syncResult: null, aborted: true, hasUnmatched: -1, openOrders: null };
         }
     }
 
