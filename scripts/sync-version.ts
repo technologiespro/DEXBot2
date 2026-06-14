@@ -8,10 +8,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const { BUILD_DIR } = require('../modules/constants');
+const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
 
 const PARENT = path.dirname(__dirname);
-const rootDir = path.basename(PARENT) === BUILD_DIR ? path.dirname(PARENT) : PARENT;
+const rootDir = resolveProjectRoot(PARENT);
 const rootPackagePath = path.join(rootDir, 'package.json');
 const rootPackage = readJson(rootPackagePath);
 const targetVersion = rootPackage.version;

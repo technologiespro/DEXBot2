@@ -16,11 +16,12 @@
 const fs = require('fs');
 const path = require('path');
 const { formatPrice6 } = require('../modules/order/format');
-const { ORDER_TYPES, ORDER_STATES, MARKET_ADAPTER, BUILD_DIR } = require('../modules/constants');
+const { ORDER_TYPES, ORDER_STATES, MARKET_ADAPTER } = require('../modules/constants');
+const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
 const { getWhitelistFlags } = require('../modules/market_adapter_whitelist');
 
 const PARENT = path.dirname(__dirname);
-const ROOT = path.basename(PARENT) === BUILD_DIR ? path.dirname(PARENT) : PARENT;
+const ROOT = resolveProjectRoot(PARENT);
 const ORDERS_DIR = path.join(ROOT, 'profiles/orders');
 const BOTS_CONFIG = path.join(ROOT, 'profiles/bots.json');
 

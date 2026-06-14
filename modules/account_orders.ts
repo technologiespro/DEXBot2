@@ -55,7 +55,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { ORDER_TYPES, ORDER_STATES, BUILD_DIR } = require('./constants');
+const { ORDER_TYPES, ORDER_STATES } = require('./constants');
+const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const AsyncLock = require('./order/async_lock');
 const { isPhantomOrder } = require('./order/utils/order');
 const Format = require('./order/format');
@@ -183,7 +184,7 @@ class AccountOrders {
 
     // Use per-bot file: {botKey}.json
     const MODULE_DIR = path.dirname(__dirname);
-    const PROJECT_ROOT = path.basename(MODULE_DIR) === BUILD_DIR ? path.dirname(MODULE_DIR) : MODULE_DIR;
+    const PROJECT_ROOT = resolveProjectRoot(MODULE_DIR);
     const ordersDir = options.ordersDir || path.join(PROJECT_ROOT, 'profiles', 'orders');
     this.profilesPath = options.profilesPath || path.join(ordersDir, `${this.botKey}.json`);
 

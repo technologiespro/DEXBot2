@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const Logger = require('./logger');
-const { BUILD_DIR } = require('./constants');
+const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const runtimeLogger = new Logger('credential-runtime');
 
 interface RuntimeDirOptions {
@@ -36,7 +36,7 @@ function debugLog(message, err = null) {
 
 function getDexbotRoot() {
     const MODULE_DIR = path.dirname(__dirname);
-    return path.basename(MODULE_DIR) === BUILD_DIR ? path.dirname(MODULE_DIR) : MODULE_DIR;
+    return resolveProjectRoot(MODULE_DIR);
 }
 
 function isUsableRuntimeBaseDir(dirPath) {

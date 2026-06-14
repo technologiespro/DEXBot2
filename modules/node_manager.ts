@@ -44,7 +44,8 @@ const fs = require('fs');
 const path = require('path');
 const _WebSocket = globalThis.WebSocket;
 const Logger = require('./logger');
-const { NODE_MANAGEMENT, BUILD_DIR } = require('./constants');
+const { NODE_MANAGEMENT } = require('./constants');
+const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const { writeJsonFileAtomic } = require('./bots_file_lock');
 const {
     resolveHealthCacheFile,
@@ -52,7 +53,7 @@ const {
 } = require('./node_health_cache');
 
 const MODULE_DIR = path.dirname(__dirname);
-const PROJECT_ROOT = path.basename(MODULE_DIR) === BUILD_DIR ? path.dirname(MODULE_DIR) : MODULE_DIR;
+const PROJECT_ROOT = resolveProjectRoot(MODULE_DIR);
 const BLACKLIST_STATE_FILE = path.join(PROJECT_ROOT, 'profiles', 'node_blacklist.json');
 
 interface NodeManagerConfig {

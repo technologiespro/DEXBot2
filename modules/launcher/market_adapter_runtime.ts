@@ -5,9 +5,10 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { buildScopedChildEnv } = require('./child_env');
 const { MARKET_ADAPTER, BUILD_DIR } = require('../constants');
+const { resolveProjectRoot } = require('./runtime_entry');
 
 const DEFAULT_CODE_ROOT = path.resolve(__dirname, '..', '..');
-const DEFAULT_ROOT = path.basename(DEFAULT_CODE_ROOT) === BUILD_DIR ? path.dirname(DEFAULT_CODE_ROOT) : DEFAULT_CODE_ROOT;
+const DEFAULT_ROOT = resolveProjectRoot(DEFAULT_CODE_ROOT);
 const DEFAULT_STATE_DIR = path.join(DEFAULT_ROOT, 'market_adapter', 'state');
 const DEFAULT_LOCK_FILE = path.join(DEFAULT_STATE_DIR, 'market_adapter.lock');
 const DEFAULT_SCRIPT = path.join(DEFAULT_CODE_ROOT, 'market_adapter', 'market_adapter' + (path.basename(DEFAULT_CODE_ROOT) === BUILD_DIR ? '.js' : '.ts'));

@@ -20,13 +20,13 @@
 
 const fs = require('fs');
 const path = require('path');
-const { BUILD_DIR } = require('../modules/constants');
+const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
 
 // Define paths to configuration files
 // cfgPath: Template file in examples folder (supports JSONC with comments)
 // livePath: Production file in profiles folder (plain JSON, no comments)
 const PARENT = path.dirname(__dirname);
-const ROOT = path.basename(PARENT) === BUILD_DIR ? path.dirname(PARENT) : PARENT;
+const ROOT = resolveProjectRoot(PARENT);
 const cfgPath = path.join(ROOT, 'examples', 'bots.json');
 const livePath = path.join(ROOT, 'profiles', 'bots.json');
 

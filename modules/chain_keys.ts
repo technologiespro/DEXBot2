@@ -87,7 +87,8 @@ const fs = require('fs');
 const net = require('net');
 const path = require('path');
 const { readInput, readPassword } = require('./order/utils/system');
-const { TIMING, BUILD_DIR, CREDENTIAL_PROMPTS } = require('./constants');
+const { TIMING, CREDENTIAL_PROMPTS } = require('./constants');
+const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const {
     getCredentialReadyFilePath,
     getCredentialSocketPath,
@@ -117,7 +118,7 @@ const VAULT_SESSION_SECRET_KIND = 'dexbot-session-secret';
 const VAULT_DAEMON_SIGNING_TOKEN_KIND = 'dexbot-daemon-signing-token';
 
 const MODULE_DIR = path.dirname(__dirname);
-const PROJECT_ROOT = path.basename(MODULE_DIR) === BUILD_DIR ? path.dirname(MODULE_DIR) : MODULE_DIR;
+const PROJECT_ROOT = resolveProjectRoot(MODULE_DIR);
 
 // Profiles key file (ignored) only
 const PROFILES_KEYS_FILE = process.env.DEXBOT_KEYS_FILE

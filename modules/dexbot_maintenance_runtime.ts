@@ -7,6 +7,7 @@ const { BitShares } = require('./bitshares_client');
 const chainOrders = require('./chain_orders');
 const Grid = require('./order/grid');
 const { ORDER_STATES, ORDER_TYPES, TIMING, GRID_LIMITS, FEE_PARAMETERS, BTS_PRECISION, NATIVE_CLIENT, BUILD_DIR } = require('./constants');
+const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const { applyGridDivergenceCorrections, loadAmaCenterSnapshot } = require('./order/utils/system');
 const { isPm2Runtime } = require('./order/logger');
 const { getSharedMarketAdapterRuntime } = require('./launcher/market_adapter_runtime');
@@ -22,7 +23,7 @@ const { reconcileGridOrders } = require('./order/grid_reconcile');
 const { formatUnmatchedChainOrder, getSideBudget } = require('./order/utils/order');
 
 const CODE_ROOT = path.join(__dirname, '..');
-const ROOT = path.basename(CODE_ROOT) === BUILD_DIR ? path.dirname(CODE_ROOT) : CODE_ROOT;
+const ROOT = resolveProjectRoot(CODE_ROOT);
 const PROFILES_DIR = path.join(ROOT, 'profiles');
 const PROFILES_BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
 const LOGS_DIR = path.join(PROFILES_DIR, 'logs');

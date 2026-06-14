@@ -35,7 +35,7 @@ const { createCredentialDaemonController } = require('./modules/launcher/credent
 const { buildScopedChildEnv } = require('./modules/launcher/child_env');
 const { parseUnlockArgs } = require('./modules/launcher/launch_modes');
 const { UPDATER, LAUNCHER, MARKET_ADAPTER, BUILD_DIR } = require('./modules/constants');
-const { buildRuntimeScriptArgs, buildRuntimeScriptPath } = require('./modules/launcher/runtime_entry');
+const { buildRuntimeScriptArgs, buildRuntimeScriptPath, resolveProjectRoot } = require('./modules/launcher/runtime_entry');
 const { createBotSupervisor, SOCKET_PATH, parseCronExpression, getNextCronDate } = require('./modules/launcher/bot_supervisor');
 const { sendControlCommand } = require('./modules/launcher/supervisor_control');
 const { registerCleanup, setupGracefulShutdown } = require('./modules/graceful_shutdown');
@@ -45,7 +45,7 @@ const { normalizeBotEntry, resolveRawBotEntries, loadSettingsFile } = require('.
 const chainKeys = require('./modules/chain_keys');
 
 const CODE_ROOT = __dirname;
-const ROOT = path.basename(CODE_ROOT) === BUILD_DIR ? path.dirname(CODE_ROOT) : CODE_ROOT;
+const ROOT = resolveProjectRoot(CODE_ROOT);
 const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const LOGS_DIR = path.join(ROOT, 'profiles', 'logs');
 const SUPERVISOR_OUT_LOG = path.join(LOGS_DIR, 'supervisor.log');

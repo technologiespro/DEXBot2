@@ -83,6 +83,7 @@ const { createPasswordBootstrapServer } = require('./modules/launcher/credential
 const { parsePm2Args } = require('./modules/launcher/launch_modes');
 const { setupGracefulShutdown } = require('./modules/graceful_shutdown');
 const { UPDATER, TIMING, BUILD_DIR } = require('./modules/constants');
+const { resolveProjectRoot } = require('./modules/launcher/runtime_entry');
 
 // Setup graceful shutdown handlers
 setupGracefulShutdown();
@@ -109,7 +110,7 @@ function pm2Error(text: string): string {
 }
 
 const CODE_ROOT = __dirname;
-const ROOT = path.basename(CODE_ROOT) === BUILD_DIR ? path.dirname(CODE_ROOT) : CODE_ROOT;
+const ROOT = resolveProjectRoot(CODE_ROOT);
 const PROFILES_DIR = path.join(ROOT, 'profiles');
 const BOTS_JSON = path.join(PROFILES_DIR, 'bots.json');
 const ECOSYSTEM_FILE = path.join(PROFILES_DIR, 'ecosystem.config.js');

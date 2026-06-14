@@ -95,7 +95,8 @@
 
 const { BitShares, createAccountClient, waitForConnected, withTimeout } = require('./bitshares_client');
 const { floatToBlockchainInt, blockchainToFloat, normalizeInt, validateOrderAmountsWithinLimits } = require('./order/utils/math');
-const { FILL_PROCESSING, TIMING, NATIVE_CLIENT, BUILD_DIR, DAEMON_ERRORS } = require('./constants');
+const { FILL_PROCESSING, TIMING, NATIVE_CLIENT, DAEMON_ERRORS } = require('./constants');
+const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const Format = require('./order/format');
 const { toFiniteNumber } = Format;
 const AsyncLock = require('./order/async_lock');
@@ -489,7 +490,7 @@ async function executeViaDaemonToken(accountName, signingToken, operations) {
             if (isSourceAuthError) {
                 try {
                     const PARENT = path.dirname(__dirname);
-                    const ROOT = path.basename(PARENT) === BUILD_DIR ? path.dirname(PARENT) : PARENT;
+                    const ROOT = resolveProjectRoot(PARENT);
                     const readyFile = getCredentialReadyFilePath({ root: ROOT });
                     if (fs.existsSync(readyFile)) {
                         const daemonInfo = JSON.parse(fs.readFileSync(readyFile, 'utf8'));

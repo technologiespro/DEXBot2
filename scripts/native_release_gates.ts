@@ -4,10 +4,10 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { BUILD_DIR } = require('../modules/constants');
+const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
 
 const ROOT_DEPTH_1 = path.dirname(__dirname);
-const root = path.basename(ROOT_DEPTH_1) === BUILD_DIR ? path.dirname(ROOT_DEPTH_1) : ROOT_DEPTH_1;
+const root = resolveProjectRoot(ROOT_DEPTH_1);
 const nodeBin = process.execPath;
 
 function run(label: any, args: any, env: any = {}) {

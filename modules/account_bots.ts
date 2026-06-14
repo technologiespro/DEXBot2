@@ -76,13 +76,14 @@
 const fs = require('fs');
 const path = require('path');
 const { ensureProfilesDirectory, readInput } = require('./order/utils/system');
-const { DEFAULT_CONFIG, GRID_LIMITS, TIMING, LOG_LEVEL, UPDATER, MARKET_ADAPTER, NODE_MANAGEMENT, BUILD_DIR } = require('./constants');
+const { DEFAULT_CONFIG, GRID_LIMITS, TIMING, LOG_LEVEL, UPDATER, MARKET_ADAPTER, NODE_MANAGEMENT } = require('./constants');
+const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const { SETTINGS_FILE, readGeneralSettings, writeGeneralSettings } = require('./general_settings');
 
 const { parseJsonWithComments } = require('./order/utils/system');
 
 const MODULE_DIR$1 = path.dirname(__dirname);
-const PROJECT_ROOT$1 = path.basename(MODULE_DIR$1) === BUILD_DIR ? path.dirname(MODULE_DIR$1) : MODULE_DIR$1;
+const PROJECT_ROOT$1 = resolveProjectRoot(MODULE_DIR$1);
 const BOTS_FILE = path.join(PROJECT_ROOT$1, 'profiles', 'bots.json');
 const PROFILES_DIR = path.join(PROJECT_ROOT$1, 'profiles');
 

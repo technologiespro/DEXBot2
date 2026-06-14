@@ -98,8 +98,8 @@ const {
     MAINTENANCE,
     GRID_LIMITS,
     FILL_PROCESSING,
-    BUILD_DIR,
 } = require('./constants');
+const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const { attemptResumePersistedGridByPriceMatch, decideStartupGridAction, reconcileGridOrders } = require('./order/grid_reconcile');
 const { AccountOrders } = require('./account_orders');
 const { parseJsonWithComments } = require('./order/utils/system');
@@ -108,7 +108,7 @@ const { normalizeBotEntry } = require('./bot_settings');
 const Format = require('./order/format');
 
 const MODULE_DIR$1 = path.dirname(__dirname);
-const PROJECT_ROOT$1 = path.basename(MODULE_DIR$1) === BUILD_DIR ? path.dirname(MODULE_DIR$1) : MODULE_DIR$1;
+const PROJECT_ROOT$1 = resolveProjectRoot(MODULE_DIR$1);
 const PROFILES_BOTS_FILE = path.join(PROJECT_ROOT$1, 'profiles', 'bots.json');
 const PROFILES_DIR = path.join(PROJECT_ROOT$1, 'profiles');
 

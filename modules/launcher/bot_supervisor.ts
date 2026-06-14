@@ -5,12 +5,12 @@ const path = require('path');
 import net = require('net');
 const { spawn, execSync } = require('child_process');
 const { buildScopedChildEnv } = require('./child_env');
-const { buildRuntimeScriptPath, isDistCodeRoot } = require('./runtime_entry');
+const { buildRuntimeScriptPath, isDistCodeRoot, resolveProjectRoot } = require('./runtime_entry');
 const { normalizeBotEntries, resolveRawBotEntries, loadSettingsFile } = require('../bot_settings');
 const { UPDATER, BUILD_DIR } = require('../constants');
 
 const CODE_ROOT = path.resolve(__dirname, '..', '..');
-const ROOT = path.basename(CODE_ROOT) === BUILD_DIR ? path.dirname(CODE_ROOT) : CODE_ROOT;
+const ROOT = resolveProjectRoot(CODE_ROOT);
 const LOGS_DIR = path.join(ROOT, 'profiles', 'logs');
 const BOT_SCRIPT = buildRuntimeScriptPath(CODE_ROOT, ['bot']);
 const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');

@@ -28,10 +28,11 @@ const path = require('path');
 const { createReadOnlyClient } = require('../modules/bitshares-native');
 const serial = require('../modules/bitshares-native/serial');
 const ecc = require('../modules/bitshares-native/crypto/ecc');
-const { NODE_MANAGEMENT, BUILD_DIR } = require('../modules/constants');
+const { NODE_MANAGEMENT } = require('../modules/constants');
+const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
 
 const PARENT = path.dirname(__dirname);
-const rootDir = path.basename(PARENT) === BUILD_DIR ? path.dirname(PARENT) : PARENT;
+const rootDir = resolveProjectRoot(PARENT);
 
 const argv: string[] = process.argv.slice(2);
 function flag(name: string, fallback: string | number): string | number {
