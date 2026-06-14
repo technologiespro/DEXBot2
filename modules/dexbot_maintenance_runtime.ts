@@ -6,7 +6,7 @@ const { spawn } = require('child_process');
 const { BitShares } = require('./bitshares_client');
 const chainOrders = require('./chain_orders');
 const Grid = require('./order/grid');
-const { ORDER_STATES, ORDER_TYPES, TIMING, GRID_LIMITS, FEE_PARAMETERS, BTS_PRECISION, NATIVE_CLIENT, BUILD_DIR } = require('./constants');
+const { ORDER_STATES, ORDER_TYPES, TIMING, GRID_LIMITS, FEE_PARAMETERS, BTS_PRECISION, NATIVE_CLIENT } = require('./constants');
 const { resolveProjectRoot, buildRuntimeScriptPath, isDistCodeRoot } = require('./launcher/runtime_entry');
 const { applyGridDivergenceCorrections, loadAmaCenterSnapshot } = require('./order/utils/system');
 const { isPm2Runtime } = require('./order/logger');
@@ -355,7 +355,7 @@ async function startMarketAdapterPm2() {
         'start',
         MARKET_ADAPTER_SCRIPT,
     ];
-    if (path.basename(CODE_ROOT) !== BUILD_DIR) {
+    if (!isDistCodeRoot(CODE_ROOT)) {
         pm2Args.push('--node-args', '--import', '--node-args', 'tsx');
     }
     pm2Args.push(

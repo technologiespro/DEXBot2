@@ -1385,7 +1385,7 @@ class Grid {
 
             // Nominal spread is the configured target spread percentage.
             // Keep this fixed: doubled-side flags are fill/replacement mechanics only.
-            const nominalSpread = manager.config.targetSpreadPercent || 2.0;
+            const nominalSpread = manager.config.targetSpreadPercent ?? DEFAULT_CONFIG.targetSpreadPercent;
 
             // Fixed tolerance: 0.5 steps = half increment (tighter spread check).
             const toleranceSteps = 0.5;

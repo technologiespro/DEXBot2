@@ -15,7 +15,7 @@ const {
     resolveMinCollateralIncreaseThreshold,
     resolveTargetCollateralRatio,
 } = require('./cr_planner');
-const { FEE_PARAMETERS } = require('./constants');
+const { FEE_PARAMETERS, DEFAULT_TARGET_CR } = require('./constants');
 const { roundToDecimals } = require('./utils/math_utils');
 const { resolveProjectRoot } = require('./launcher/runtime_entry');
 
@@ -776,7 +776,7 @@ class CreditRuntime {
                     let weight = 0;
 
                     if (item.type === 'mpa') {
-                        targetCr = resolveTargetCollateralRatio(item) || 2.0;
+                        targetCr = resolveTargetCollateralRatio(item) ?? DEFAULT_TARGET_CR;
                         const resolvedFeedPrice = assetId
                             ? normalizeResolvedPriceResult(
                                 await this._resolveMpaFeedPrice(assetId, collateralAsset.id, { includeSource: true }),
