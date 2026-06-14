@@ -12,7 +12,10 @@ update.log
 profiles
 analysis
 dashboard
+dist
+claw
 market_adapter/data
 market_adapter/state
+market_adapter/inputs/data
 tests
 docs

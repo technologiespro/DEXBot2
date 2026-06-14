@@ -74,6 +74,7 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 **Jun 11**: Gradual strict typing (all @ts-nocheck removed, 67 files annotated), race-condition batch 1 (atomic JSON, in-flight flags, snapshot persist), timeout hardening and leak fixes across the board, DRY refactoring claw/tests/unlock — v0.7.18.
 
 **Jun 12–14**: First stable release v1.0.0. Startup profile schema validation, logging system overhaul (write queue, rotation, JSON output, critical level, correlation IDs), AMA slope delta threshold computed from `maxSlopePct × deltaThresholdPct/100`, dashboard branch isolation, `--dryrun` flag, final TS strict error sweep across test files, deferred race items, on-chain authority resolution for signing key lookup, credential security hardening across 8 finding groups, comprehensive centralization of project-root resolution / fs+math utilities / magic numbers with regression fixing, error-path fallback hardening eliminating all silent error swallowing, mainnet corpus generator for release validation, and multi-wave stale-documentation cleanup. This release marks the transition from pre-1.0 development to stable production readiness.
+- **Post-release docker hardening**: Tightened build context (`dist`, `claw`, `market_adapter/inputs/data` added to `.dockerignore`), documented `market_adapter/data` and `market_adapter/state` volume mounts in `Dockerfile` run comment.
 
 ---
 

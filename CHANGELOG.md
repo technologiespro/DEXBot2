@@ -39,6 +39,7 @@ This release marks the project's first stable milestone. Includes 37 commits on 
 - **Docs**: remove broken `TEST_UPDATES_SUMMARY.md` links in `architecture.md`, `developer_guide.md`, `DEXBOT_COMPARISON.md` — replaced with `tests/README.md`.
 - **Docs**: update test counts (188 `test_*.ts` files, 211 entries in `scripts/run-tests.ts`) and commit stats (1564) in `EVOLUTION.md` and `DEXBOT_COMPARISON.md`.
 - **Docs**: remove `Pre-DEXBot2` section from `EVOLUTION.md`.
+- **Fix**: tighten docker build context — add `dist`, `claw`, and `market_adapter/inputs/data` to `.dockerignore`; document `market_adapter/data` and `market_adapter/state` volume mounts in `Dockerfile` run comment (`dc70c40`).
 
 ## [0.7.18] - 2026-06-11 - @ts-nocheck Removal, Type Annotations, Race-Condition Batch 1 & DRY Refactoring
 
