@@ -13,7 +13,6 @@ const {
 const { createPasswordBootstrapServer } = require('./credential_bootstrap');
 const { buildScopedChildEnv } = require('./child_env');
 const { buildRuntimeScriptArgs, resolveProjectRoot } = require('./runtime_entry');
-const { BUILD_DIR } = require('../constants');
 
 const DEFAULT_CODE_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_ROOT = resolveProjectRoot(DEFAULT_CODE_ROOT);

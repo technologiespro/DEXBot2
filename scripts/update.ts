@@ -30,12 +30,10 @@ const { sendControlCommand } = require('../modules/launcher/supervisor_control')
 // Import update configuration from constants
 // Contains: REPOSITORY_URL, BRANCH, BUILD_DIR settings
 const { UPDATER, BUILD_DIR } = require('../modules/constants');
+const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
 
 // Project root directory — handles running from scripts/ or dist/scripts/
-const SCRIPTS_DIR = __dirname;
-const ROOT = path.basename(path.dirname(SCRIPTS_DIR)) === BUILD_DIR
-    ? path.resolve(SCRIPTS_DIR, '..', '..')
-    : path.resolve(SCRIPTS_DIR, '..');
+const ROOT = resolveProjectRoot(path.dirname(__dirname));
 const MONOLITHIC_PID_FILE = path.join(ROOT, 'profiles', 'monolithic.pid');
 const MONOLITHIC_BOT_PID_FILE = path.join(ROOT, 'profiles', 'monolithic-bot.pid');
 const MONOLITHIC_BOT_INFO_FILE = path.join(ROOT, 'profiles', 'monolithic-bot.json');

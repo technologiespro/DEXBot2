@@ -7,7 +7,7 @@ const { BitShares } = require('./bitshares_client');
 const chainOrders = require('./chain_orders');
 const Grid = require('./order/grid');
 const { ORDER_STATES, ORDER_TYPES, TIMING, GRID_LIMITS, FEE_PARAMETERS, BTS_PRECISION, NATIVE_CLIENT, BUILD_DIR } = require('./constants');
-const { resolveProjectRoot } = require('./launcher/runtime_entry');
+const { resolveProjectRoot, buildRuntimeScriptPath, isDistCodeRoot } = require('./launcher/runtime_entry');
 const { applyGridDivergenceCorrections, loadAmaCenterSnapshot } = require('./order/utils/system');
 const { isPm2Runtime } = require('./order/logger');
 const { getSharedMarketAdapterRuntime } = require('./launcher/market_adapter_runtime');
@@ -28,10 +28,10 @@ const PROFILES_DIR = path.join(ROOT, 'profiles');
 const PROFILES_BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
 const LOGS_DIR = path.join(PROFILES_DIR, 'logs');
 const MARKET_ADAPTER_APP_NAME = 'dexbot-adapter';
-const MARKET_ADAPTER_SCRIPT = path.join(CODE_ROOT, 'market_adapter', 'market_adapter' + (path.basename(CODE_ROOT) === BUILD_DIR ? '.js' : '.ts'));
+const MARKET_ADAPTER_SCRIPT = buildRuntimeScriptPath(CODE_ROOT, ['market_adapter', 'market_adapter']);
 const MARKET_ADAPTER_ERROR_FILE = path.join(LOGS_DIR, 'dexbot-adapter-error.log');
 const MARKET_ADAPTER_OUT_FILE = path.join(LOGS_DIR, 'dexbot-adapter.log');
-const MARKET_ADAPTER_TRIGGER_SOURCE = 'market_adapter/market_adapter' + (path.basename(CODE_ROOT) === BUILD_DIR ? '.js' : '.ts');
+const MARKET_ADAPTER_TRIGGER_SOURCE = 'market_adapter/market_adapter' + (isDistCodeRoot(CODE_ROOT) ? '.js' : '.ts');
 const MANUAL_TRIGGER_METADATA = {
     shouldRefreshCenterPrice: true,
     centerRefreshContext: 'manual grid resync',
