@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const { spawnSync } = require('child_process');
 const path = require('path');
-const { BUILD_DIR } = require('../../modules/constants');
+const { isDistCodeRoot } = require('../../modules/launcher/runtime_entry');
 const mcpServer = require('../scripts/claw_mcp_server');
 
 function encodeNewlineMessage(message) {
@@ -144,7 +144,7 @@ async function testHandleRequestEmitsNewlineJson() {
 function runServerProcess(input) {
   const repoRoot = path.resolve(__dirname, '..', '..');
   const clawRoot = path.resolve(__dirname, '..');
-  const _isDist = path.basename(path.dirname(__dirname)) === BUILD_DIR;
+  const _isDist = isDistCodeRoot(path.dirname(__dirname));
   const scriptPath = path.join(clawRoot, 'scripts', 'claw_mcp_server' + (_isDist ? '.js' : '.ts'));
   const scriptRel = path.relative(repoRoot, scriptPath);
 

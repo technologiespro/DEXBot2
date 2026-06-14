@@ -1,6 +1,6 @@
 const fs = require('fs/promises');
 const path = require('path');
-const { BUILD_DIR } = require('../../modules/constants');
+const { resolveProjectRoot } = require('../../modules/launcher/runtime_entry');
 const {
   closeShortOnBts,
   openShortOnBts,
@@ -25,7 +25,7 @@ function getBlockchainToFloat() {
 }
 
 const PM_PARENT_DIR = path.dirname(path.dirname(__dirname));
-const PM_PROJECT_ROOT = path.basename(PM_PARENT_DIR) === BUILD_DIR ? path.dirname(PM_PARENT_DIR) : PM_PARENT_DIR;
+const PM_PROJECT_ROOT = resolveProjectRoot(PM_PARENT_DIR);
 const DEFAULT_STATE_PATH = path.join(PM_PROJECT_ROOT, 'claw', 'data', 'positions.json');
 const STRATEGY_NAME = 'short-mpa-bts';
 

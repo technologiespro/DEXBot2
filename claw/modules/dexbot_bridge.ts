@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const { BUILD_DIR } = require('../../modules/constants');
+const { resolveProjectRoot } = require('../../modules/launcher/runtime_entry');
 
 function candidateExists(candidatePath: string) {
   if (fs.existsSync(candidatePath)) {
@@ -21,7 +22,7 @@ function getDexbot2Root() {
   }
 
   const DB_PARENT_DIR = path.dirname(path.dirname(__dirname));
-  const DB_PROJECT_ROOT = path.basename(DB_PARENT_DIR) === BUILD_DIR ? path.dirname(DB_PARENT_DIR) : DB_PARENT_DIR;
+  const DB_PROJECT_ROOT = resolveProjectRoot(DB_PARENT_DIR);
   const repoRoot = DB_PROJECT_ROOT;
   if (
     candidateExists(path.join(repoRoot, 'modules', 'order', 'index.js')) ||

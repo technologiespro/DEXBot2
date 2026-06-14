@@ -1,11 +1,11 @@
 const fsPromises = require('fs/promises');
 const path = require('path');
-const { BUILD_DIR } = require('../../modules/constants');
+const { resolveProjectRoot } = require('../../modules/launcher/runtime_entry');
 const { PositionManager, DEFAULT_STATE_PATH } = require('./position_manager');
 const { waitForConnected } = require('./bitshares_client');
 
 const PW_PARENT_DIR = path.dirname(path.dirname(__dirname));
-const PW_PROJECT_ROOT = path.basename(PW_PARENT_DIR) === BUILD_DIR ? path.dirname(PW_PARENT_DIR) : PW_PARENT_DIR;
+const PW_PROJECT_ROOT = resolveProjectRoot(PW_PARENT_DIR);
 const DEFAULT_HEALTH_PATH = path.join(PW_PROJECT_ROOT, 'claw', 'data', 'watcher-health.json');
 const DEFAULT_MAX_CONSECUTIVE_FAILURES = 5;
 

@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { BUILD_DIR } = require('../../modules/constants');
+const { resolveProjectRoot } = require('../../modules/launcher/runtime_entry');
 
 function isDexbot2Root(candidate: string) {
   return !!candidate && (
@@ -28,7 +29,7 @@ function findDexbot2Root(startDir?: string) {
 }
 
 const LP_PARENT_DIR = path.dirname(path.dirname(__dirname));
-const LP_PROJECT_ROOT = path.basename(LP_PARENT_DIR) === BUILD_DIR ? path.dirname(LP_PARENT_DIR) : LP_PARENT_DIR;
+const LP_PROJECT_ROOT = resolveProjectRoot(LP_PARENT_DIR);
 const DEFAULT_ROOT = findDexbot2Root(LP_PROJECT_ROOT);
 
 function normalizeRoot(options: Record<string, any> = {}) {

@@ -1,6 +1,6 @@
 const fs = require('fs/promises');
 const path = require('path');
-const { BUILD_DIR } = require('../../modules/constants');
+const { resolveProjectRoot } = require('../../modules/launcher/runtime_entry');
 
 const bitsharesClient = require('./bitshares_client');
 const chainBroadcast = require('./chain_broadcast');
@@ -26,7 +26,7 @@ import type {
 } from './types';
 
 const CI_PARENT_DIR = path.dirname(path.dirname(__dirname));
-const CI_PROJECT_ROOT = path.basename(CI_PARENT_DIR) === BUILD_DIR ? path.dirname(CI_PARENT_DIR) : CI_PARENT_DIR;
+const CI_PROJECT_ROOT = resolveProjectRoot(CI_PARENT_DIR);
 const CLAW_ROOT = path.join(CI_PROJECT_ROOT, 'claw');
 const DEFAULT_DATA_DIR = path.join(CLAW_ROOT, 'data');
 const DEFAULT_STATE_DIR = path.join(DEFAULT_DATA_DIR, 'state');
