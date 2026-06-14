@@ -181,12 +181,50 @@ function testInvalidXdgRuntimeFallsBackToProfilesRun() {
     }
 }
 
+function testRootBypassesOwnerCheck() {
+    const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-root-bypass-'));
+    const testFile = path.join(baseDir, 'test.key');
+
+    try {
+        fs.writeFileSync(testFile, 'test', { mode: 0o600 });
+
+        const originalGetuid = process.getuid;
+
+        // Non-root uid different from file owner should throw
+        process.getuid = () => 9999;
+        assert.throws(
+            () => runtime.assertPrivatePathSecurity(testFile, { expectedType: 'file', requiredMode: 0o600 }),
+            /Unexpected owner/,
+            'non-root uid should reject mismatched owner'
+        );
+
+        // Root (uid 0) should bypass owner check entirely
+        process.getuid = () => 0;
+        assert.doesNotThrow(
+            () => runtime.assertPrivatePathSecurity(testFile, { expectedType: 'file', requiredMode: 0o600 }),
+            'root should bypass owner check'
+        );
+
+        // requireOwner: false should also bypass
+        process.getuid = () => 9999;
+        assert.doesNotThrow(
+            () => runtime.assertPrivatePathSecurity(testFile, { expectedType: 'file', requiredMode: 0o600, requireOwner: false }),
+            'requireOwner: false should bypass owner check'
+        );
+
+        process.getuid = originalGetuid;
+    } finally {
+        try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+    }
+}
+
 (async () => {
     testDefaultPathsUseProfilesRun();
     testXdgRuntimeOverride();
     testEnsureRuntimeDirUsesPrivatePermissions();
     await testSecurePathChecksRecognizePrivateFilesAndSockets();
     testInvalidXdgRuntimeFallsBackToProfilesRun();
+    testRootBypassesOwnerCheck();
 
     console.log('credential runtime path tests passed');
     process.exit(0);

@@ -138,8 +138,12 @@ function assertPrivatePathSecurity(filePath: string, options: PrivatePathOptions
     }
 
     const currentUid = getCurrentUid();
-    if (requireOwner && currentUid !== null && typeof stat.uid === 'number' && stat.uid !== currentUid) {
+    if (requireOwner && currentUid !== null && currentUid !== 0
+        && typeof stat.uid === 'number' && stat.uid !== currentUid) {
         throw new Error(`Unexpected owner for ${filePath}; expected uid ${currentUid}, found ${stat.uid}`);
+    }
+    if (currentUid === 0 && requireOwner && typeof stat.uid === 'number' && stat.uid !== 0) {
+        debugLog(`owner check bypassed for root on ${filePath} (owner=${stat.uid})`);
     }
 
     if (Number.isInteger(requiredMode) && process.platform !== 'win32') {
