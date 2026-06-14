@@ -2,11 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.0.0] - 2026-06-12 - First Stable Release
+## [1.0.0] - 2026-06-14 - First Stable Release
 
-This release marks the project's first stable milestone. Includes 19 commits on top of 0.7.18: startup profile schema validation, a full logging system overhaul (write queue, rotation, JSON output, critical level, correlation IDs), AMA slope delta threshold from `maxSlopePct` × `deltaThresholdPct/100`, dashboard isolation to `dashboard-draft`, `--dryrun` flag for unlock launcher, `modules/README.md` for new-user orientation, final 54 TS strict error resolutions across test files, deferred race-condition items #9/#10/#13, and a comprehensive stale-doc sweep (version numbers, test counts, broken links, default values).
+This release marks the project's first stable milestone. Includes 37 commits on top of 0.7.18: startup profile schema validation, a full logging system overhaul (write queue, rotation, JSON output, critical level, correlation IDs), AMA slope delta threshold from `maxSlopePct` × `deltaThresholdPct/100`, dashboard isolation to `dashboard-draft`, `--dryrun` flag for unlock launcher, `modules/README.md` for new-user orientation, final 54 TS strict error resolutions across test files, deferred race-condition items #9/#10/#13, on-chain authority resolution for signing key lookup, credential security hardening across 8 finding groups, comprehensive centralization of project-root resolution / fs+math utilities / magic numbers with regression fixing, error-path fallback hardening eliminating all silent catches, and a multi-wave stale-doc sweep (version numbers, test counts, broken links, default values, .js→.ts references).
 
-### 2026-06-12
+### 2026-06-14
 
 - **Feat**: startup profile schema validator — validates `bots.json` at boot and fixes 5 config risk patterns including `minPrice`/`maxPrice` type coercion, missing `gridPrice` fallback, overflow `incrementPercent`, and `botFunds` cap (`1e3afc6`).
 - **Feat**: overhaul logging system — write queue (100ms batch flush), size-based rotation (1.1GB total budget, 5 files), JSON structured output, `critical` severity level, and correlation ID tracing across fill/order/adapter operations (`dc85882`).
@@ -19,6 +19,20 @@ This release marks the project's first stable milestone. Includes 19 commits on 
 - **Fix**: address 9 review issues — flush wiring, flush resolve, JSON separation, rotation test, JSDoc, and more (`c6e7c41`).
 - **Fix**: resolve last 54 TS strict errors across test files (`22f5857`, `d8f6373`, `294f834`, `11b13a2`, `e3022fb`, `48d4e90`, `65677a8`, `0ac4837`).
 - **Fix**: deferred race items #9 (credential daemon shutdown guard), #10 (creator-use-pay from auth token refresh), #13 (double event re-subscription guard) (`e0ac76d`).
+- **Feat**: on-chain authority resolution for signing key lookup — `getBtsKeyFromAccount` resolves active/memo keys via full account authority graph traversal with multi-sig weight threshold evaluation (`a06d465`).
+- **Feat**: add repo-wide net lines chart to `analyze-git` — cumulative added/removed line delta from `--numstat` per merge-base (`0f69d95`).
+- **Feat**: unblock v1.0.0 native release gate with mainnet corpus generator — generates realistic mainnet-sized test data for runtime validation (`ad6b628`).
+- **Fix**: credential security hardening across 8 finding groups — C1 (credential socket cleanup), C2 (SIGHUP handler race), H1-H4 (HMAC token rotation gaps), M1/M4/M5 (master password verification and retry logic), L1-L8 (logging and lock file races) (`b74dfe4`).
+- **Fix**: credential policy reload diagnostics, path-root helper resolution, and test accuracy improvements (`cc05428`).
+- **Fix**: harden critical fallbacks and add logging to silent error paths — replaces bare `.catch(() => {})` patterns with proper error logging in remaining uncovered sites (`6b97b3f`).
+- **Fix**: add logging to remaining silent catches and centralize timeout defaults — ensures no silent error swallowing remains in the codebase (`77a6ddb`).
+- **Fix**: centralize remaining magic numbers and BUILD_DIR pattern — catches all magic numbers and hardcoded `'dist'` strings missed in earlier refactoring waves (`ec2e9a5`).
+- **Fix**: address missed sites from centralized-cleanup series — typo'd constant, missed BUILD_DIR refactor, dead-code fallbacks, `fs_utils`/`math_utils` adoption, silent catches (`abea2f3`).
+- **Refactor**: centralize project-root resolution via `resolveProjectRoot` — replaces ad-hoc `path.resolve(__dirname, '..')` patterns with a single `constants.resolveProjectRoot()` helper across all modules/order/, market_adapter, modules and launchers, claw, and test files (`73ce984`, `a77dc03`, `759f026`, `d43128c`).
+- **Refactor**: finish centralizing path-root and script-ext helpers — extracts `runtime_entry.ts` path helpers into shared utility (`c1b3fb3`).
+- **Refactor**: centralize fs and math utilities with regression fixes — extracts `fs_utils.ts` (atomic JSON, read/write, mkdirp) and `math_utils.ts` (clamp, precision rounding, integer math) from duplicated inline logic; regression fixes discovered during extraction applied (`dd8a510`).
+- **Refactor**: centralize magic numbers and enforce explicit precision — extracts named constants across order sizing, fee calculation, and timeout domains; enforces explicit precision guards on all grid calculations (`1ca0802`).
+- **Docs**: sweep stale `.js→.ts` references and fix wrong inline docs across the codebase (`329b072`).
 - **Version**: bump from 0.7.18 to 1.0.0 across all package.json manifests.
 - **Docs**: fix stale version references in `DEXBOT_COMPARISON.md`, `EVOLUTION.md`, `FUND_MOVEMENT_AND_ACCOUNTING.md`, `README.md`.
 - **Docs**: fix AMA delta threshold default in `README.md` (2% → 1%) and `GRID_RECALCULATION.md` example.
