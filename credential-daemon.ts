@@ -69,7 +69,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const chainKeys = require('./modules/chain_keys');
-const { TIMING, NODE_MANAGEMENT, BUILD_DIR } = require('./modules/constants');
+const { TIMING, NODE_MANAGEMENT } = require('./modules/constants');
 const { readGeneralSettings } = require('./modules/general_settings');
 const { orderNodesForSettings } = require('./modules/node_health_cache');
 const credentialPolicy = require('./modules/credential_policy');
@@ -97,8 +97,8 @@ const Logger = require('./modules/logger');
 const daemonLogger = new Logger('credential-daemon');
 
 // Resolve project root — handles running from dist/ (compiled) vs source
-const DAEMON_DIR = __dirname;
-const PROJECT_ROOT = path.basename(DAEMON_DIR) === BUILD_DIR ? path.dirname(DAEMON_DIR) : DAEMON_DIR;
+const { resolveProjectRoot } = require('./modules/launcher/runtime_entry');
+const PROJECT_ROOT = resolveProjectRoot(__dirname);
 
 // Unix sockets are required; only Unix-like systems are supported
 
@@ -545,9 +545,11 @@ async function initialize() {
         process.on('SIGHUP', () => {
             daemonLogger.log?.('[credential-daemon] SIGHUP received: refreshing configuration and node list...');
 
+            // Strict reload: fail closed if the operator just wrote an
+            // invalid policy.  The try/catch wraps shutdown() so a
+            // successful reload falls through to refreshNodeList().
             try {
-                // Reload policy config first. If it no longer validates, fail closed.
-                policyConfig = credentialPolicy.loadRequiredPolicyConfig(policyConfigPath);
+                policyConfig = credentialPolicy.reloadPolicyFromDisk(policyConfigPath, { strict: true });
                 debugLog('Policy config reloaded');
             } catch (err: any) {
                 daemonLogger.error?.(`[credential-daemon] SIGHUP policy reload failed: ${err.message}`);
@@ -570,23 +572,22 @@ async function initialize() {
                 if (policyWatchDebounce) clearTimeout(policyWatchDebounce);
                 policyWatchDebounce = setTimeout(() => {
                     policyWatchDebounce = null;
-                    try {
-                        const newConfig = credentialPolicy.loadRequiredPolicyConfig(policyConfigPath);
+                    const newConfig = credentialPolicy.reloadPolicyFromDisk(policyConfigPath);
+                    if (newConfig) {
                         policyConfig = newConfig;
                         debugLog(`Policy config reloaded via fs.watch (${eventType})`);
-                    } catch (err: any) {
-                        daemonLogger.error?.(`[credential-daemon] fs.watch policy reload failed: ${err.message}`);
-                        // Do NOT shut down on watch-triggered reload failure — the
-                        // existing in-memory config is still valid.  The SIGHUP
-                        // handler's stricter fail-closed applies only to explicit
-                        // operator-initiated reloads.
                     }
+                    // On non-strict failure, reloadPolicyFromDisk already logs
+                    // a warn; the existing in-memory config is kept.  This is
+                    // intentionally distinct from SIGHUP's fail-closed policy.
                 }, 500);
             });
         } catch (watchErr: any) {
-            // fs.watch can fail on exotic filesystems; log but don't crash.
-            // SIGHUP and the audit-log timer still work.
-            debugLog(`Could not watch policy config file ${policyConfigPath}`, watchErr);
+            // fs.watch can fail on exotic filesystems (network FS, FUSE).
+            // Log at WARN (not debug): without the watch AND without a
+            // successful SIGHUP from the bot, the daemon keeps the stale
+            // botHmacSecret until restart.  Operators need to see this.
+            daemonLogger.warn?.(`[credential-daemon] Could not watch policy config file ${policyConfigPath}: ${watchErr.message}. SIGHUP from bot process is now the only reload path.`);
         }
 
         ensureCredentialRuntimeDirSync({ root: PROJECT_ROOT, runtimeDir: RUNTIME_DIR, socketPath: SOCKET_PATH, readyFilePath: READY_FILE });

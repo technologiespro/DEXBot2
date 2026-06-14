@@ -59,8 +59,8 @@ const { normalizeBotEntry } = require('./modules/dexbot_class');
 const { loadSettingsFile, resolveRawBotEntries, selectBotEntry } = require('./modules/bot_settings');
 const { setupGracefulShutdown, registerCleanup, unregisterCleanup } = require('./modules/graceful_shutdown');
 const chainKeys = require('./modules/chain_keys');
-const { BUILD_DIR } = require('./modules/constants');
 const credentialPolicy = require('./modules/credential_policy');
+const launcherRuntime = require('./modules/launcher/runtime_entry');
 
 // Setup graceful shutdown handlers
 setupGracefulShutdown();
@@ -69,10 +69,8 @@ setupGracefulShutdown();
 // world-readable (would indicate a prior run with a permissive umask).
 if (typeof chainKeys.checkKeysFileSecurity === 'function') chainKeys.checkKeysFileSecurity();
 // Same migration-aware check for daemon-policies.json.
-const _policyRoot = path.basename(__dirname) === BUILD_DIR ? path.dirname(__dirname) : __dirname;
-if (typeof credentialPolicy.checkPolicyFileSecurity === 'function') credentialPolicy.checkPolicyFileSecurity(path.join(_policyRoot, 'profiles', 'daemon-policies.json'));
-
-const ROOT = path.basename(__dirname) === BUILD_DIR ? path.dirname(__dirname) : __dirname;
+const ROOT = launcherRuntime.resolveProjectRoot(__dirname);
+if (typeof credentialPolicy.checkPolicyFileSecurity === 'function') credentialPolicy.checkPolicyFileSecurity(path.join(ROOT, 'profiles', 'daemon-policies.json'));
 const PROFILES_BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const launcherLogger = createPm2AwareLogger('bot.js');
 

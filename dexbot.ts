@@ -104,9 +104,8 @@ const {
     resolveRawBotEntries,
     saveSettingsFile,
 } = require('./modules/bot_settings');
-const { buildRuntimeScriptArgs } = require('./modules/launcher/runtime_entry');
+const { buildRuntimeScriptArgs, resolveProjectRoot } = require('./modules/launcher/runtime_entry');
 const { buildMarketAdapterWhitelistNpmArgs } = require('./modules/cli_whitelist_args');
-const { BUILD_DIR } = require('./modules/constants');
 const credentialPolicy = require('./modules/credential_policy');
 
 // Setup graceful shutdown handlers
@@ -116,14 +115,13 @@ setupGracefulShutdown();
 // world-readable (would indicate a prior run with a permissive umask).
 if (typeof chainKeys.checkKeysFileSecurity === 'function') chainKeys.checkKeysFileSecurity();
 // Same migration-aware check for daemon-policies.json.
-const _policyRoot = path.basename(__dirname) === BUILD_DIR ? path.dirname(__dirname) : __dirname;
-if (typeof credentialPolicy.checkPolicyFileSecurity === 'function') credentialPolicy.checkPolicyFileSecurity(path.join(_policyRoot, 'profiles', 'daemon-policies.json'));
+const ROOT = resolveProjectRoot(__dirname);
+if (typeof credentialPolicy.checkPolicyFileSecurity === 'function') credentialPolicy.checkPolicyFileSecurity(path.join(ROOT, 'profiles', 'daemon-policies.json'));
 
 // Note: accountOrders is now per-bot only. Each bot has its own AccountOrders instance
 // created in DEXBot.start() in modules/dexbot_class.ts. This eliminates shared-file race conditions.
 
 // Primary CLI driver that manages tracked bots and helper utilities such as key/bot editors.
-const ROOT = path.basename(__dirname) === BUILD_DIR ? path.dirname(__dirname) : __dirname;
 const PROFILES_BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const PROFILES_DIR = path.join(ROOT, 'profiles');
 

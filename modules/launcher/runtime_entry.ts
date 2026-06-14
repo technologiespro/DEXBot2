@@ -5,6 +5,20 @@ function isDistCodeRoot(codeRoot: string) {
     return path.basename(codeRoot) === BUILD_DIR;
 }
 
+/**
+ * Resolve the DEXBot2 project root from any directory path inside the
+ * project (source or dist layout).  When the input is the `dist/`
+ * directory itself, the project root is its parent; otherwise the input
+ * itself is the project root.
+ *
+ * Centralises the BUILD_DIR-aware check that was previously copy-pasted
+ * across 40+ files as
+ *     path.basename(dir) === BUILD_DIR ? path.dirname(dir) : dir
+ */
+function resolveProjectRoot(dirPath: string): string {
+    return isDistCodeRoot(dirPath) ? path.dirname(dirPath) : dirPath;
+}
+
 function stripKnownExtension(fileName: string) {
     return fileName.replace(/\.(?:[cm]?js|ts)$/i, '');
 }
@@ -41,4 +55,5 @@ export = {
     buildRuntimeScriptArgs,
     buildRuntimeScriptPath,
     isDistCodeRoot,
+    resolveProjectRoot,
 };

@@ -14,8 +14,9 @@ const { spawn } = require('child_process');
 const { BitShares } = require('./bitshares_client');
 const { isPositiveInt } = require('./order/utils/math');
 const { parseJsonWithComments } = require('./order/utils/system');
-const { FEE_PARAMETERS, BUILD_DIR } = require('./constants');
+const { FEE_PARAMETERS } = require('./constants');
 const { getCredentialReadyFilePath, assertPrivatePathSecurity } = require('./credential_runtime');
+const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const Logger = require('./logger');
 
 // Module-scope logger for library-style helpers that don't own a process
@@ -23,8 +24,7 @@ const Logger = require('./logger');
 // is configured, matching the rest of the codebase.
 const policyLogger = new Logger('credential-policy');
 
-const MODULE_DIR = path.dirname(__dirname);
-const PROJECT_ROOT = path.basename(MODULE_DIR) === BUILD_DIR ? path.dirname(MODULE_DIR) : MODULE_DIR;
+const PROJECT_ROOT = resolveProjectRoot(path.dirname(__dirname));
 
 const BOTS_JSON_PATH = path.join(PROJECT_ROOT, 'profiles', 'bots.json');
 const ASSET_OBJECT_ID_PATTERN = /^1\.3\.\d+$/;
@@ -256,6 +256,31 @@ function loadPolicyConfig(filePath: string, options: { forceReload?: boolean } =
 
     policyCache.set(filePath, detailed.config);
     return detailed.config;
+}
+
+/**
+ * Reload daemon-policies.json from disk with caller-controlled failure
+ * semantics.  Single source of truth for both the SIGHUP handler
+ * (operator-initiated, fail closed) and the fs.watch debounce
+ * (auto-provision, keep last-good in-memory config).
+ *
+ * @param {string} filePath - Path to daemon-policies.json
+ * @param {object} [options={}] - Options
+ * @param {boolean} [options.strict=false] - When true, rethrows the load
+ *   error so the caller can decide the response (e.g. shutdown).  When
+ *   false (default), returns null on failure so the caller can keep the
+ *   existing in-memory config and log a warning.
+ * @returns {object|null} Parsed config on success, null on non-strict failure
+ */
+function reloadPolicyFromDisk(filePath: string, options: { strict?: boolean } = {}): PolicyConfig | null {
+    const strict = options.strict === true;
+    try {
+        return loadRequiredPolicyConfig(filePath);
+    } catch (err: any) {
+        if (strict) throw err;
+        policyLogger.warn(`[policy] Reload from ${filePath} failed: ${err.message} — keeping in-memory config`);
+        return null;
+    }
 }
 
 /**
@@ -1352,6 +1377,9 @@ function loadBotHmacSecret(accountName: string, policyConfigPath: string, option
     const info = (msg: string) => {
         if (!quiet) policyLogger.info(msg);
     };
+    const debug = (msg: string) => {
+        if (!quiet) policyLogger.debug?.(msg);
+    };
     const warn = (msg: string) => {
         policyLogger.warn(msg);
     };
@@ -1393,15 +1421,24 @@ function loadBotHmacSecret(accountName: string, policyConfigPath: string, option
         // picked up immediately, without waiting for the fs.watch debounce
         // (500ms) or a SIGHUP from the operator.  Three distinct failure
         // modes are handled separately:
-        //   - ready file missing/empty: daemon is not running, nothing to do
+        //   - ready file missing: daemon is not running, nothing to do
+        //   - ready file empty: daemon is mid-startup; fs.watch will catch it
         //   - ready file malformed (old format, partial write): warn and skip
         //   - process.kill error (ESRCH=process gone, EPERM=not allowed):
         //     warn — the fs.watch safety net will still pick up the change
         try {
             const readyFile = getCredentialReadyFilePath({ root: PROJECT_ROOT });
+            if (!fs.existsSync(readyFile)) {
+                info(`[policy] Ready file ${readyFile} not present; daemon not running, SIGHUP skipped`);
+                secret = newSecret;
+                return secret;
+            }
             const raw = fs.readFileSync(readyFile, 'utf8');
             if (!raw.trim()) {
-                info(`[policy] Ready file ${readyFile} is empty; daemon may not be running`);
+                // File exists but is empty: daemon is mid-startup.  Don't warn —
+                // this is the expected race window between fork and ready-file write.
+                // The fs.watch safety net will pick up the change within 500ms.
+                debug(`[policy] Ready file ${readyFile} is empty (daemon mid-startup); fs.watch will pick up the change`);
                 secret = newSecret;
                 return secret;
             }
@@ -1482,6 +1519,7 @@ export = {
     ensurePolicyConfig,
     loadPolicyConfig,
     loadRequiredPolicyConfig,
+    reloadPolicyFromDisk,
     validatePolicyConfig,
     deriveDebtPolicyConstraints,
     resolveAccountPolicy,

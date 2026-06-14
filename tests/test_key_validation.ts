@@ -28,7 +28,13 @@ const cases = [
         valid: false,
     },
     {
-        name: 'invalid_pvt_k1_wrong_length',
+        // The base58check decoder throws on bad checksum BEFORE exposing the
+        // payload, so a truncated key is rejected as a checksum failure
+        // rather than as a wrong-length failure.  This case verifies the
+        // truncated-input branch; a true wrong-length case would need a
+        // valid checksum with non-32-byte payload, which base58check does
+        // not surface.
+        name: 'invalid_pvt_k1_truncated',
         key: 'PVT_K1_2orKbL5',
         valid: false,
     },
