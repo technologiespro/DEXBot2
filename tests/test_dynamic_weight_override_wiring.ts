@@ -4,11 +4,12 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { BUILD_DIR } = require('../modules/constants');
+const { isDistCodeRoot } = require('../modules/launcher/runtime_entry');
 const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
 
 console.log('Running dynamic weight override wiring tests');
 
-const _isDist = path.basename(path.dirname(__dirname)) === BUILD_DIR;
+const _isDist = isDistCodeRoot(path.dirname(__dirname));
 const marketAdapterPath = _isDist
   ? path.resolve(__dirname, '..', 'market_adapter', 'market_adapter.js')
   : require.resolve('../market_adapter/market_adapter.ts');

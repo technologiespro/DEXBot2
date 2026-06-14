@@ -5,8 +5,8 @@ const fs = require('fs/promises');
 const fsSync = require('fs');
 const path = require('path');
 
-const { BUILD_DIR } = require('../modules/constants');
-const _isDist = path.basename(path.dirname(__dirname)) === BUILD_DIR;
+const { isDistCodeRoot } = require('../modules/launcher/runtime_entry');
+const _isDist = isDistCodeRoot(path.dirname(__dirname));
 function _resolveAdapterModule() {
   return _isDist
     ? path.resolve(__dirname, '..', 'market_adapter', 'market_adapter.js')

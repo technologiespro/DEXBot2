@@ -7,8 +7,8 @@ const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache
 
 console.log('Running dexbot maintenance runtime dynamic weight tests');
 
-const { BUILD_DIR } = require('../modules/constants');
-const _isDist = path.basename(path.dirname(__dirname)) === BUILD_DIR;
+const { isDistCodeRoot } = require('../modules/launcher/runtime_entry');
+const _isDist = isDistCodeRoot(path.dirname(__dirname));
 const _adapterSource = 'market_adapter/market_adapter' + (_isDist ? '.js' : '.ts');
 const runtimePath = require.resolve('../modules/dexbot_maintenance_runtime');
 const dexbotClassPath = require.resolve('../modules/dexbot_class');

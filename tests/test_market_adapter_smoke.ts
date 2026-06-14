@@ -6,10 +6,11 @@ const path = require('path');
 console.log('Running market_adapter smoke tests');
 
 const { BUILD_DIR } = require('../modules/constants');
+const { isDistCodeRoot } = require('../modules/launcher/runtime_entry');
 const root = path.join(__dirname, '..');
 const lockPath = path.join(root, 'market_adapter', 'state', 'market_adapter.lock');
 
-const _isDist = path.basename(path.dirname(__dirname)) === BUILD_DIR;
+const _isDist = isDistCodeRoot(path.dirname(__dirname));
 const _adapterScript = _isDist ? `${BUILD_DIR}/market_adapter/market_adapter.js` : 'market_adapter/market_adapter.ts';
 const _signalRunnerScript = _isDist ? `${BUILD_DIR}/market_adapter/ama_signal_runner.js` : 'market_adapter/ama_signal_runner.ts';
 const _spawnArgs = _isDist ? [] : ['--import', 'tsx'];

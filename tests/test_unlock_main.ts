@@ -1,7 +1,7 @@
 const assert = require('assert');
 const path = require('path');
 const childProcess = require('child_process');
-const { BUILD_DIR } = require('../modules/constants');
+const { isDistCodeRoot } = require('../modules/launcher/runtime_entry');
 const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
 const { makeControllerStub, makeFakeChild } = require('./helpers/unlock_test_helpers');
 
@@ -15,7 +15,7 @@ const originalDisableSupervisorSocket = process.env.DEXBOT_DISABLE_SUPERVISOR_SO
 const originalIsolatedForeground = process.env.DEXBOT_ISOLATED_FOREGROUND;
 const originalMonolithicBg = process.env.DEXBOT_MONOLITHIC_BG;
 
-const _isDist = path.basename(path.dirname(__dirname)) === BUILD_DIR;
+const _isDist = isDistCodeRoot(path.dirname(__dirname));
 const _tsSuffix = _isDist ? '.js' : '.ts';
 
 const state = {
