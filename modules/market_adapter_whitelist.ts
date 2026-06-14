@@ -2,10 +2,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const { BUILD_DIR } = require('./constants');
+const { resolveProjectRoot } = require('./launcher/runtime_entry');
 
 const CODE_ROOT = path.join(__dirname, '..');
-const ROOT = path.basename(CODE_ROOT) === BUILD_DIR ? path.dirname(CODE_ROOT) : CODE_ROOT;
+const ROOT = resolveProjectRoot(CODE_ROOT);
 const PROFILES_DIR = path.join(ROOT, 'profiles');
 const WHITELIST_FILE = process.env.DEXBOT_TEST_MARKET_ADAPTER_WHITELIST_FILE
     || path.join(PROFILES_DIR, 'market_adapter_whitelist.json');

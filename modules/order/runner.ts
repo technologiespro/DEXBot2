@@ -60,9 +60,9 @@
 const fs = require('fs');
 const path = require('path');
 const { OrderManager } = require('./manager');
-const { BUILD_DIR } = require('../constants');
+const { resolveProjectRoot } = require('../launcher/runtime_entry');
 const RUNNER_PARENT = path.dirname(path.dirname(__dirname));
-const RUNNER_ROOT = path.basename(RUNNER_PARENT) === BUILD_DIR ? path.dirname(RUNNER_PARENT) : RUNNER_PARENT;
+const RUNNER_ROOT = resolveProjectRoot(RUNNER_PARENT);
 const Grid = require('./grid');
 const { readBotsFileSync } = require('../bots_file_lock');
 const { parseJsonWithComments } = require('./utils/system');

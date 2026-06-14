@@ -64,11 +64,12 @@ const fsPromises = require('fs').promises;
 const path = require('path');
 const readline = require('readline');
 const Format = require('./format');
-const { TIMING, BUILD_DIR } = require('../constants');
+const { TIMING } = require('../constants');
+const { resolveProjectRoot } = require('../launcher/runtime_entry');
 const Logger = require('../logger');
 const exportLogger = new Logger('Export');
 const EXPORT_PARENT = path.dirname(path.dirname(__dirname));
-const EXPORT_ROOT = path.basename(EXPORT_PARENT) === BUILD_DIR ? path.dirname(EXPORT_PARENT) : EXPORT_PARENT;
+const EXPORT_ROOT = resolveProjectRoot(EXPORT_PARENT);
 
 /**
  * Parse a fill line from PM2 log file

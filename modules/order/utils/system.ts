@@ -47,13 +47,14 @@
 
 const fs = require('fs');
 const path = require('path');
-const { API_LIMITS, TIMING, ORDER_TYPES, ORDER_STATES, COW_ACTIONS, FEE_PARAMETERS, BTS_PRECISION, BUILD_DIR } = require('../../constants');
+const { API_LIMITS, TIMING, ORDER_TYPES, ORDER_STATES, COW_ACTIONS, FEE_PARAMETERS, BTS_PRECISION } = require('../../constants');
+const { resolveProjectRoot } = require('../../launcher/runtime_entry');
 const Format = require('../format');
 const { toFiniteNumber, isValidNumber } = Format;
 const MathUtils = require('./math');
 const OrderUtils = require('./order');
 const CODE_ROOT = path.join(__dirname, '..', '..', '..');
-const ROOT = path.basename(CODE_ROOT) === BUILD_DIR ? path.dirname(CODE_ROOT) : CODE_ROOT;
+const ROOT = resolveProjectRoot(CODE_ROOT);
 const Logger = require('../../logger');
 const systemLogger = new Logger('System');
 
