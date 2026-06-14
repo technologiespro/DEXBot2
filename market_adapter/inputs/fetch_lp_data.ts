@@ -255,7 +255,7 @@ function loadCachedFetchContext(bot, intervalSeconds) {
 
     for (const file of dataFiles) {
         try {
-            const parsed = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
+            const parsed = readJSON(path.join(dir, file));
             const meta = parsed?.meta;
             if (!meta) continue;
             if (meta.intervalSeconds !== intervalSeconds) continue;

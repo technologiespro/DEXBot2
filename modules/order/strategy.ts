@@ -92,9 +92,7 @@ class StrategyEngine {
         // The expensive eviction (sort) is deferred until we're truly near the limit.
         this._pruneCallCount = (this._pruneCallCount || 0) + 1;
         const PRUNE_SAMPLE_INTERVAL = 10;
-        const maxEvents = Number.isFinite(PIPELINE_TIMING.MAX_FEE_EVENT_CACHE_SIZE) && PIPELINE_TIMING.MAX_FEE_EVENT_CACHE_SIZE > 0
-            ? PIPELINE_TIMING.MAX_FEE_EVENT_CACHE_SIZE
-            : 10000;
+        const maxEvents = Math.max(1, PIPELINE_TIMING.MAX_FEE_EVENT_CACHE_SIZE);
 
         // Check every Nth call OR if we're already over the limit (to drain it down)
         const shouldCheckSize = (this._pruneCallCount % PRUNE_SAMPLE_INTERVAL === 0) ||
@@ -132,8 +130,11 @@ class StrategyEngine {
             if (this.manager?.assets && filledOrder?.type) {
                 precision = getPrecisionByOrderType(this.manager.assets, filledOrder.type);
             }
-        } catch (_) {
-            // Precision not available — fall back to size string
+        } catch (err: any) {
+            this.manager?.logger?.log?.(
+                `_buildFeeEventId: precision unavailable for ${filledOrder?.type}, falling back to size string: ${err.message}`,
+                'debug'
+            );
         }
 
         if (typeof precision !== 'number') {

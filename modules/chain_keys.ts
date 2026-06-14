@@ -1048,7 +1048,7 @@ async function waitForDaemon(maxWaitMs = TIMING.DAEMON_STARTUP_TIMEOUT_MS, optio
  * @param {function} extractResult - Callback: (response) => resolved value; throw to reject
  * @returns {Promise<*>} Resolved value from extractResult
  */
-function sendDaemonRequest(requestType, accountName, timeout = 5000, options = {}, label = 'request', extractResult = null) {
+function sendDaemonRequest(requestType, accountName, timeout = TIMING.DAEMON_PING_TIMEOUT_MS, options = {}, label = 'request', extractResult = null) {
     const net = require('net');
     const socketPath = getCredentialSocketPath(options);
 
@@ -1119,7 +1119,7 @@ function sendDaemonRequest(requestType, accountName, timeout = 5000, options = {
  * @param {Object} options - Optional socket path overrides
  * @returns {Promise<boolean>} Resolves with true if daemon responds
  */
-function pingDaemon(accountName, timeout = 5000, options = {}) {
+function pingDaemon(accountName, timeout = TIMING.DAEMON_PING_TIMEOUT_MS, options = {}) {
     return sendDaemonRequest('ping', accountName, timeout, options, 'ping', (response) => {
         if (response.success && response.pong) return true;
         throw new Error(response.error || 'Daemon ping failed');
@@ -1133,7 +1133,7 @@ function pingDaemon(accountName, timeout = 5000, options = {}) {
  * @param {Object} options - Optional socket path overrides
  * @returns {Promise<string|null>} Resolves with sessionId if account is available, rejects otherwise
  */
-function probeAccountInDaemon(accountName, timeout = 5000, options = {}) {
+function probeAccountInDaemon(accountName, timeout = TIMING.DAEMON_PING_TIMEOUT_MS, options = {}) {
     return sendDaemonRequest('probe-account', accountName, timeout, options, 'probe', (response) => {
         if (response.success) return response.sessionId || null;
         throw new Error(response.error || 'Daemon probe failed');

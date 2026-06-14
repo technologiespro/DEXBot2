@@ -611,7 +611,9 @@ async function initializeFeeCache(botsConfig: any[], BitShares: any): Promise<Re
                     }
                 };
             }
-        } catch (error: any) {}
+        } catch (error: any) {
+            systemLogger.warn(`initializeFeeCache: failed to parse asset ${assetSymbol}: ${error.message}`);
+        }
     }
 
     MathUtils._setFeeCache(cache);

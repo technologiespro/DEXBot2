@@ -1864,7 +1864,9 @@ async function acquireBts(deficit) {
             if (sellAmount <= 0 || sellAmount > asset.free) continue;
 
             candidates.push({ asset, poolId: poolData.id, sellAmount, expectedReceive, priceImpact: sellAmount / assetReserve });
-        } catch (e) { /* pool not found */ }
+        } catch (e: any) {
+            this._log(`[BTS-ACQ] Pool lookup failed for ${asset?.symbol}: ${e.message}`, 'debug');
+        }
     }
 
     if (candidates.length === 0) {

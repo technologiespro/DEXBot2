@@ -179,7 +179,9 @@ function getAddressPrefix(chainClient) {
             ? chainClient.getConfig()
             : null;
         if (config && config.addressPrefix) return config.addressPrefix;
-    } catch (e) {}
+    } catch (e: any) {
+        logger.warn(`getAddressPrefix: failed to read chain config: ${e.message}`);
+    }
     return DEFAULT_ADDRESS_PREFIX;
 }
 

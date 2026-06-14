@@ -256,7 +256,7 @@ class DEXBot {
         this._batchInFlight = false;
         this._recoverySyncInFlight = false;
         this._lastTargetedDriftSyncAt = 0;
-        this._targetedDriftSyncCooldownMs = 60_000;
+        this._targetedDriftSyncCooldownMs = TIMING.TARGETED_DRIFT_SYNC_COOLDOWN_MS;
         this._maintenanceCooldownCycles = 0;
         this._lastGridActivityAt = 0;
         this._currentCycleId = 0;
@@ -3524,7 +3524,7 @@ class DEXBot {
             return;
         }
 
-        const intervalMs = Math.max(30_000, Number(TIMING.CREDENTIAL_DAEMON_WATCHDOG_MS) || 60_000);
+        const intervalMs = Math.max(TIMING.DAEMON_PING_TIMEOUT_MS, TIMING.CREDENTIAL_DAEMON_WATCHDOG_MS);
         const probe = async () => {
             if (this._shuttingDown || !this._isCredentialDaemonWriteRequired()) return;
             // Guard against overlapping ticks: if the previous probe is still

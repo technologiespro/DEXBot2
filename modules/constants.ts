@@ -214,6 +214,7 @@ let TIMING = {
     DAEMON_STARTUP_TIMEOUT_MS: 60000,  // 60 seconds - Private key daemon startup timeout
     RETRY_BACKOFF_CAP_MS: 30000,  // 30 seconds - Max exponential backoff delay for connection retries
     DAEMON_PING_TIMEOUT_MS: 5000,      // 5 seconds - Private key daemon ping/healthcheck timeout
+    CREDENTIAL_DAEMON_WATCHDOG_MS: 60000,  // 60 seconds - Credential daemon watchdog polling interval
 
     // Main loop and polling defaults
     RUN_LOOP_DEFAULT_MS: 5000,  // 5 seconds - default open-orders sync cycle delay (env override: OPEN_ORDERS_SYNC_LOOP_MS)
@@ -264,6 +265,11 @@ let TIMING = {
     // in dexbot_class.ts. Must stay below the 20s shutdown lock timeout so
     // it never holds _fillProcessingLock longer than the shutdown deadline.
     SAFETY_NET_SYNC_TIMEOUT_MS: 25000,
+
+    // TARGETED_DRIFT_SYNC_COOLDOWN_MS: Minimum interval between targeted drift
+    // reconciliation cycles. Prevents rapid re-triggering when the grid is
+    // oscillating around the drift threshold.
+    TARGETED_DRIFT_SYNC_COOLDOWN_MS: 60000,
 };
 
 // Grid limits and scaling constants
