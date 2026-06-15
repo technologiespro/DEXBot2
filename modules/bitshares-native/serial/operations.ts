@@ -59,6 +59,285 @@ const credit_deal_update_operation_fee_parameters = new Serializer('credit_deal_
     fee: uint64,
 });
 
+// -- Operation fee parameters (all non-virtual Core ops) --
+
+const account_create_operation_fee_parameters = new Serializer('account_create_operation_fee_parameters', {
+    basic_fee: uint64,
+    premium_fee: uint64,
+    price_per_kbyte: uint32,
+});
+
+const account_update_operation_fee_parameters = new Serializer('account_update_operation_fee_parameters', {
+    fee: int64,
+    price_per_kbyte: uint32,
+});
+
+const account_whitelist_operation_fee_parameters = new Serializer('account_whitelist_operation_fee_parameters', {
+    fee: int64,
+});
+
+const account_upgrade_operation_fee_parameters = new Serializer('account_upgrade_operation_fee_parameters', {
+    membership_annual_fee: uint64,
+    membership_lifetime_fee: uint64,
+});
+
+const account_transfer_operation_fee_parameters = new Serializer('account_transfer_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const asset_create_operation_fee_parameters = new Serializer('asset_create_operation_fee_parameters', {
+    symbol3: uint64,
+    symbol4: uint64,
+    long_symbol: uint64,
+    price_per_kbyte: uint32,
+});
+
+const asset_update_operation_fee_parameters = new Serializer('asset_update_operation_fee_parameters', {
+    fee: uint64,
+    price_per_kbyte: uint32,
+});
+
+const asset_update_bitasset_operation_fee_parameters = new Serializer('asset_update_bitasset_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const asset_update_feed_producers_operation_fee_parameters = new Serializer('asset_update_feed_producers_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const asset_issue_operation_fee_parameters = new Serializer('asset_issue_operation_fee_parameters', {
+    fee: uint64,
+    price_per_kbyte: uint32,
+});
+
+const asset_reserve_operation_fee_parameters = new Serializer('asset_reserve_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const asset_fund_fee_pool_operation_fee_parameters = new Serializer('asset_fund_fee_pool_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const asset_global_settle_operation_fee_parameters = new Serializer('asset_global_settle_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const asset_publish_feed_operation_fee_parameters = new Serializer('asset_publish_feed_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const asset_settle_cancel_operation_fee_parameters = new Serializer('asset_settle_cancel_operation_fee_parameters', {});
+
+const asset_claim_fees_operation_fee_parameters = new Serializer('asset_claim_fees_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const witness_create_operation_fee_parameters = new Serializer('witness_create_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const witness_update_operation_fee_parameters = new Serializer('witness_update_operation_fee_parameters', {
+    fee: int64,
+});
+
+const proposal_create_operation_fee_parameters = new Serializer('proposal_create_operation_fee_parameters', {
+    fee: uint64,
+    price_per_kbyte: uint32,
+});
+
+const proposal_update_operation_fee_parameters = new Serializer('proposal_update_operation_fee_parameters', {
+    fee: uint64,
+    price_per_kbyte: uint32,
+});
+
+const proposal_delete_operation_fee_parameters = new Serializer('proposal_delete_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const withdraw_permission_create_operation_fee_parameters = new Serializer('withdraw_permission_create_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const withdraw_permission_update_operation_fee_parameters = new Serializer('withdraw_permission_update_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const withdraw_permission_claim_operation_fee_parameters = new Serializer('withdraw_permission_claim_operation_fee_parameters', {
+    fee: uint64,
+    price_per_kbyte: uint32,
+});
+
+const withdraw_permission_delete_operation_fee_parameters = new Serializer('withdraw_permission_delete_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const committee_member_create_operation_fee_parameters = new Serializer('committee_member_create_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const committee_member_update_operation_fee_parameters = new Serializer('committee_member_update_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const committee_member_update_global_parameters_operation_fee_parameters = new Serializer('committee_member_update_global_parameters_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const vesting_balance_create_operation_fee_parameters = new Serializer('vesting_balance_create_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const vesting_balance_withdraw_operation_fee_parameters = new Serializer('vesting_balance_withdraw_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const worker_create_operation_fee_parameters = new Serializer('worker_create_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const custom_operation_fee_parameters = new Serializer('custom_operation_fee_parameters', {
+    fee: uint64,
+    price_per_kbyte: uint32,
+});
+
+const assert_operation_fee_parameters = new Serializer('assert_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const balance_claim_operation_fee_parameters = new Serializer('balance_claim_operation_fee_parameters', {});
+
+const override_transfer_operation_fee_parameters = new Serializer('override_transfer_operation_fee_parameters', {
+    fee: uint64,
+    price_per_kbyte: uint32,
+});
+
+const transfer_to_blind_operation_fee_parameters = new Serializer('transfer_to_blind_operation_fee_parameters', {
+    fee: uint64,
+    price_per_output: uint32,
+});
+
+const blind_transfer_operation_fee_parameters = new Serializer('blind_transfer_operation_fee_parameters', {
+    fee: uint64,
+    price_per_output: uint32,
+});
+
+const transfer_from_blind_operation_fee_parameters = new Serializer('transfer_from_blind_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const asset_claim_pool_operation_fee_parameters = new Serializer('asset_claim_pool_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const asset_update_issuer_operation_fee_parameters = new Serializer('asset_update_issuer_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const bid_collateral_operation_fee_parameters = new Serializer('bid_collateral_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const execute_bid_operation_fee_parameters = new Serializer('execute_bid_operation_fee_parameters', {});
+
+const htlc_create_operation_fee_parameters = new Serializer('htlc_create_operation_fee_parameters', {
+    fee: uint64,
+    fee_per_day: uint64,
+});
+
+const htlc_redeem_operation_fee_parameters = new Serializer('htlc_redeem_operation_fee_parameters', {
+    fee: uint64,
+    fee_per_kb: uint64,
+});
+
+const htlc_redeemed_operation_fee_parameters = new Serializer('htlc_redeemed_operation_fee_parameters', {});
+
+const htlc_extend_operation_fee_parameters = new Serializer('htlc_extend_operation_fee_parameters', {
+    fee: uint64,
+    fee_per_day: uint64,
+});
+
+const htlc_refund_operation_fee_parameters = new Serializer('htlc_refund_operation_fee_parameters', {});
+
+const custom_authority_create_operation_fee_parameters = new Serializer('custom_authority_create_operation_fee_parameters', {
+    basic_fee: uint64,
+    price_per_byte: uint32,
+});
+
+const custom_authority_update_operation_fee_parameters = new Serializer('custom_authority_update_operation_fee_parameters', {
+    basic_fee: uint64,
+    price_per_byte: uint32,
+});
+
+const custom_authority_delete_operation_fee_parameters = new Serializer('custom_authority_delete_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const ticket_create_operation_fee_parameters = new Serializer('ticket_create_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const ticket_update_operation_fee_parameters = new Serializer('ticket_update_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const liquidity_pool_create_operation_fee_parameters = new Serializer('liquidity_pool_create_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const liquidity_pool_delete_operation_fee_parameters = new Serializer('liquidity_pool_delete_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const liquidity_pool_deposit_operation_fee_parameters = new Serializer('liquidity_pool_deposit_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const liquidity_pool_withdraw_operation_fee_parameters = new Serializer('liquidity_pool_withdraw_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const samet_fund_create_operation_fee_parameters = new Serializer('samet_fund_create_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const samet_fund_delete_operation_fee_parameters = new Serializer('samet_fund_delete_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const samet_fund_update_operation_fee_parameters = new Serializer('samet_fund_update_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const samet_fund_borrow_operation_fee_parameters = new Serializer('samet_fund_borrow_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const samet_fund_repay_operation_fee_parameters = new Serializer('samet_fund_repay_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const credit_offer_create_operation_fee_parameters = new Serializer('credit_offer_create_operation_fee_parameters', {
+    fee: uint64,
+    price_per_kbyte: uint32,
+});
+
+const credit_offer_delete_operation_fee_parameters = new Serializer('credit_offer_delete_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const credit_offer_update_operation_fee_parameters = new Serializer('credit_offer_update_operation_fee_parameters', {
+    fee: uint64,
+    price_per_kbyte: uint32,
+});
+
+const credit_deal_expired_operation_fee_parameters = new Serializer('credit_deal_expired_operation_fee_parameters', {});
+
+const liquidity_pool_update_operation_fee_parameters = new Serializer('liquidity_pool_update_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const fba_distribute_operation_fee_parameters = new Serializer('fba_distribute_operation_fee_parameters', {});
+
 const fee_parameters = staticVariantType([
     transfer_operation_fee_parameters,
     limit_order_create_operation_fee_parameters,
@@ -67,11 +346,78 @@ const fee_parameters = staticVariantType([
     fill_order_operation_fee_parameters,
 ]);
 
+fee_parameters.st_operations[5] = account_create_operation_fee_parameters;
+fee_parameters.st_operations[6] = account_update_operation_fee_parameters;
+fee_parameters.st_operations[7] = account_whitelist_operation_fee_parameters;
+fee_parameters.st_operations[8] = account_upgrade_operation_fee_parameters;
+fee_parameters.st_operations[9] = account_transfer_operation_fee_parameters;
+fee_parameters.st_operations[10] = asset_create_operation_fee_parameters;
+fee_parameters.st_operations[11] = asset_update_operation_fee_parameters;
+fee_parameters.st_operations[12] = asset_update_bitasset_operation_fee_parameters;
+fee_parameters.st_operations[13] = asset_update_feed_producers_operation_fee_parameters;
+fee_parameters.st_operations[14] = asset_issue_operation_fee_parameters;
+fee_parameters.st_operations[15] = asset_reserve_operation_fee_parameters;
+fee_parameters.st_operations[16] = asset_fund_fee_pool_operation_fee_parameters;
 fee_parameters.st_operations[17] = asset_settle_operation_fee_parameters;
+fee_parameters.st_operations[18] = asset_global_settle_operation_fee_parameters;
+fee_parameters.st_operations[19] = asset_publish_feed_operation_fee_parameters;
+fee_parameters.st_operations[20] = witness_create_operation_fee_parameters;
+fee_parameters.st_operations[21] = witness_update_operation_fee_parameters;
+fee_parameters.st_operations[22] = proposal_create_operation_fee_parameters;
+fee_parameters.st_operations[23] = proposal_update_operation_fee_parameters;
+fee_parameters.st_operations[24] = proposal_delete_operation_fee_parameters;
+fee_parameters.st_operations[25] = withdraw_permission_create_operation_fee_parameters;
+fee_parameters.st_operations[26] = withdraw_permission_update_operation_fee_parameters;
+fee_parameters.st_operations[27] = withdraw_permission_claim_operation_fee_parameters;
+fee_parameters.st_operations[28] = withdraw_permission_delete_operation_fee_parameters;
+fee_parameters.st_operations[29] = committee_member_create_operation_fee_parameters;
+fee_parameters.st_operations[30] = committee_member_update_operation_fee_parameters;
+fee_parameters.st_operations[31] = committee_member_update_global_parameters_operation_fee_parameters;
+fee_parameters.st_operations[32] = vesting_balance_create_operation_fee_parameters;
+fee_parameters.st_operations[33] = vesting_balance_withdraw_operation_fee_parameters;
+fee_parameters.st_operations[34] = worker_create_operation_fee_parameters;
+fee_parameters.st_operations[35] = custom_operation_fee_parameters;
+fee_parameters.st_operations[36] = assert_operation_fee_parameters;
+fee_parameters.st_operations[37] = balance_claim_operation_fee_parameters;
+fee_parameters.st_operations[38] = override_transfer_operation_fee_parameters;
+fee_parameters.st_operations[39] = transfer_to_blind_operation_fee_parameters;
+fee_parameters.st_operations[40] = blind_transfer_operation_fee_parameters;
+fee_parameters.st_operations[41] = transfer_from_blind_operation_fee_parameters;
+fee_parameters.st_operations[42] = asset_settle_cancel_operation_fee_parameters;
+fee_parameters.st_operations[43] = asset_claim_fees_operation_fee_parameters;
+fee_parameters.st_operations[44] = fba_distribute_operation_fee_parameters;
+fee_parameters.st_operations[45] = bid_collateral_operation_fee_parameters;
+fee_parameters.st_operations[46] = execute_bid_operation_fee_parameters;
+fee_parameters.st_operations[47] = asset_claim_pool_operation_fee_parameters;
+fee_parameters.st_operations[48] = asset_update_issuer_operation_fee_parameters;
+fee_parameters.st_operations[49] = htlc_create_operation_fee_parameters;
+fee_parameters.st_operations[50] = htlc_redeem_operation_fee_parameters;
+fee_parameters.st_operations[51] = htlc_redeemed_operation_fee_parameters;
+fee_parameters.st_operations[52] = htlc_extend_operation_fee_parameters;
+fee_parameters.st_operations[53] = htlc_refund_operation_fee_parameters;
+fee_parameters.st_operations[54] = custom_authority_create_operation_fee_parameters;
+fee_parameters.st_operations[55] = custom_authority_update_operation_fee_parameters;
+fee_parameters.st_operations[56] = custom_authority_delete_operation_fee_parameters;
+fee_parameters.st_operations[57] = ticket_create_operation_fee_parameters;
+fee_parameters.st_operations[58] = ticket_update_operation_fee_parameters;
+fee_parameters.st_operations[59] = liquidity_pool_create_operation_fee_parameters;
+fee_parameters.st_operations[60] = liquidity_pool_delete_operation_fee_parameters;
+fee_parameters.st_operations[61] = liquidity_pool_deposit_operation_fee_parameters;
+fee_parameters.st_operations[62] = liquidity_pool_withdraw_operation_fee_parameters;
+fee_parameters.st_operations[63] = liquidity_pool_exchange_operation_fee_parameters;
+fee_parameters.st_operations[64] = samet_fund_create_operation_fee_parameters;
+fee_parameters.st_operations[65] = samet_fund_delete_operation_fee_parameters;
+fee_parameters.st_operations[66] = samet_fund_update_operation_fee_parameters;
+fee_parameters.st_operations[67] = samet_fund_borrow_operation_fee_parameters;
+fee_parameters.st_operations[68] = samet_fund_repay_operation_fee_parameters;
+fee_parameters.st_operations[69] = credit_offer_create_operation_fee_parameters;
+fee_parameters.st_operations[70] = credit_offer_delete_operation_fee_parameters;
+fee_parameters.st_operations[71] = credit_offer_update_operation_fee_parameters;
 fee_parameters.st_operations[72] = credit_offer_accept_operation_fee_parameters;
 fee_parameters.st_operations[73] = credit_deal_repay_operation_fee_parameters;
+fee_parameters.st_operations[74] = credit_deal_expired_operation_fee_parameters;
+fee_parameters.st_operations[75] = liquidity_pool_update_operation_fee_parameters;
 fee_parameters.st_operations[76] = credit_deal_update_operation_fee_parameters;
-fee_parameters.st_operations[63] = liquidity_pool_exchange_operation_fee_parameters;
 fee_parameters.st_operations[77] = limit_order_update_operation_fee_parameters;
 
 const fee_schedule = new Serializer('fee_schedule', {
@@ -319,4 +665,71 @@ export = {
     credit_deal_repay_operation_fee_parameters,
     credit_deal_update_operation_fee_parameters,
     liquidity_pool_exchange_operation_fee_parameters,
+    account_create_operation_fee_parameters,
+    account_update_operation_fee_parameters,
+    account_whitelist_operation_fee_parameters,
+    account_upgrade_operation_fee_parameters,
+    account_transfer_operation_fee_parameters,
+    asset_create_operation_fee_parameters,
+    asset_update_operation_fee_parameters,
+    asset_update_bitasset_operation_fee_parameters,
+    asset_update_feed_producers_operation_fee_parameters,
+    asset_issue_operation_fee_parameters,
+    asset_reserve_operation_fee_parameters,
+    asset_fund_fee_pool_operation_fee_parameters,
+    asset_global_settle_operation_fee_parameters,
+    asset_publish_feed_operation_fee_parameters,
+    asset_settle_cancel_operation_fee_parameters,
+    asset_claim_fees_operation_fee_parameters,
+    witness_create_operation_fee_parameters,
+    witness_update_operation_fee_parameters,
+    proposal_create_operation_fee_parameters,
+    proposal_update_operation_fee_parameters,
+    proposal_delete_operation_fee_parameters,
+    withdraw_permission_create_operation_fee_parameters,
+    withdraw_permission_update_operation_fee_parameters,
+    withdraw_permission_claim_operation_fee_parameters,
+    withdraw_permission_delete_operation_fee_parameters,
+    committee_member_create_operation_fee_parameters,
+    committee_member_update_operation_fee_parameters,
+    committee_member_update_global_parameters_operation_fee_parameters,
+    vesting_balance_create_operation_fee_parameters,
+    vesting_balance_withdraw_operation_fee_parameters,
+    worker_create_operation_fee_parameters,
+    custom_operation_fee_parameters,
+    assert_operation_fee_parameters,
+    balance_claim_operation_fee_parameters,
+    override_transfer_operation_fee_parameters,
+    transfer_to_blind_operation_fee_parameters,
+    blind_transfer_operation_fee_parameters,
+    transfer_from_blind_operation_fee_parameters,
+    asset_claim_pool_operation_fee_parameters,
+    asset_update_issuer_operation_fee_parameters,
+    bid_collateral_operation_fee_parameters,
+    execute_bid_operation_fee_parameters,
+    htlc_create_operation_fee_parameters,
+    htlc_redeem_operation_fee_parameters,
+    htlc_redeemed_operation_fee_parameters,
+    htlc_extend_operation_fee_parameters,
+    htlc_refund_operation_fee_parameters,
+    custom_authority_create_operation_fee_parameters,
+    custom_authority_update_operation_fee_parameters,
+    custom_authority_delete_operation_fee_parameters,
+    ticket_create_operation_fee_parameters,
+    ticket_update_operation_fee_parameters,
+    liquidity_pool_create_operation_fee_parameters,
+    liquidity_pool_delete_operation_fee_parameters,
+    liquidity_pool_deposit_operation_fee_parameters,
+    liquidity_pool_withdraw_operation_fee_parameters,
+    samet_fund_create_operation_fee_parameters,
+    samet_fund_delete_operation_fee_parameters,
+    samet_fund_update_operation_fee_parameters,
+    samet_fund_borrow_operation_fee_parameters,
+    samet_fund_repay_operation_fee_parameters,
+    credit_offer_create_operation_fee_parameters,
+    credit_offer_delete_operation_fee_parameters,
+    credit_offer_update_operation_fee_parameters,
+    credit_deal_expired_operation_fee_parameters,
+    liquidity_pool_update_operation_fee_parameters,
+    fba_distribute_operation_fee_parameters,
 };

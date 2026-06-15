@@ -133,6 +133,7 @@ export interface LimitOrderUpdateOp {
   new_price?: Price;
   delta_amount_to_sell?: Asset;
   new_expiration?: string;
+  on_fill?: Array<Record<string, any>>;
   extensions?: Record<string, any>;
 }
 

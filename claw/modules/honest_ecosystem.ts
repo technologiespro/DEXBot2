@@ -1,9 +1,10 @@
-const { getAsset, getBackingAsset, getBitassetData, getCallOrders, listAssets } = require('./chain_queries');
+const { getAsset, getBackingAsset, getBitassetData, getCallOrders, getObjects, listAssets } = require('./chain_queries');
 const { derivePoolPrice } = require('./liquidity_pools');
 
 const REFERENCE_SYMBOL = 'HONEST.MONEY';
 const CORE_SYMBOL = 'BTS';
 const DEFAULT_PREFIX = 'HONEST.';
+const HARDCODED_POOL_ID = '1.19.305';
 const HARDCODED_HONEST_MONEY_BTS_POOL = {
   assetA: {
     amount: 29854.8782,
@@ -13,7 +14,7 @@ const HARDCODED_HONEST_MONEY_BTS_POOL = {
     amount: 70846.22383703,
     symbol: REFERENCE_SYMBOL
   },
-  id: '1.19.305',
+  id: HARDCODED_POOL_ID,
   poolSymbol: 'honest.BTSMONEY',
   takerFeePercent: 0.4,
   withdrawalFeePercent: 0
@@ -27,6 +28,53 @@ function isMpa(asset: any) {
 
 function isHonestAsset(asset: any) {
   return typeof asset?.symbol === 'string' && asset.symbol.startsWith(DEFAULT_PREFIX);
+}
+
+async function fetchLivePoolReserves(poolId: string = HARDCODED_POOL_ID) {
+  try {
+    const objects = await getObjects([poolId]);
+    const pool = objects && objects[0];
+    if (!pool || pool.asset_a == null || pool.asset_b == null) return null;
+
+    const [assetAObj, assetBObj] = await Promise.all([
+      getAsset(pool.asset_a),
+      getAsset(pool.asset_b)
+    ]);
+
+    const precisionA = assetAObj?.precision ?? 0;
+    const precisionB = assetBObj?.precision ?? 0;
+    const balanceA = Number(pool.balance_a) || 0;
+    const balanceB = Number(pool.balance_b) || 0;
+
+    return {
+      assetA: {
+        amount: precisionA > 0 ? balanceA / Math.pow(10, precisionA) : balanceA,
+        symbol: assetAObj?.symbol || CORE_SYMBOL
+      },
+      assetB: {
+        amount: precisionB > 0 ? balanceB / Math.pow(10, precisionB) : balanceB,
+        symbol: assetBObj?.symbol || REFERENCE_SYMBOL
+      },
+      id: poolId,
+      poolSymbol: pool.share_asset || HARDCODED_HONEST_MONEY_BTS_POOL.poolSymbol,
+      takerFeePercent: pool.taker_fee_percent ?? HARDCODED_HONEST_MONEY_BTS_POOL.takerFeePercent,
+      withdrawalFeePercent: pool.withdrawal_fee_percent ?? HARDCODED_HONEST_MONEY_BTS_POOL.withdrawalFeePercent,
+      source: 'live-liquidity-pool'
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function getHonestMoneyBridge() {
+  const live = await fetchLivePoolReserves();
+  if (live) {
+    const core = live.assetA.symbol === CORE_SYMBOL ? live.assetA : live.assetB;
+    const honestMoney = live.assetA.symbol === REFERENCE_SYMBOL ? live.assetA : live.assetB;
+    const latestHonestMoneyPerBts = Number(core.amount) > 0 ? honestMoney.amount / core.amount : null;
+    return { liquidityPool: live, latestHonestMoneyPerBts, market: `${REFERENCE_SYMBOL}/${CORE_SYMBOL}`, source: live.source };
+  }
+  return getHardcodedHonestMoneyBridge();
 }
 
 function getHardcodedHonestMoneyBridge() {
@@ -62,10 +110,11 @@ function isHardcodedHonestMoneyBtsPair(assetA: any, assetB: any) {
   );
 }
 
-function resolveHardcodedHonestMoneyPrice(assetA: any, assetB: any) {
+async function resolveHardcodedHonestMoneyPrice(assetA: any, assetB: any) {
   const assetASymbol = assetA && typeof assetA === 'object' ? assetA.symbol : assetA;
   const assetBSymbol = assetB && typeof assetB === 'object' ? assetB.symbol : assetB;
-  const bridge = getHardcodedHonestMoneyBridge();
+
+  const bridge = await getHonestMoneyBridge();
   const bridgePrice = bridge.latestHonestMoneyPerBts;
 
   if (bridgePrice === null || !Number.isFinite(bridgePrice) || bridgePrice <= 0) {
@@ -110,7 +159,7 @@ async function resolveHonestPairContext(assetA: any, assetB: any, options: Recor
     };
   }
 
-  const bridge = getHardcodedHonestMoneyBridge();
+  const bridge = await getHonestMoneyBridge();
   const assetAEntry = bridge.liquidityPool.reserves.find((entry) => entry.symbol === assetASymbol) || null;
   const assetBEntry = bridge.liquidityPool.reserves.find((entry) => entry.symbol === assetBSymbol) || null;
 
@@ -234,7 +283,7 @@ async function buildHonestEcosystemContext(options: Record<string, any> = {}) {
       symbol: asset.symbol,
       type: isMpa(asset) ? 'MPA' : 'ASSET'
     })),
-    bridge: getHardcodedHonestMoneyBridge(),
+    bridge: await getHonestMoneyBridge(),
     pairContexts,
     mpas: honestAssets.mpas,
     referenceAsset: {

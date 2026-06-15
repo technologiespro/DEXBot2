@@ -683,7 +683,7 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
 
     if (opName === 'transfer') {
         // allowedToAccounts
-        if (constraints.allowedToAccounts) {
+        if (Array.isArray(constraints.allowedToAccounts) && constraints.allowedToAccounts.length > 0) {
             if (!constraints.allowedToAccounts.includes(d.to)) {
                 return {
                     allow: false,
@@ -693,7 +693,7 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
             }
         }
         // allowedAssets
-        if (constraints.allowedAssets) {
+        if (Array.isArray(constraints.allowedAssets) && constraints.allowedAssets.length > 0) {
             const id = d.amount && d.amount.asset_id;
             if (id && !constraints.allowedAssets.includes(id)) {
                 return {
@@ -718,7 +718,7 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
 
     if (opName === 'limit_order_create') {
         // allowedSellAssets
-        if (constraints.allowedSellAssets) {
+        if (Array.isArray(constraints.allowedSellAssets) && constraints.allowedSellAssets.length > 0) {
             const id = d.amount_to_sell && d.amount_to_sell.asset_id;
             if (id && !constraints.allowedSellAssets.includes(id)) {
                 return {
@@ -729,7 +729,7 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
             }
         }
         // allowedReceiveAssets
-        if (constraints.allowedReceiveAssets) {
+        if (Array.isArray(constraints.allowedReceiveAssets) && constraints.allowedReceiveAssets.length > 0) {
             const id = d.min_to_receive && d.min_to_receive.asset_id;
             if (id && !constraints.allowedReceiveAssets.includes(id)) {
                 return {
@@ -773,7 +773,7 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
 
     if (opName === 'limit_order_update') {
         // allowedSellAssets via new_price.base
-        if (constraints.allowedSellAssets) {
+        if (Array.isArray(constraints.allowedSellAssets) && constraints.allowedSellAssets.length > 0) {
             const id = d.new_price && d.new_price.base && d.new_price.base.asset_id;
             if (id && !constraints.allowedSellAssets.includes(id)) {
                 return {
@@ -784,7 +784,7 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
             }
         }
         // allowedReceiveAssets via new_price.quote
-        if (constraints.allowedReceiveAssets) {
+        if (Array.isArray(constraints.allowedReceiveAssets) && constraints.allowedReceiveAssets.length > 0) {
             const id = d.new_price && d.new_price.quote && d.new_price.quote.asset_id;
             if (id && !constraints.allowedReceiveAssets.includes(id)) {
                 return {
@@ -809,7 +809,7 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
 
     if (opName === 'call_order_update') {
         // allowedAssets
-        if (constraints.allowedAssets) {
+        if (Array.isArray(constraints.allowedAssets) && constraints.allowedAssets.length > 0) {
             const collId = d.delta_collateral && d.delta_collateral.asset_id;
             const debtId = d.delta_debt && d.delta_debt.asset_id;
             if (collId && !constraints.allowedAssets.includes(collId)) {
@@ -845,7 +845,7 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
                 };
             }
         }
-        if (constraints.allowedCollateralAssets) {
+        if (Array.isArray(constraints.allowedCollateralAssets) && constraints.allowedCollateralAssets.length > 0) {
             const collId = d.delta_collateral && d.delta_collateral.asset_id;
             const resolved = await resolveConfiguredAssetRefs(constraints.allowedCollateralAssets, 'allowedCollateralAssets');
             if (!resolved.ok) {
@@ -908,7 +908,7 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
     }
 
     if (opName === 'credit_offer_accept') {
-        if (constraints.allowedOfferIds) {
+        if (Array.isArray(constraints.allowedOfferIds) && constraints.allowedOfferIds.length > 0) {
             const offerId = d.offer_id;
             if (offerId && !constraints.allowedOfferIds.includes(String(offerId))) {
                 return {
@@ -936,7 +936,7 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
                 };
             }
         }
-        if (constraints.allowedCollateralAssets) {
+        if (Array.isArray(constraints.allowedCollateralAssets) && constraints.allowedCollateralAssets.length > 0) {
             const assetId = d.collateral && d.collateral.asset_id;
             const resolved = await resolveConfiguredAssetRefs(constraints.allowedCollateralAssets, 'allowedCollateralAssets');
             if (!resolved.ok) {
@@ -954,7 +954,7 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
                 };
             }
         }
-        if (constraints.allowedDebtAssets) {
+        if (Array.isArray(constraints.allowedDebtAssets) && constraints.allowedDebtAssets.length > 0) {
             const assetId = d.borrow_amount && d.borrow_amount.asset_id;
             const resolved = await resolveConfiguredAssetRefs(constraints.allowedDebtAssets, 'allowedDebtAssets');
             if (!resolved.ok) {
@@ -995,7 +995,7 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
     }
 
     if (opName === 'credit_deal_repay') {
-        if (constraints.allowedDealIds) {
+        if (Array.isArray(constraints.allowedDealIds) && constraints.allowedDealIds.length > 0) {
             const dealId = d.deal_id;
             if (dealId && !constraints.allowedDealIds.includes(String(dealId))) {
                 return {
@@ -1005,7 +1005,7 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
                 };
             }
         }
-        if (constraints.allowedDebtAssets) {
+        if (Array.isArray(constraints.allowedDebtAssets) && constraints.allowedDebtAssets.length > 0) {
             const assetId = d.repay_amount && d.repay_amount.asset_id;
             const resolved = await resolveConfiguredAssetRefs(constraints.allowedDebtAssets, 'allowedDebtAssets');
             if (!resolved.ok) {
@@ -1046,7 +1046,7 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
     }
 
     if (opName === 'credit_deal_update') {
-        if (constraints.allowedDealIds) {
+        if (Array.isArray(constraints.allowedDealIds) && constraints.allowedDealIds.length > 0) {
             const dealId = d.deal_id;
             if (dealId && !constraints.allowedDealIds.includes(String(dealId))) {
                 return {
@@ -1067,7 +1067,7 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
 
     if (opName === 'liquidity_pool_exchange') {
         // allowedPools
-        if (constraints.allowedPools) {
+        if (Array.isArray(constraints.allowedPools) && constraints.allowedPools.length > 0) {
             if (!constraints.allowedPools.includes(d.pool)) {
                 return {
                     allow: false,
@@ -1077,7 +1077,7 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
             }
         }
         // allowedSellAssets
-        if (constraints.allowedSellAssets) {
+        if (Array.isArray(constraints.allowedSellAssets) && constraints.allowedSellAssets.length > 0) {
             const id = d.amount_to_sell && d.amount_to_sell.asset_id;
             if (id && !constraints.allowedSellAssets.includes(id)) {
                 return {
@@ -1088,7 +1088,7 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
             }
         }
         // allowedReceiveAssets
-        if (constraints.allowedReceiveAssets) {
+        if (Array.isArray(constraints.allowedReceiveAssets) && constraints.allowedReceiveAssets.length > 0) {
             const id = d.min_to_receive && d.min_to_receive.asset_id;
             if (id && !constraints.allowedReceiveAssets.includes(id)) {
                 return {
@@ -1146,14 +1146,16 @@ async function evaluatePolicy(policy: any, context: PolicyContext): Promise<{ al
         } else {
             // Fallback: allowedOpTypes check (backward compat)
             const allowed = policy.allowedOpTypes || [];
-            for (const op of context.operations) {
-                if (!op || typeof op !== 'object') continue;
-                if (!allowed.includes(op.op_name)) {
-                    return {
-                        allow: false,
-                        reason: `op type "${op.op_name}" not permitted`,
-                        policyId: 'allowedOpTypes',
-                    };
+            if (Array.isArray(allowed) && allowed.length > 0) {
+                for (const op of context.operations) {
+                    if (!op || typeof op !== 'object') continue;
+                    if (!allowed.includes(op.op_name)) {
+                        return {
+                            allow: false,
+                            reason: `op type "${op.op_name}" not permitted`,
+                            policyId: 'allowedOpTypes',
+                        };
+                    }
                 }
             }
         }

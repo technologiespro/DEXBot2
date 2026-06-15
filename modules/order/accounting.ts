@@ -187,7 +187,8 @@ class Accountant {
                 cancelFee: Math.max(0, toFiniteNumber(fees?.cancelFee, 0)),
                 makerFeeDiscountPercent: Math.max(0, toFiniteNumber(fees?.makerFeeDiscountPercent, FEE_PARAMETERS.MAKER_REFUND_PERCENT))
             };
-        } catch (_err: any) {
+        } catch (err: any) {
+            this.manager?.logger?.log?.(`[FEE] Failed to load BTS fee schedule: ${err?.message || err}; using fallback defaults`, 'warn');
             return {
                 createFee: 0,
                 updateFee: 0,
