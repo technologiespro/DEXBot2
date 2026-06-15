@@ -38,6 +38,31 @@ To start only one bot:
 tsx unlock.ts <bot-name>
 ```
 
+### Headless (non-interactive) startup
+
+For environments without an interactive TTY (Docker containers, PaaS platforms), use
+`--headless` with a password source:
+
+```bash
+# Via environment variable (less secure — see security note)
+DEXBOT_MASTER_PASSWORD=<password> tsx unlock.ts --headless
+
+# Via secret file (recommended — works with Docker secrets)
+tsx unlock.ts --headless --password-file /run/secrets/bot-password
+```
+
+The same flags work with PM2:
+
+```bash
+DEXBOT_MASTER_PASSWORD=<password> node pm2 --headless
+node pm2 --headless --password-file /run/secrets/bot-password
+```
+
+> **⚠️ Security note:** Environment variables are visible via `/proc/<pid>/environ`
+> for the lifetime of the process. The `--password-file` path is safer — use Docker
+> secrets or a mounted file with `chmod 400`. In both cases, the master password
+> is used only to derive the vault key and is **not** retained after unlock.
+
 For claw-only workflows that only need credentials, use:
 
 ```bash
@@ -76,7 +101,18 @@ docker compose up
 
 This compose mode runs `unlock.ts`, which starts the credential daemon and may prompt for the master password. If `BOT_NAME` is empty, it starts all active bots from `profiles/bots.json`.
 
-3. View logs:
+For non-interactive environments (CI, headless servers), pass the master password
+via an env var or secret file override:
+
+```bash
+# Using a Docker secret (recommended)
+DEXBOT_MASTER_PASSWORD=$(cat /run/secrets/bot-password) docker compose up
+
+# Or override the command entirely
+docker compose run dexbot node dist/unlock.js --headless --password-file /run/secrets/bot-password
+```
+
+4. View logs:
 
 ```bash
 docker compose logs -f dexbot
@@ -96,5 +132,5 @@ docker compose down
   - Pre-create host directories (`mkdir -p profiles market_adapter/data market_adapter/state`) so they inherit your host user's ownership, or
   - Set `DEXBOT_UID` and `DEXBOT_GID` in `.env` to match your host user (`id -u` / `id -g`).
 - Keep `.env` for non-sensitive runtime values (for example `BOT_NAME`, `OPEN_ORDERS_SYNC_LOOP_MS`).
-- Do not store the master password in `.env`. The secure launchers prompt once and keep it only in process memory.
+- Do not store the master password in `.env`. The secure launchers prompt once and keep it only in process memory. If you must use non-interactive startup, use `--headless --password-file` with a Docker secret (see [Headless startup](#headless-non-interactive-startup) above).
 - If you prefer immutable pinning, replace `latest` in `docker-compose.yml` with a `sha-<commit>` tag.

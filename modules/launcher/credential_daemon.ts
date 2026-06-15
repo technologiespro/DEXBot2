@@ -14,6 +14,7 @@ const { createPasswordBootstrapServer } = require('./credential_bootstrap');
 const { buildScopedChildEnv } = require('./child_env');
 const { buildRuntimeScriptArgs, resolveProjectRoot } = require('./runtime_entry');
 const { safeUnlink } = require('../utils/fs_utils');
+const { readHeadlessPassword } = require('./headless_password');
 
 const DEFAULT_CODE_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_ROOT = resolveProjectRoot(DEFAULT_CODE_ROOT);
@@ -70,7 +71,12 @@ function createCredentialDaemonController({
         }
     }
 
-    async function ensureCredentialDaemon({ detached = false, stdio: stdioOption = undefined } = {}) {
+    async function ensureCredentialDaemon({ detached = false, stdio: stdioOption = undefined, headless = false, passwordFile = null }: {
+        detached?: boolean;
+        stdio?: StdioOptions;
+        headless?: boolean;
+        passwordFile?: string | null;
+    } = {}) {
         if (await isDaemonReady()) {
             return false;
         }
@@ -79,7 +85,13 @@ function createCredentialDaemonController({
         ensureCredentialRuntimeDirSync({ socketPath, readyFilePath, root });
         credentialPolicy.ensurePolicyConfig(path.join(root, 'profiles', 'daemon-policies.json'));
 
-        const vaultSecret = await chainKeys.authenticate();
+        let vaultSecret;
+
+        if (headless) {
+            vaultSecret = chainKeys.unlockWithPassword(readHeadlessPassword({ passwordFile }));
+        } else {
+            vaultSecret = await chainKeys.authenticate();
+        }
         const bootstrap = await createPasswordBootstrapServer({ secret: vaultSecret });
         const daemonArgs = buildRuntimeScriptArgs({
             codeRoot,

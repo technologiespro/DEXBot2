@@ -18,21 +18,26 @@ const originalMonolithicBg = process.env.DEXBOT_MONOLITHIC_BG;
 const _isDist = isDistCodeRoot(path.dirname(__dirname));
 const _tsSuffix = _isDist ? '.js' : '.ts';
 
-const state = {
+const state: any = {
     calls: [],
+    ensureCalls: [],
     ensureCount: 0,
     waitCount: 0,
     stopCount: 0,
 };
 
 const controller = makeControllerStub({
-    ensureCredentialDaemon: async () => { state.ensureCount += 1; },
+    ensureCredentialDaemon: async (opts: any) => {
+        state.ensureCalls.push(opts);
+        state.ensureCount += 1;
+    },
     waitForManagedDaemon: async () => { state.waitCount += 1; return 0; },
     stopManagedDaemon: async () => { state.stopCount += 1; },
 });
 
 function resetState() {
     state.calls.length = 0;
+    state.ensureCalls.length = 0;
     state.ensureCount = 0;
     state.waitCount = 0;
     state.stopCount = 0;
@@ -160,6 +165,18 @@ async function runMissingIsolatedBotFailsFastTest() {
     assert.strictEqual(state.calls.length, 0, 'launcher should not spawn child processes for unknown bots');
 }
 
+async function runHeadlessSingleBotTest() {
+    resetState();
+    await unlock.main({ argv: ['node', 'unlock', '--headless', 'XRP-BTS'], startupGraceMs: 0 });
+
+    assert.strictEqual(state.ensureCount, 1, 'headless launcher should unlock the credential daemon once');
+    assert.ok(state.ensureCalls.length >= 1, 'ensureCredentialDaemon should have been called');
+    assert.strictEqual(state.ensureCalls[0].headless, true, 'headless flag should be passed to ensureCredentialDaemon');
+    assert.strictEqual(state.stopCount, 1, 'headless launcher should clean up its owned daemon');
+    const botCalls = state.calls.filter(isDexbotSpawn);
+    assert.strictEqual(botCalls.length, 1, 'headless single-bot unlock should spawn exactly one bot process');
+}
+
 (async () => {
     try {
         await runAllBotsTest();
@@ -169,6 +186,7 @@ async function runMissingIsolatedBotFailsFastTest() {
         await runIsolatedSingleBotTest();
         await runImmediateExitStartupFailureTest();
         await runMissingIsolatedBotFailsFastTest();
+        await runHeadlessSingleBotTest();
         console.log('unlock main tests passed');
         process.exit(0);
     } catch (err) {

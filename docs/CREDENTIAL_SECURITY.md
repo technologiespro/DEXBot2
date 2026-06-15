@@ -309,6 +309,45 @@ This means production deployments running the daemon never expose the master
 password interactively, while the interactive path remains available for
 development and recovery.
 
+### Headless (Non-Interactive) Startup
+
+For environments without an interactive TTY (Docker containers, PaaS platforms),
+the launcher supports a `--headless` flag that reads the master password from a
+non-interactive source instead of prompting:
+
+```bash
+# Via environment variable
+DEXBOT_MASTER_PASSWORD=<password> node dist/unlock.js --headless
+
+# Via secret file (recommended)
+node dist/unlock.js --headless --password-file /run/secrets/bot-password
+```
+
+**Security considerations:**
+
+| Source | Risk | Mitigation |
+|--------|------|------------|
+| `DEXBOT_MASTER_PASSWORD` env var | Password visible in `/proc/<pid>/environ` and process listings | Use only in ephemeral containers; prefer `--password-file` |
+| `--password-file <path>` | File permissions may leak the password | Set file to `chmod 400` and use Docker secrets or `tmpfs` mounts |
+
+In both cases, the password is used immediately to derive the vault key via
+`chainKeys.unlockWithPassword()` and is **not** retained in memory beyond the
+unlock call. The derived vault secret is passed to the credential daemon through
+the same one-shot bootstrap socket mechanism described in §2.
+
+**When to use headless mode:**
+- Docker/PaaS deployments where stdin is not a TTY
+- Automated restart scripts that cannot provide interactive input
+- CI/CD test pipelines that need a pre-configured key vault
+
+**When to avoid it:**
+- Shared or multi-tenant environments where `/proc` is accessible
+- Any deployment where the operator cannot control filesystem permissions
+  on the password file
+
+The foreign daemon detection and cleanup logic runs identically in both
+interactive and headless modes.
+
 ### Foreign Daemon Detection
 
 At startup, `unlock` scans for credential daemons left by a different user or a

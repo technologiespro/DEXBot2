@@ -9,21 +9,24 @@
  * Use --foreground to run in terminal (no auto-restart).
  *
  * Usage:
- *   node unlock                 Background + auto-restart (default)
- *   node unlock --foreground    Terminal mode (no auto-restart)
+ *   node unlock                         Background + auto-restart (default)
+ *   node unlock --foreground            Terminal mode (no auto-restart)
  *   node unlock claw-only
  *   node unlock --claw-only
  *   node unlock --isolated
  *   node unlock --isolated <botName>
  *   node unlock --dryrun
  *   node unlock --dryrun <botName>
+ *   node unlock --headless              Non-interactive (requires env var or --password-file)
+ *   node unlock --headless --password-file <path>
  *   node unlock status, stat
  *   node unlock stop
  *   node unlock restart
  *   node unlock delete
  *
  * Environment:
- *   BOT_NAME              Fallback bot name when none is given as positional arg
+ *   BOT_NAME                     Fallback bot name when none is given as positional arg
+ *   DEXBOT_MASTER_PASSWORD       Master password for --headless mode (less secure than file)
  */
 
 process.umask(0o077);
@@ -88,11 +91,12 @@ function forwardSignal(child: any, signal: any) {
     }
 }
 
-function printLauncherHeader({ botName = null, clawOnly = false, isolated = false, dryrun = false }: { botName?: string | null; clawOnly?: boolean; isolated?: boolean; dryrun?: boolean } = {}) {
+function printLauncherHeader({ botName = null, clawOnly = false, isolated = false, dryrun = false, headless = false }: { botName?: string | null; clawOnly?: boolean; isolated?: boolean; dryrun?: boolean; headless?: boolean } = {}) {
     console.log('='.repeat(50));
     console.log('DEXBot2 Unlock Launcher');
     if (dryrun) console.log('Mode: dryrun (no transactions)');
     if (isolated) console.log('Mode: isolated (per-bot processes)');
+    if (headless) console.log('Mode: headless (non-interactive password)');
     if (clawOnly) {
         console.log('Starting credential daemon only');
     } else if (botName) {
@@ -881,7 +885,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
         return;
     }
 
-    const { botName, clawOnly, isolated, dryrun } = parsed;
+    const { botName, clawOnly, isolated, dryrun, headless, passwordFile } = parsed;
     const selectedBot = botName ? resolveBotEntryForName(botName) : null;
     const launchedBotNames = getLaunchedBotNames(botName);
     const shouldStartMonolithicBackground = !clawOnly && !isolated && !isDetachedSupervisorChild && !isMonolithicBgChild && !forceForeground;
@@ -894,7 +898,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
     if (shouldStartMonolithicBackground) {
         const { pid } = readLiveMonolithicPid();
         if (pid > 0) {
-            printLauncherHeader({ botName, clawOnly, isolated, dryrun });
+            printLauncherHeader({ botName, clawOnly, isolated, dryrun, headless });
             console.log(`DEXBot2 already running in background (PID ${pid}).`);
             console.log('Use `node unlock stat` to inspect it, or `node unlock restart` to restart it.');
             process.exitCode = 0;
@@ -904,7 +908,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
 
     try {
         if (!isDetachedSupervisorChild) {
-            printLauncherHeader({ botName, clawOnly, isolated, dryrun });
+            printLauncherHeader({ botName, clawOnly, isolated, dryrun, headless });
 
             // Detect and clean up a credential daemon that is not owned by
             // this launcher. Without this check, a leftover daemon (for
@@ -934,7 +938,11 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
             }
 
             try {
-                const unlockedNow = await controller.ensureCredentialDaemon(daemonOpts);
+                const unlockedNow = await controller.ensureCredentialDaemon({
+                    ...daemonOpts,
+                    headless,
+                    passwordFile,
+                });
                 if (unlockedNow) {
                     console.log(statusSuccess('✓ Authentication successful'));
                 }

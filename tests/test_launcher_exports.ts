@@ -16,51 +16,53 @@ const {
 
 assert.strictEqual(typeof unlock.main, 'function', 'unlock should export main');
 assert.strictEqual(typeof unlock.buildDexbotStartArgs, 'function', 'unlock should export buildDexbotStartArgs');
+const UNLOCK_BASE = { headless: false, passwordFile: null };
+
 assert.deepStrictEqual(
     parseUnlockArgs(['node', 'unlock', '--claw-only']),
-    { botName: null, clawOnly: true, isolated: false, dryrun: false },
+    { botName: null, clawOnly: true, isolated: false, dryrun: false, ...UNLOCK_BASE },
     'unlock parser should recognize claw-only mode'
 );
 assert.deepStrictEqual(
     parseUnlockArgs(['node', 'unlock', 'XRP-BTS']),
-    { botName: 'XRP-BTS', clawOnly: false, isolated: false, dryrun: false },
+    { botName: 'XRP-BTS', clawOnly: false, isolated: false, dryrun: false, ...UNLOCK_BASE },
     'unlock parser should capture bot names'
 );
 assert.deepStrictEqual(
     parseUnlockArgs(['node', 'unlock', '--isolated']),
-    { botName: null, clawOnly: false, isolated: true, dryrun: false },
+    { botName: null, clawOnly: false, isolated: true, dryrun: false, ...UNLOCK_BASE },
     'unlock parser should recognize isolated flag'
 );
 assert.deepStrictEqual(
     parseUnlockArgs(['node', 'unlock', '--isolated', 'XRP-BTS']),
-    { botName: 'XRP-BTS', clawOnly: false, isolated: true, dryrun: false },
+    { botName: 'XRP-BTS', clawOnly: false, isolated: true, dryrun: false, ...UNLOCK_BASE },
     'unlock parser should combine isolated flag with bot name'
 );
 assert.deepStrictEqual(
     parseUnlockArgs(['node', 'unlock', '--dryrun']),
-    { botName: null, clawOnly: false, isolated: false, dryrun: true },
+    { botName: null, clawOnly: false, isolated: false, dryrun: true, ...UNLOCK_BASE },
     'unlock parser should recognize dryrun flag'
 );
 assert.deepStrictEqual(
     parseUnlockArgs(['node', 'unlock', '--dryrun', 'XRP-BTS']),
-    { botName: 'XRP-BTS', clawOnly: false, isolated: false, dryrun: true },
+    { botName: 'XRP-BTS', clawOnly: false, isolated: false, dryrun: true, ...UNLOCK_BASE },
     'unlock parser should combine dryrun flag with bot name'
 );
 assert.deepStrictEqual(
     parseUnlockArgs(['node', 'unlock', '--dryrun', '--isolated']),
-    { botName: null, clawOnly: false, isolated: true, dryrun: true },
+    { botName: null, clawOnly: false, isolated: true, dryrun: true, ...UNLOCK_BASE },
     'unlock parser should combine dryrun and isolated flags'
 );
 const originalBotName = process.env.BOT_NAME;
 process.env.BOT_NAME = 'ENV-BOT';
 assert.deepStrictEqual(
     parseUnlockArgs(['node', 'unlock']),
-    { botName: 'ENV-BOT', clawOnly: false, isolated: false, dryrun: false },
+    { botName: 'ENV-BOT', clawOnly: false, isolated: false, dryrun: false, ...UNLOCK_BASE },
     'unlock parser should use BOT_NAME when no bot argument is passed'
 );
 assert.deepStrictEqual(
     parseUnlockArgs(['node', 'unlock', '--claw-only']),
-    { botName: null, clawOnly: true, isolated: false, dryrun: false },
+    { botName: null, clawOnly: true, isolated: false, dryrun: false, ...UNLOCK_BASE },
     'unlock parser should ignore BOT_NAME in claw-only mode'
 );
 if (originalBotName === undefined) {
@@ -68,24 +70,58 @@ if (originalBotName === undefined) {
 } else {
     process.env.BOT_NAME = originalBotName;
 }
+// Headless mode tests
+assert.deepStrictEqual(
+    parseUnlockArgs(['node', 'unlock', '--headless']),
+    { botName: null, clawOnly: false, isolated: false, dryrun: false, headless: true, passwordFile: null },
+    'unlock parser should recognize headless flag'
+);
+assert.deepStrictEqual(
+    parseUnlockArgs(['node', 'unlock', '--headless', '--password-file', '/run/secrets/pw']),
+    { botName: null, clawOnly: false, isolated: false, dryrun: false, headless: true, passwordFile: '/run/secrets/pw' },
+    'unlock parser should recognize headless with password-file'
+);
+assert.deepStrictEqual(
+    parseUnlockArgs(['node', 'unlock', '--headless', '--password-file=/run/secrets/pw']),
+    { botName: null, clawOnly: false, isolated: false, dryrun: false, headless: true, passwordFile: '/run/secrets/pw' },
+    'unlock parser should accept --password-file=value syntax'
+);
+assert.deepStrictEqual(
+    parsePm2Args(['node', 'pm2.js', '--headless']),
+    { command: null, target: null, clawOnly: false, headless: true, passwordFile: null },
+    'pm2 parser should recognize headless flag'
+);
+assert.deepStrictEqual(
+    parsePm2Args(['node', 'pm2.js', '--headless', 'XRP-BTS']),
+    { command: null, target: 'XRP-BTS', clawOnly: false, headless: true, passwordFile: null },
+    'pm2 parser should combine headless with bot name'
+);
+assert.deepStrictEqual(
+    parsePm2Args(['node', 'pm2.js', '--password-file', '/run/secrets/pw']),
+    { command: null, target: null, clawOnly: false, headless: false, passwordFile: '/run/secrets/pw' },
+    'pm2 parser should recognize password-file without headless'
+);
+
+const PM2_BASE = { headless: false, passwordFile: null };
+
 assert.deepStrictEqual(
     parsePm2Args(['node', 'pm2.js', 'claw-only']),
-    { command: 'claw-only', target: null, clawOnly: true },
+    { command: 'claw-only', target: null, clawOnly: true, ...PM2_BASE },
     'pm2 parser should accept claw-only as a direct command'
 );
 assert.deepStrictEqual(
     parsePm2Args(['node', 'pm2.js', '--claw-only']),
-    { command: 'claw-only', target: null, clawOnly: true },
+    { command: 'claw-only', target: null, clawOnly: true, ...PM2_BASE },
     'pm2 parser should accept claw-only as a flag'
 );
 assert.deepStrictEqual(
     parsePm2Args(['node', 'pm2.js', 'XRP-BTS']),
-    { command: null, target: 'XRP-BTS', clawOnly: false },
+    { command: null, target: 'XRP-BTS', clawOnly: false, ...PM2_BASE },
     'pm2 parser should treat a bare bot name as the default PM2 target'
 );
 assert.deepStrictEqual(
     parsePm2Args(['node', 'pm2.js', 'restart', 'all']),
-    { command: 'restart', target: 'all', clawOnly: false },
+    { command: 'restart', target: 'all', clawOnly: false, ...PM2_BASE },
     'pm2 parser should accept restart commands'
 );
 const expectedDexbotPath = path.join(__dirname, '..', 'dexbot.ts');
@@ -139,7 +175,7 @@ for (const entry of [
 ]) {
     const label = `unlock parser should handle ${entry.args.slice(2).join(' ')}`;
     const result = parseUnlockArgs(entry.args);
-    const expected = { botName: null, clawOnly: false, isolated: false, dryrun: false, control: entry.expected };
+    const expected = { botName: null, clawOnly: false, isolated: false, dryrun: false, headless: false, passwordFile: null, control: entry.expected };
     assert.deepStrictEqual(result, expected, label);
 }
 

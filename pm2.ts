@@ -21,6 +21,9 @@
  * node pm2 restart all           - Restart managed apps; re-unlock dexbot-cred only if needed
  * node pm2 restart <target>      - Restart a bot or safely re-unlock dexbot-cred
 
+ * node pm2 --headless            - Non-interactive unlock with env var
+ * node pm2 --headless --password-file <path>
+ *                               - Non-interactive unlock with password file
  * node pm2 help                  - Show help message
  *
  * ===============================================================================
@@ -73,6 +76,7 @@ const { readBotsFileWithLock } = require('./modules/bots_file_lock');
 const { loadSettingsFile, selectActiveBotEntries } = require('./modules/bot_settings');
 const chainKeys = require('./modules/chain_keys');
 const credentialPolicy = require('./modules/credential_policy');
+const { readHeadlessPassword } = require('./modules/launcher/headless_password');
 const {
     ensureCredentialRuntimeDirSync,
     getCredentialReadyFilePath,
@@ -358,7 +362,12 @@ function cleanupStaleCredentialDaemonFiles() {
     }
 }
 
-async function ensureCredentialDaemonPM2({ forceRefresh = false, logReuse }: { forceRefresh?: boolean; logReuse?: any } = {}) {
+async function ensureCredentialDaemonPM2({ forceRefresh = false, logReuse, headless = false, passwordFile = null }: {
+    forceRefresh?: boolean;
+    logReuse?: any;
+    headless?: boolean;
+    passwordFile?: string | null;
+} = {}) {
     ensureCredentialRuntimeDirSync({ root: ROOT, socketPath: CREDENTIAL_SOCKET_PATH, readyFilePath: CREDENTIAL_READY_FILE });
     credentialPolicy.ensurePolicyConfig(POLICY_CONFIG_FILE);
     const daemonReady = await chainKeys.isDaemonResponsive({
@@ -376,7 +385,14 @@ async function ensureCredentialDaemonPM2({ forceRefresh = false, logReuse }: { f
 
     let bootstrap = null;
     try {
-        const vaultSecret = await chainKeys.authenticate();
+        let vaultSecret;
+
+        if (headless) {
+            vaultSecret = chainKeys.unlockWithPassword(readHeadlessPassword({ passwordFile }));
+        } else {
+            vaultSecret = await chainKeys.authenticate();
+        }
+
         bootstrap = await createPasswordBootstrapServer({ secret: vaultSecret });
         console.log(pm2Success('✓ Authentication successful'));
         await startManagedRuntimePM2({ apps: [], bootstrap });
@@ -409,7 +425,12 @@ async function assertActiveBotTarget(target: any) {
  * @param {boolean} [options.clawOnly=false] - Start the credential daemon only.
  * @returns {Promise<void>}
  */
-async function main({ botNameFilter = null, clawOnly = false } = {}) {
+async function main({ botNameFilter = null, clawOnly = false, headless = false, passwordFile = null }: {
+    botNameFilter?: string | null;
+    clawOnly?: boolean;
+    headless?: boolean;
+    passwordFile?: string | null;
+} = {}) {
     if (typeof chainKeys.checkKeysFileSecurity === 'function') chainKeys.checkKeysFileSecurity();
     if (typeof credentialPolicy.checkPolicyFileSecurity === 'function') credentialPolicy.checkPolicyFileSecurity(path.join(ROOT, 'profiles', 'daemon-policies.json'));
 
@@ -420,6 +441,9 @@ async function main({ botNameFilter = null, clawOnly = false } = {}) {
     }
     if (botNameFilter) {
         console.log(`Starting bot: ${botNameFilter}`);
+    }
+    if (headless) {
+        console.log('Mode: headless (non-interactive password)');
     }
     console.log('='.repeat(50));
     console.log();
@@ -458,7 +482,7 @@ async function main({ botNameFilter = null, clawOnly = false } = {}) {
 
     // Step 2: Ensure credential daemon availability
     try {
-        await ensureCredentialDaemonPM2();
+        await ensureCredentialDaemonPM2({ headless, passwordFile });
     } catch (error: any) {
         console.error(pm2Error(`\n❌ ${error.message}`));
         process.exit(1);
@@ -877,25 +901,25 @@ async function deletePM2Processes(target: any) {
     }
 }
 
-async function restartPM2Processes(target: any) {
+async function restartPM2Processes(target: any, { headless = false, passwordFile = null }: { headless?: boolean; passwordFile?: string | null } = {}) {
     console.log(`Restarting PM2 processes: ${target}`);
 
     if (target === 'all') {
         generateEcosystemConfig({ clawOnly: false, exitOnError: false });
-        await ensureCredentialDaemonPM2({ logReuse: false });
+        await ensureCredentialDaemonPM2({ logReuse: false, headless, passwordFile });
         await runManagedAppsPm2Action('restart');
         console.log('Managed dexbot PM2 apps restarted. dexbot-cred was left on the safe wrapper path.');
         return;
     }
 
     if (target === CREDENTIAL_DAEMON_APP_NAME) {
-        await ensureCredentialDaemonPM2({ forceRefresh: true, logReuse: false });
+        await ensureCredentialDaemonPM2({ forceRefresh: true, logReuse: false, headless, passwordFile });
         console.log(`Credential daemon '${target}' restarted with a fresh unlock.`);
         return;
     }
 
     await assertActiveBotTarget(target);
-    await ensureCredentialDaemonPM2({ logReuse: false });
+    await ensureCredentialDaemonPM2({ logReuse: false, headless, passwordFile });
     await execPM2Command('restart', target);
     console.log(`PM2 process '${target}' restarted.`);
 }
@@ -905,7 +929,7 @@ async function restartPM2Processes(target: any) {
  */
 function showPM2Help() {
     console.log(`
-Usage: node pm2 <command> [target]
+Usage: node pm2 [--headless] [--password-file <path>] [<target>]
 
 Commands:
   (default)                 Unlock keystore and start all bots with PM2
@@ -915,13 +939,20 @@ Commands:
   delete <bot-name|all>     Delete PM2 process(es) - only dexbot processes
   restart <bot-name|all|dexbot-cred>
                             Restart managed apps safely; dexbot-cred uses fresh unlock flow
-
   help                      Show this help message
+
+Flags:
+  --headless                Non-interactive unlock (requires DEXBOT_MASTER_PASSWORD env var
+                            or --password-file)
+  --password-file <path>    Read master password from file (first line)
 
 Examples:
   node pm2                       # Start all bots (unlock + start)
   node pm2 claw-only             # Start only the credential daemon
   node pm2 <bot-name>           # Start a single bot
+  node pm2 --headless            # Start all bots (non-interactive)
+  node pm2 --password-file /run/secrets/bot-password
+                                 # Start all bots with password from file
   node pm2 stop all             # Stop all dexbot processes
   node pm2 stop XRP-BTS         # Stop specific bot
   node pm2 delete all           # Delete all dexbot processes from PM2
@@ -940,19 +971,19 @@ const isPm2DirectRun = require.main === module || (
 );
 if (isPm2DirectRun) {
     // Parse command line arguments
-    const { command, target, clawOnly } = parsePm2Args(process.argv);
+    const { command, target, clawOnly, headless, passwordFile } = parsePm2Args(process.argv);
 
     (async () => {
         try {
             if (!command) {
                 // Full setup: unlock, generate config, authenticate, start PM2
                 // Optional: filter to specific bot if provided
-                await main({ botNameFilter: target || null, clawOnly });
+                await main({ botNameFilter: target || null, clawOnly, headless, passwordFile });
                 // Close stdin to prevent hanging
                 if (process.stdin) process.stdin.destroy();
                 process.exit(0);
             } else if (command === 'claw-only') {
-                await main({ clawOnly: true });
+                await main({ clawOnly: true, headless, passwordFile });
                 // Close stdin to prevent hanging
                 if (process.stdin) process.stdin.destroy();
                 process.exit(0);
@@ -993,7 +1024,7 @@ if (isPm2DirectRun) {
                     process.exit(1);
                 }
                 try {
-                    await restartPM2Processes(target);
+                    await restartPM2Processes(target, { headless, passwordFile });
                     process.exit(0);
                 } catch (err: any) {
                     console.error(pm2Error(`Failed to restart processes: ${err.message}`));
