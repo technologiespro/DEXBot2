@@ -962,13 +962,8 @@ async function handleCLICommands() {
                 for (const r of rows) {
                     console.log(`${r.pid.padEnd(8)} ${r.name.padEnd(nameWidth)} ${r.status.padEnd(statusWidth)} ${r.uptime.padEnd(12)} ${r.mem}`);
                 }
-            } catch (err: any) {
-                const msg = String(err?.message || err || '');
-                if (msg.includes('ENOENT') || msg.includes('not found') || msg.includes('not installed')) {
-                    console.log('PM2 is not installed or not available.');
-                } else {
-                    console.log('No DEXBot2 processes running.');
-                }
+            } catch {
+                console.log('No DEXBot2 processes running.');
             }
             process.exit(0);
             return true;
