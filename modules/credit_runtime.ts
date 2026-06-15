@@ -80,7 +80,12 @@ function toGrapheneCollateralRatio(value) {
 
 function getMapEntries(value) {
     if (value instanceof Map) return Array.from(value.entries());
-    if (Array.isArray(value)) return value;
+    if (Array.isArray(value)) {
+        if (value.length > 0 && typeof value[0] === 'object' && !Array.isArray(value[0]) && value[0] !== null && 'key' in value[0] && 'value' in value[0]) {
+            return value.map((item: any) => [item.key, item.value]);
+        }
+        return value;
+    }
     if (value && typeof value === 'object') return Object.entries(value);
     return [];
 }
@@ -1066,7 +1071,7 @@ class CreditRuntime {
     }
 
     async _fetchBorrowerDeals() {
-        if (this._borrowerDealsCache) return this._borrowerDealsCache;
+        if (this._borrowerDealsCache !== null) return this._borrowerDealsCache;
         const accountRef = getAccountRef(this.bot);
         if (!accountRef) return [];
         const accountId = await this._resolveAccountId(accountRef);
@@ -1349,6 +1354,8 @@ class CreditRuntime {
     }
 
     async refreshState() {
+        this._assetCache.clear();
+        this._objectCache.clear();
         this._fullAccountCache = null;
         this._borrowerDealsCache = null;
         await this.loadState();
@@ -1975,6 +1982,8 @@ class CreditRuntime {
             }
         } else if (shouldAutoReborrow && deferredReborrowRequest && !inlineReborrowPlanned && !sourceDealStillActive) {
             this.queueReborrow(deferredReborrowRequest);
+        } else if (shouldAutoReborrow && deferredReborrowRequest && !inlineReborrowPlanned && sourceDealStillActive) {
+            this.warn(`credit runtime: deferred reborrow for deal ${dealSummary.id} dropped — source deal still active on-chain after repay`);
         }
         await this._checkGridMaintenanceAfterCreditUpdate('credit capital update', {
             fillLockAlreadyHeld: options.fillLockAlreadyHeld === true,
@@ -2307,6 +2316,7 @@ class CreditRuntime {
 
             for (const request of this.state.pendingReborrows) {
                 if (!request?.offerId || (request.borrowAmount == null && request.collateralAmount == null)) {
+                    this.warn(`credit runtime: dropping invalid pending reborrow request${request?.sourceDealId ? ` for deal ${request.sourceDealId}` : ''} — missing offerId or borrow/collateral amounts`);
                     continue;
                 }
 
@@ -2318,6 +2328,7 @@ class CreditRuntime {
                 }
 
                 if (request.sourceDealId && activeDealIds.has(String(request.sourceDealId))) {
+                    this.warn(`credit runtime: pending reborrow for deal ${request.sourceDealId} deferred — source deal still active on-chain`);
                     nextQueue.push({ ...request, reason: 'source deal still active on-chain' });
                     continue;
                 }
@@ -2342,9 +2353,11 @@ class CreditRuntime {
                             await this.executeOperations([fallback.op], 'credit reborrow');
                             processed++;
                         } catch (err: any) {
+                            this.warn(`credit runtime: fallback reborrow for offer ${request.offerId} failed: ${err.message}`);
                             nextQueue.push({ ...request, reason: err.message });
                         }
                     } else {
+                        this.warn(`credit runtime: pending reborrow for offer ${request.offerId} deferred — ${offer ? 'offer disabled' : 'offer unavailable'}`);
                         nextQueue.push({ ...request, reason: offer ? 'offer disabled' : 'offer unavailable' });
                     }
                     continue;
@@ -2362,6 +2375,7 @@ class CreditRuntime {
                     await this.executeOperations([acceptOp], 'credit reborrow');
                     processed++;
                 } catch (err: any) {
+                    this.warn(`credit runtime: pending reborrow for offer ${request.offerId} failed: ${err.message}`);
                     nextQueue.push({ ...request, reason: err.message });
                 }
             }

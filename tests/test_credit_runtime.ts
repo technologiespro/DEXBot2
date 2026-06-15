@@ -3135,6 +3135,113 @@ async function testGetCollateralOffsets() {
   }
 }
 
+async function testProactiveRepayBundlesReborrowInSingleBatch() {
+  const calls = [];
+  const dbCalls = [];
+  const dealId = '1.19.77';
+  const offerId = '1.18.42';
+  const debtAmount = 500;
+  const collateralAmount = 1000;
+  const repayTime = new Date(Date.now() - 3600000).toISOString();
+  const activeDeal = {
+    id: dealId,
+    borrower: '1.2.3',
+    offer_id: offerId,
+    offer_owner: '1.2.9',
+    debt_asset: '1.3.10',
+    debt_amount: debtAmount,
+    collateral_asset: '1.3.0',
+    collateral_amount: collateralAmount,
+    fee_rate: 30000,
+    latest_repay_time: repayTime,
+    auto_repay: 0,
+  };
+  const restore = installStubs(calls, dbCalls, {
+    dealResponses: [[activeDeal], []],
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-proactive-bundle-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const policy = {
+      asset: 'HONEST.USD',
+      collateralAsset: 'BTS',
+      type: 'creditOffer',
+      ratio: 1,
+      maxBorrowAmount: 1000,
+      maxCollateralRatio: 2.5,
+      maxFeeRatePerDay: 0.05,
+      autoReborrow: true,
+      autoRepay: 2,
+      renewOnly: true,
+    };
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-proactive-bundle',
+        debtPolicy: { lending: [policy] },
+        TIMING: { CREDIT_DEAL_EXPIRY_THRESHOLD_HOURS: 168 },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      manager: {
+        _fillProcessingLock: {
+          acquire: async (fn) => fn(),
+        },
+        fetchAccountTotals: async () => {},
+      },
+      _runGridMaintenance: async () => ({ checked: true }),
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    await runtime.refreshState();
+
+    runtime.state.positions['1.3.10:1.3.0'] = {
+      assignedCollateralBudget: 1000,
+      creditConversionRate: 0.5,
+      creditDeals: [{
+        id: dealId,
+        debtAssetId: '1.3.10',
+        debtAmount: debtAmount,
+        collateralAssetId: '1.3.0',
+        collateralAmount: collateralAmount,
+        latestRepayTime: repayTime,
+        feeRate: 30000,
+        offerId: offerId,
+        autoRepay: 0,
+      }],
+    };
+
+    const execCallCount = calls.length;
+    await runtime._runCreditMaintenance(policy, '1.3.10');
+
+    const newCalls = calls.slice(execCallCount);
+    assert.strictEqual(newCalls.length, 1, 'proactive repay+reborrow should execute as a single batch');
+
+    const batch = newCalls[0];
+    assert.strictEqual(batch.operations.length, 2, 'batch should contain repay + reborrow');
+    assert.strictEqual(batch.operations[0].op_name, 'credit_deal_repay', 'first op should be credit_deal_repay');
+    assert.strictEqual(batch.operations[1].op_name, 'credit_offer_accept', 'second op should be credit_offer_accept');
+
+    const repayOp = batch.operations[0];
+    const acceptOp = batch.operations[1];
+    assert.strictEqual(repayOp.op_data.deal_id, dealId, 'repay should target the expired deal');
+    assert.strictEqual(repayOp.op_data.repay_amount.amount, debtAmount, 'repay amount should match deal debt');
+    assert.strictEqual(acceptOp.op_data.offer_id, offerId, 'reborrow should use original offer');
+    assert.strictEqual(acceptOp.op_data.borrow_amount.amount, debtAmount, 'reborrow amount should match repaid debt');
+    assert.strictEqual(acceptOp.op_data.collateral.amount, 1000, 'reborrow collateral should follow the offer price ratio');
+    assert.deepStrictEqual(acceptOp.op_data.extensions, { auto_repay: 2 }, 'reborrow should carry forward policy autoRepay');
+
+    assert.strictEqual(runtime.state.pendingReborrows.length, 0, 'no pending reborrows after successful inline batch');
+    assert.strictEqual(runtime.state.reborrowPending, false, 'reborrowPending flag should be false');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
 (async () => {
   await testRefreshAndMpaPlan();
   await testCreditOfferCollateralPercentUsesDebtSnapshot();
@@ -3171,6 +3278,7 @@ async function testGetCollateralOffsets() {
   await testCreditMaintenanceCapsIncreaseAtBorrowCeilingForMultiCollateralOffer();
   await testStatePersistsAcrossRestart();
   await testGetCollateralOffsets();
+  await testProactiveRepayBundlesReborrowInSingleBatch();
   console.log('credit runtime tests passed');
   process.exit(0);
 })().catch((err) => {
