@@ -118,7 +118,7 @@ function createSubscriptionManager(chainClient: any): any {
             );
         }
 
-        subscriptionsLogger.info(`fetchFillHistoryEntries: account=${accountId}, cursor=${cursorHistoryId}, start=${startHistoryId}, maxPages=${maxPages}, pageLimit=${pageLimit}`);
+        subscriptionsLogger.debug(`fetchFillHistoryEntries: account=${accountId}, cursor=${cursorHistoryId}, start=${startHistoryId}, maxPages=${maxPages}, pageLimit=${pageLimit}`);
 
         while (true) {
             const page = await Promise.resolve(fetchPage(
@@ -130,7 +130,7 @@ function createSubscriptionManager(chainClient: any): any {
             pagesFetched++;
 
             const pageLen = Array.isArray(page) ? page.length : 0;
-            subscriptionsLogger.info(`fetchFillHistoryEntries: page ${pagesFetched} returned ${pageLen} entries (start=${startHistoryId}, stop=${cursorHistoryId})`);
+            subscriptionsLogger.debug(`fetchFillHistoryEntries: page ${pagesFetched} returned ${pageLen} entries (start=${startHistoryId}, stop=${cursorHistoryId})`);
 
             if (!Array.isArray(page) || page.length === 0) break;
 
@@ -151,15 +151,15 @@ function createSubscriptionManager(chainClient: any): any {
                 entries.push(entry);
             }
             if (skippedCount > 0) {
-                subscriptionsLogger.info(`fetchFillHistoryEntries: skipped ${skippedCount} entries at/before cursor (cursor=${cursorHistoryId})`);
+                subscriptionsLogger.debug(`fetchFillHistoryEntries: skipped ${skippedCount} entries at/before cursor (cursor=${cursorHistoryId})`);
             }
 
             if (page.length < pageLimit) {
-                subscriptionsLogger.info(`fetchFillHistoryEntries: last page (${page.length} < ${pageLimit})`);
+                subscriptionsLogger.debug(`fetchFillHistoryEntries: last page (${page.length} < ${pageLimit})`);
                 break;
             }
             if (maxPages !== null && pagesFetched >= maxPages) {
-                subscriptionsLogger.info(`fetchFillHistoryEntries: maxPages (${maxPages}) reached`);
+                subscriptionsLogger.debug(`fetchFillHistoryEntries: maxPages (${maxPages}) reached`);
                 break;
             }
             // Stop if all entries on this page are at or before the cursor.
@@ -171,7 +171,7 @@ function createSubscriptionManager(chainClient: any): any {
             startHistoryId = nextStartHistoryId;
         }
 
-        subscriptionsLogger.info(`fetchFillHistoryEntries: returning ${entries.length} operation(s) across ${pagesFetched} page(s) for ${accountId}`);
+        subscriptionsLogger.debug(`fetchFillHistoryEntries: returning ${entries.length} operation(s) across ${pagesFetched} page(s) for ${accountId}`);
         return sortEntriesOldestFirst(entries);
     }
 
@@ -382,7 +382,7 @@ function createSubscriptionManager(chainClient: any): any {
         }
 
         if (noticeObjectIds.length === 0) {
-            subscriptionsLogger.info(`processObjects: no identifiable object IDs in notice data for ${sub.accountName} (dataLen=${data?.length}, types=${data.map((d: any) => typeof d).join(',')})`);
+            subscriptionsLogger.debug(`processObjects: no identifiable object IDs in notice data for ${sub.accountName} (dataLen=${data?.length}, types=${data.map((d: any) => typeof d).join(',')})`);
             // NOTE: Do NOT return early here. The notice data is just a trigger signal;
             // we must always scan fill history to catch actual fills, because the node
             // may send objects without string `id` fields (e.g. bare account/statistics objects).
@@ -417,19 +417,19 @@ function createSubscriptionManager(chainClient: any): any {
 
             if (!sub.lastDeliveredHistoryId) {
                 sub.lastDeliveredHistoryId = await primeLastDeliveredHistoryId(sub);
-                subscriptionsLogger.info(`processObjects: primed lastDeliveredHistoryId=${sub.lastDeliveredHistoryId} for ${sub.accountName}`);
+                subscriptionsLogger.debug(`processObjects: primed lastDeliveredHistoryId=${sub.lastDeliveredHistoryId} for ${sub.accountName}`);
             }
 
             const history = await fetchFillHistoryEntries(accountId, sub.lastDeliveredHistoryId, options);
             if (history.length === 0) {
-                subscriptionsLogger.info(`processObjects: no history entries for ${sub.accountName} (cursor=${sub.lastDeliveredHistoryId})`);
+                subscriptionsLogger.debug(`processObjects: no history entries for ${sub.accountName} (cursor=${sub.lastDeliveredHistoryId})`);
                 return;
             }
 
             const historyRange = history.length > 0
                 ? `${history[0]?.id}..${history[history.length - 1]?.id}`
                 : 'empty';
-            subscriptionsLogger.info(`processObjects: ${history.length} history entries for ${sub.accountName} range=${historyRange} cursor=${sub.lastDeliveredHistoryId}`);
+            subscriptionsLogger.debug(`processObjects: ${history.length} history entries for ${sub.accountName} range=${historyRange} cursor=${sub.lastDeliveredHistoryId}`);
 
             const fills = [];
             for (const entry of history) {
@@ -485,7 +485,7 @@ function createSubscriptionManager(chainClient: any): any {
                 // No fills in this batch — advance cursor past history to avoid
                 // re-scanning non-fill operations on subsequent calls.
                 sub.lastDeliveredHistoryId = history[history.length - 1]?.id || sub.lastDeliveredHistoryId;
-                subscriptionsLogger.info(`processObjects: history had entries but none were FILL_ORDER operations for ${sub.accountName}`);
+                subscriptionsLogger.debug(`processObjects: history had entries but none were FILL_ORDER operations for ${sub.accountName}`);
             }
         } catch (err: any) {
             subscriptionsLogger.warn(`processObjects: error for ${sub.accountName}: ${err?.message}`);
