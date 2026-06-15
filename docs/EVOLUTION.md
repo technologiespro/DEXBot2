@@ -73,8 +73,7 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 
 **Jun 11**: Gradual strict typing (all @ts-nocheck removed, 67 files annotated), race-condition batch 1 (atomic JSON, in-flight flags, snapshot persist), timeout hardening and leak fixes across the board, DRY refactoring claw/tests/unlock — v0.7.18.
 
-**Jun 12–14**: First stable release v1.0.0. Startup profile schema validation, logging system overhaul (write queue, rotation, JSON output, critical level, correlation IDs), AMA slope delta threshold computed from `maxSlopePct × deltaThresholdPct/100`, dashboard branch isolation, `--dryrun` flag, final TS strict error sweep across test files, deferred race items, on-chain authority resolution for signing key lookup, credential security hardening across 8 finding groups, comprehensive centralization of project-root resolution / fs+math utilities / magic numbers with regression fixing, error-path fallback hardening eliminating all silent error swallowing, mainnet corpus generator for release validation, and multi-wave stale-documentation cleanup. This release marks the transition from pre-1.0 development to stable production readiness.
-- **Post-release docker hardening**: Tightened build context (`dist`, `claw`, `market_adapter/inputs/data` added to `.dockerignore`), documented `market_adapter/data` and `market_adapter/state` volume mounts in `Dockerfile` run comment.
+**Jun 12–15**: First stable release v1.0.0 — profile validation, logging overhaul, AMA delta threshold, on-chain authority resolution, credential hardening, centralization of project-root/fs/math/magic-number utilities, error-path hardening, doc sweep. Post-release: docker context, root credential bypass, keep-alive zombie recovery, phantom LP cleanup, AMA warning removal, chain client reconnect, git remote preservation, esbuild bump.
 
 ---
 
@@ -166,9 +165,9 @@ BUILD_DIR centralization, source-mode runtime, HMAC recovery, error hardening, z
 
 Massive gradual typing effort removing all 89 @ts-nocheck directives and adding full type annotations across 67 files, race-condition batch 1 (atomic JSON writes, per-context in-flight flags, snapshot persist, sync engine lock ownership), across-the-board timeout hardening and leak fixes (withTimeout utility, subscribe orphan cleanup, consumer backoff watchdog, history page cap, master password limit), DRY refactoring extracting shared MCP/skill/test utilities (~460 lines removed), Claw HMAC recovery alignment with the main path, plus remaining audit cleanup (BUILD_DIR paths, fd leak, CEX rate limiting).
 
-### v0.7.18 → v1.0.0 (37 commits)
+### v0.7.18 → v1.0.0 (42 commits)
 
-First stable release. Startup profile schema validation and 5 config risk fixes, comprehensive logging system overhaul (write queue, rotation, JSON output, critical level, correlation IDs), AMA slope delta threshold computed from `maxSlopePct × deltaThresholdPct/100`, dashboard branch isolation, `--dryrun` flag for unlock launcher, final TS strict error sweep (54 remaining errors resolved), deferred race-condition items #9/#10/#13, on-chain authority resolution for signing key lookup via full account authority graph traversal, credential security hardening across 8 finding groups (C1, C2, H1-H4, M1/M4/M5, L1-L8), comprehensive centralization of project-root resolution / fs+math utilities / magic numbers with regression fixes applied during extraction, error-path fallback hardening replacing all remaining bare `.catch(() => {})` patterns, mainnet corpus generator for release validation, repo-wide net-lines chart in `analyze-git`, and a multi-wave stale-documentation cleanup across the entire docs tree including `.js→.ts` reference sweeps. Version bumped to 1.0.0.
+First stable release. Profile validation, logging overhaul, AMA delta threshold, on-chain authority resolution, credential hardening (8 finding groups), centralization of project-root/fs/math/magic-number utilities with regression fixes, error-path hardening, mainnet corpus generator, doc sweep. Post-release: docker context, root bypass, keep-alive recovery, phantom LP cleanup, AMA warning removal, chain client reconnect, git remote preservation, esbuild bump.
 
 ---
 
@@ -218,7 +217,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: June 14, 2026
-**Total Commits**: 1582
-**Date Range**: December 2, 2025 - June 14, 2026 (ongoing)
+**Last Updated**: June 15, 2026
+**Total Commits**: 1588
+**Date Range**: December 2, 2025 - June 15, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

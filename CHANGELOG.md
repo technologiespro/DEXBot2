@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [1.0.0] - 2026-06-14 - First Stable Release
 
-This release marks the project's first stable milestone. Includes 37 commits on top of 0.7.18: startup profile schema validation, a full logging system overhaul (write queue, rotation, JSON output, critical level, correlation IDs), AMA slope delta threshold from `maxSlopePct` × `deltaThresholdPct/100`, dashboard isolation to `dashboard-draft`, `--dryrun` flag for unlock launcher, `modules/README.md` for new-user orientation, final 54 TS strict error resolutions across test files, deferred race-condition items #9/#10/#13, on-chain authority resolution for signing key lookup, credential security hardening across 8 finding groups, comprehensive centralization of project-root resolution / fs+math utilities / magic numbers with regression fixing, error-path fallback hardening eliminating all silent catches, and a multi-wave stale-doc sweep (version numbers, test counts, broken links, default values, .js→.ts references).
+This release marks the project's first stable milestone. Includes 42 commits on top of 0.7.18: startup profile schema validation, a full logging system overhaul (write queue, rotation, JSON output, critical level, correlation IDs), AMA slope delta threshold from `maxSlopePct` × `deltaThresholdPct/100`, dashboard isolation to `dashboard-draft`, `--dryrun` flag for unlock launcher, `modules/README.md` for new-user orientation, final 54 TS strict error resolutions across test files, deferred race-condition items #9/#10/#13, on-chain authority resolution for signing key lookup, credential security hardening across 8 finding groups, comprehensive centralization of project-root resolution / fs+math utilities / magic numbers with regression fixing, error-path fallback hardening eliminating all silent catches, and a multi-wave stale-doc sweep (version numbers, test counts, broken links, default values, .js→.ts references). Post-release fixes add root credential file ownership bypass, transport keep-alive zombie connection recovery, phantom LP API method cleanup, stale AMA default-profile warning removal, read-only chain client API re-registration on reconnect, git remote preservation in the update script, and an esbuild security patch.
 
 ### 2026-06-14
 
@@ -40,6 +40,13 @@ This release marks the project's first stable milestone. Includes 37 commits on 
 - **Docs**: update test counts (188 `test_*.ts` files, 211 entries in `scripts/run-tests.ts`) and commit stats (1564) in `EVOLUTION.md` and `DEXBOT_COMPARISON.md`.
 - **Docs**: remove `Pre-DEXBot2` section from `EVOLUTION.md`.
 - **Fix**: tighten docker build context — add `dist`, `claw`, and `market_adapter/inputs/data` to `.dockerignore`; document `market_adapter/data` and `market_adapter/state` volume mounts in `Dockerfile` run comment (`dc70c40`).
+
+### 2026-06-15
+
+- **Fix**: resolve keep-alive zombie connections (3 consecutive failures trigger autoreconnect via `ws.close()`), replace static `BitShares.disconnect()` with `disconnectClient()` at 4 shutdown call sites to eliminate ~12 misleading WARN entries per day, remove phantom `get_liquidity_pools_by_assets` LP API call (non-existent in BitShares Core 7.0.2), remove stale "no market profile matches — will use built-in AMA defaults" validation warning with 5 unused helper functions, add `onStatusChange` handler for read-only chain client to null and re-register stale API IDs after transport reconnect, reduce STALE hour counter noise in market adapter output (`36e1a95`).
+- **Fix**: allow root to bypass credential file ownership check — `assertPrivatePathSecurity` now skips owner check when `currentUid === 0` so root can read non-root-owned `keys.json` without crashing; adds test coverage (`94d0c39`).
+- **Fix**: preserve existing git remote in update script — remove remote-overwrite logic that forced HTTPS even when SSH keys were configured, preventing `git fetch` hangs (`9d6343a`).
+- **Chore**: bump esbuild 0.28.0→0.28.1 (npm audit fix, GHSA-gv7w-rqvm-qjhr) and remove noisy root owner-bypass debugLog from `credential_runtime.ts` (`2c4e446`).
 
 ## [0.7.18] - 2026-06-11 - @ts-nocheck Removal, Type Annotations, Race-Condition Batch 1 & DRY Refactoring
 

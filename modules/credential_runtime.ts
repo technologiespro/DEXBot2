@@ -1,9 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-const Logger = require('./logger');
 const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const { ensureDir } = require('./utils/fs_utils');
-const runtimeLogger = new Logger('credential-runtime');
 
 interface RuntimeDirOptions {
     runtimeDir?: string;
@@ -28,12 +26,6 @@ interface PrivatePathOptions {
 const DEFAULT_RUNTIME_DIR_NAME = 'dexbot2';
 const DEFAULT_SOCKET_BASENAME = 'dexbot-cred-daemon.sock';
 const DEFAULT_READY_BASENAME = 'dexbot-cred-daemon.ready';
-
-function debugLog(message, err = null) {
-    const suffix = err && err.message ? `: ${err.message}` : '';
-    // NOTE: intentionally logs at error level for visibility in production logs
-    runtimeLogger.error(`[credential-runtime][debug] ${message}${suffix}`);
-}
 
 function getDexbotRoot() {
     const MODULE_DIR = path.dirname(__dirname);
@@ -142,10 +134,6 @@ function assertPrivatePathSecurity(filePath: string, options: PrivatePathOptions
         && typeof stat.uid === 'number' && stat.uid !== currentUid) {
         throw new Error(`Unexpected owner for ${filePath}; expected uid ${currentUid}, found ${stat.uid}`);
     }
-    if (currentUid === 0 && requireOwner && typeof stat.uid === 'number' && stat.uid !== 0) {
-        debugLog(`owner check bypassed for root on ${filePath} (owner=${stat.uid})`);
-    }
-
     if (Number.isInteger(requiredMode) && process.platform !== 'win32') {
         const mode = stat.mode & 0o777;
         if (mode !== requiredMode) {
