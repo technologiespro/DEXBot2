@@ -3,7 +3,7 @@
  * Sync DEXBot2-owned package/plugin manifest versions from root package.json.
  *
  * package.json has to remain the source of truth because npm requires a literal
- * JSON version field. Runtime code should read modules/constants.APP_VERSION.
+ * JSON version field.
  */
 
 const fs = require('fs');

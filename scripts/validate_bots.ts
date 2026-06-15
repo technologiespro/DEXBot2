@@ -3,13 +3,9 @@
 /**
  * Bot Configuration Validator
  *
- * Validates that both the template and live bot configuration files contain
- * all required fields for each bot entry. This is a health check to ensure
- * configurations are valid before being used by the system.
- *
- * Checks two files:
- * 1. examples/bots.json (JSONC template with comments)
- * 2. profiles/bots.json (live config, plain JSON)
+ * Validates that the live bot configuration file contains all required fields
+ * for each bot entry. This is a health check to ensure configurations are
+ * valid before being used by the system.
  *
  * Required fields for each bot: assetA, assetB, activeOrders, botFunds
  * Optional field: gridPrice (number | null | "ama"/"ama1".."ama4")
@@ -22,30 +18,9 @@ const fs = require('fs');
 const path = require('path');
 const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
 
-// Define paths to configuration files
-// cfgPath: Template file in examples folder (supports JSONC with comments)
-// livePath: Production file in profiles folder (plain JSON, no comments)
 const PARENT = path.dirname(__dirname);
 const ROOT = resolveProjectRoot(PARENT);
-const cfgPath = path.join(ROOT, 'examples', 'bots.json');
 const livePath = path.join(ROOT, 'profiles', 'bots.json');
-
-/**
- * stripComments: Remove JavaScript-style comments from JSON string
- *
- * JSONC (JSON with Comments) format is not standard JSON, but is commonly used
- * for configuration files. This helper strips block-style and line-style comments
- * so the text can be parsed by JSON.parse.
- *
- * @param {string} s - JSONC string potentially containing comments
- * @returns {string} - Cleaned JSON string ready for JSON.parse()
- */
-function stripComments(s: any) {
-  return s.replace(/\/\*(?:.|[\r\n])*?\*\//g, '')
-    .split('\n')
-    .map((l: any) => l.replace(/(^|\s*)\/\/.*/, ''))
-    .join('\n');
-}
 
 /**
  * checkConfig: Validate bot configuration entries
@@ -65,7 +40,7 @@ function stripComments(s: any) {
  * - Summary message if all bots are valid
  *
  * @param {Object} obj - Parsed configuration object (single bot or {bots: [...]})
- * @param {string} src - Source name for display (e.g., 'examples/bots.json')
+ * @param {string} src - Source name for display (e.g., 'profiles/bots.json')
  */
 function checkConfig(obj: any, src: any) {
   // Normalize: convert single bot to array format for uniform processing
@@ -116,29 +91,9 @@ function checkConfig(obj: any, src: any) {
 }
 
 /**
- * Validate Template Configuration
- *
- * The template file (examples/bots.json) is in JSONC format (JSON with Comments).
- * Comments are stripped before parsing to allow JSON.parse() to work correctly.
- * Any parse errors are caught and reported without stopping execution.
- */
-try {
-  if (fs.existsSync(cfgPath)) {
-    const rawCfg = fs.readFileSync(cfgPath, 'utf8');
-    // Strip JSONC comments before parsing as standard JSON
-    const cfg = JSON.parse(stripComments(rawCfg));
-    checkConfig(cfg, 'examples/bots.json (template, JSONC)');
-  } else {
-    console.warn(`template config not found, skipping: ${cfgPath}`);
-  }
-} catch (err: any) {
-  console.error('template config: parse error ->', err.message);
-}
-
-/**
  * Validate Live Configuration
  *
- * The live config (profiles/bots.json) is plain JSON without comments.
+ * The live config (profiles/bots.json) is plain JSON.
  * It's used at runtime, so it must be valid JSON.
  * Parse errors are caught and reported without stopping execution.
  */

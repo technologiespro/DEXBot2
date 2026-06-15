@@ -15,11 +15,11 @@ node dexbot update
 ```
 *Note: Protects your `profiles/` directory and logs all changes to `profiles/logs/update.log`.*
 
-### Fix Environment Paths
+### Create PM2 Bot Symlinks
 **File:** `create-bot-symlinks.sh`
-**Purpose:** Create convenience root-level symlinks to profile data.
+**Purpose:** Create PM2 ecosystem config symlinks for each bot in `profiles/bots.json`.
 ```bash
-# Creates logs -> profiles/logs and orders -> profiles/orders
+# Creates profiles/<bot-name>.config.js -> profiles/ecosystem.config.js for each bot
 bash scripts/create-bot-symlinks.sh
 ```
 
@@ -68,7 +68,7 @@ bash scripts/reset-settings.sh
 **File:** `validate_bots.ts`
 **Purpose:** Check `bots.json` for schema errors or missing required fields.
 ```bash
-# Validate both example and live bot configurations
+# Validate the live bot configuration
 tsx scripts/validate_bots.ts
 ```
 
@@ -121,7 +121,6 @@ npm run version:check
 # Rewrite aligned manifests from root package.json
 npm run version:sync
 ```
-**Reference:** Runtime code reads `APP_VERSION` from `modules/constants.ts`, which imports the root package version.
 
 ---
 
