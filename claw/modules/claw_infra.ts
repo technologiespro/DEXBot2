@@ -9,6 +9,7 @@ const credentialClient = require('./dexbot_credential_client');
 const { createHonestEcosystemAdapter } = require('./honest_ecosystem');
 const { loadDexbotOrderSubsystem } = require('./dexbot_bridge');
 const { createDexbotProfileAdapter } = require('./dexbot_profiles');
+const { createCreditRuntimeAdapter } = require('./credit_runtime_adapter');
 const { acquireFileLock } = require('../../market_adapter/utils/file_lock');
 const {
   createPositionManagerWatcher,
@@ -284,9 +285,14 @@ function createClawInfrastructure(options: ClawInfrastructureOptions = {}) {
   const profiles = createDexbotProfileAdapter(runtime.profileRoot, {
     logger: runtime.logger
   });
+  const creditRuntime = createCreditRuntimeAdapter(
+    { profiles, runtime },
+    { accountName: runtime.accountName || undefined, ...(options.creditRuntime || {}) }
+  );
   return {
     bitshares,
     credential,
+    creditRuntime,
     honest,
     profiles,
     market,

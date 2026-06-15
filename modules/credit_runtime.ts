@@ -276,6 +276,7 @@ class CreditRuntime {
     _loaded: boolean;
     _maintenanceInFlight: boolean;
     _watchdogInFlight: boolean;
+    _reborrowsInFlight: boolean;
 
     constructor(bot, options = {}) {
         this.bot = bot || {};
@@ -296,6 +297,7 @@ class CreditRuntime {
         this._loaded = false;
         this._maintenanceInFlight = false;
         this._watchdogInFlight = false;
+        this._reborrowsInFlight = false;
     }
 
     _createDefaultState() {
@@ -2292,84 +2294,91 @@ class CreditRuntime {
         if (!Array.isArray(this.state.pendingReborrows) || this.state.pendingReborrows.length === 0) {
             return { processed: 0, remaining: 0 };
         }
+        if (this._reborrowsInFlight) {
+            return { skipped: true, reason: 'reborrow processing already in flight' };
+        }
+        this._reborrowsInFlight = true;
 
-        const onChainDeals = await this._fetchBorrowerDeals();
-        const activeDealIds = new Set(onChainDeals.map((deal) => String(deal?.id)).filter(Boolean));
-        const nextQueue = [];
-        let processed = 0;
+        try {
+            const onChainDeals = await this._fetchBorrowerDeals();
+            const activeDealIds = new Set(onChainDeals.map((deal) => String(deal?.id)).filter(Boolean));
+            const nextQueue = [];
+            let processed = 0;
 
-        for (const request of this.state.pendingReborrows) {
-            if (!request?.offerId || (request.borrowAmount == null && request.collateralAmount == null)) {
-                continue;
-            }
-
-            const offer = await this._getOfferById(request.offerId);
-            // Resolve policy: prefer request.specificPolicy, fall back to current debtPolicy lending item
-            const requestPolicy = request.specificPolicy || (offer ? await this._resolveLendingPolicyForOffer(offer) : null);
-            if (!requestPolicy || !requestPolicy.autoReborrow) {
-                this.warn(`credit runtime: dropping pending reborrow for offer ${request.offerId}; autoReborrow disabled or policy missing`);
-                continue;
-            }
-
-            if (request.sourceDealId && activeDealIds.has(String(request.sourceDealId))) {
-                nextQueue.push({ ...request, reason: 'source deal still active on-chain' });
-                continue;
-            }
-
-            if (!offer || offer.enabled === false) {
-                const fallbackIds = await this._resolveFallbackAssetIds(requestPolicy, offer);
-                const fallback = fallbackIds.debtAssetId && fallbackIds.collateralAssetId
-                    ? await this._selectFallbackCreditOffer({
-                        debtAssetId: fallbackIds.debtAssetId,
-                        collateralAssetId: fallbackIds.collateralAssetId,
-                        policy: requestPolicy,
-                        borrowAmount: request.borrowAmount,
-                        collateralAmount: request.collateralAmount,
-                        autoRepay: request.autoRepay ?? false,
-                        pendingReleaseCollateralAmount: request.pendingReleaseCollateralAmount,
-                        excludeOfferId: request.offerId,
-                    })
-                    : null;
-                if (fallback) {
-                    try {
-                        this.warn(`credit runtime: fallback reborrow offer ${fallback.offer.id} selected for pending request after offer ${request.offerId} became unavailable`);
-                        await this.executeOperations([fallback.op], 'credit reborrow');
-                        processed++;
-                    } catch (err: any) {
-                        nextQueue.push({ ...request, reason: err.message });
-                    }
-                } else {
-                    nextQueue.push({ ...request, reason: offer ? 'offer disabled' : 'offer unavailable' });
+            for (const request of this.state.pendingReborrows) {
+                if (!request?.offerId || (request.borrowAmount == null && request.collateralAmount == null)) {
+                    continue;
                 }
-                continue;
+
+                const offer = await this._getOfferById(request.offerId);
+                const requestPolicy = request.specificPolicy || (offer ? await this._resolveLendingPolicyForOffer(offer) : null);
+                if (!requestPolicy || !requestPolicy.autoReborrow) {
+                    this.warn(`credit runtime: dropping pending reborrow for offer ${request.offerId}; autoReborrow disabled or policy missing`);
+                    continue;
+                }
+
+                if (request.sourceDealId && activeDealIds.has(String(request.sourceDealId))) {
+                    nextQueue.push({ ...request, reason: 'source deal still active on-chain' });
+                    continue;
+                }
+
+                if (!offer || offer.enabled === false) {
+                    const fallbackIds = await this._resolveFallbackAssetIds(requestPolicy, offer);
+                    const fallback = fallbackIds.debtAssetId && fallbackIds.collateralAssetId
+                        ? await this._selectFallbackCreditOffer({
+                            debtAssetId: fallbackIds.debtAssetId,
+                            collateralAssetId: fallbackIds.collateralAssetId,
+                            policy: requestPolicy,
+                            borrowAmount: request.borrowAmount,
+                            collateralAmount: request.collateralAmount,
+                            autoRepay: request.autoRepay ?? false,
+                            pendingReleaseCollateralAmount: request.pendingReleaseCollateralAmount,
+                            excludeOfferId: request.offerId,
+                        })
+                        : null;
+                    if (fallback) {
+                        try {
+                            this.warn(`credit runtime: fallback reborrow offer ${fallback.offer.id} selected for pending request after offer ${request.offerId} became unavailable`);
+                            await this.executeOperations([fallback.op], 'credit reborrow');
+                            processed++;
+                        } catch (err: any) {
+                            nextQueue.push({ ...request, reason: err.message });
+                        }
+                    } else {
+                        nextQueue.push({ ...request, reason: offer ? 'offer disabled' : 'offer unavailable' });
+                    }
+                    continue;
+                }
+
+                try {
+                    const acceptOp = await this.buildCreditOfferAcceptOperation({
+                        offer,
+                        borrowAmount: request.borrowAmount ?? null,
+                        collateralAmount: request.collateralAmount || null,
+                        autoRepay: request.autoRepay ?? false,
+                        specificPolicy: request.specificPolicy || requestPolicy,
+                        pendingReleaseCollateralAmount: request.pendingReleaseCollateralAmount,
+                    });
+                    await this.executeOperations([acceptOp], 'credit reborrow');
+                    processed++;
+                } catch (err: any) {
+                    nextQueue.push({ ...request, reason: err.message });
+                }
             }
 
-            try {
-                const acceptOp = await this.buildCreditOfferAcceptOperation({
-                    offer,
-                    borrowAmount: request.borrowAmount ?? null,
-                    collateralAmount: request.collateralAmount || null,
-                    autoRepay: request.autoRepay ?? false,
-                    specificPolicy: request.specificPolicy || requestPolicy,
-                    pendingReleaseCollateralAmount: request.pendingReleaseCollateralAmount,
-                });
-                await this.executeOperations([acceptOp], 'credit reborrow');
-                processed++;
-            } catch (err: any) {
-                nextQueue.push({ ...request, reason: err.message });
+            this.state.pendingReborrows = nextQueue;
+            this.state.reborrowPending = nextQueue.length > 0;
+            await this.refreshState();
+            let gridMaintenanceResult = null;
+            if (processed > 0) {
+                gridMaintenanceResult = await this._checkGridMaintenanceAfterCreditUpdate('credit capital update');
             }
-        }
+            await this.persistState('pending reborrows');
 
-        this.state.pendingReborrows = nextQueue;
-        this.state.reborrowPending = nextQueue.length > 0;
-        await this.refreshState();
-        let gridMaintenanceResult = null;
-        if (processed > 0) {
-            gridMaintenanceResult = await this._checkGridMaintenanceAfterCreditUpdate('credit capital update');
+            return { processed, remaining: nextQueue.length, gridMaintenanceResult };
+        } finally {
+            this._reborrowsInFlight = false;
         }
-        await this.persistState('pending reborrows');
-
-        return { processed, remaining: nextQueue.length, gridMaintenanceResult };
     }
 
     async _runMpaMaintenance(context: any, options: Record<string, any>, lendingItem, assetId) {
@@ -2492,7 +2501,7 @@ class CreditRuntime {
         const posState = this.state.positions[posKey];
         if (!posState) return null;
 
-        const activeDealIds = new Set((posState.creditDeals || []).map((d) => String(d?.id)).filter(Boolean));
+        let activeDealIds = new Set((posState.creditDeals || []).map((d) => String(d?.id)).filter(Boolean));
 
         for (const deal of (posState.creditDeals || [])) {
             if (!activeDealIds.has(String(deal?.id))) continue;
@@ -2523,7 +2532,14 @@ class CreditRuntime {
                         specificPolicy: lendingItem,
                         fillLockAlreadyHeld: runtimeContext?.options?.fillLockAlreadyHeld === true,
                     });
-                    activeDealIds.delete(String(deal.id));
+                    // repayCreditDeal calls refreshState() which mutates this.state.positions[posKey];
+                    // re-read from fresh state for subsequent loop iterations
+                    const refreshedPosState = this.state.positions[posKey];
+                    if (refreshedPosState && Array.isArray(refreshedPosState.creditDeals)) {
+                        activeDealIds = new Set(refreshedPosState.creditDeals.map((d) => String(d?.id)).filter(Boolean));
+                    } else {
+                        activeDealIds.delete(String(deal.id));
+                    }
                 } catch (err: any) {
                     this.warn(`credit runtime: proactive repay/reborrow for deal ${deal.id} failed: ${err.message}`);
                 }
@@ -2533,7 +2549,7 @@ class CreditRuntime {
         // Phase 2: Ensure auto_repay matches policy on existing deals
         const policyAutoRepay = resolveAutoRepayValue(lendingItem?.autoRepay);
         if (policyAutoRepay > 0) {
-            const currentDeals = posState.creditDeals || [];
+            const currentDeals = (this.state.positions[posKey]?.creditDeals) || [];
             for (const deal of currentDeals) {
                 if (resolveAutoRepayValue(deal.autoRepay) !== policyAutoRepay) {
                     try {

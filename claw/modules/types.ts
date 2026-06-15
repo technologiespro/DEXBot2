@@ -41,6 +41,11 @@ export interface BroadcastOptions {
     accountName?: string;
 }
 
+export interface CreditRuntimeAdapterOptions {
+    stateDir?: string;
+    accountName?: string;
+}
+
 export interface ClawInfrastructureOptions {
     runtime?: RuntimeContextOptions;
     stateStore?: StateStoreOptions;
@@ -49,6 +54,7 @@ export interface ClawInfrastructureOptions {
     credential?: CredentialClientOptions;
     bitshares?: BitsharesClientOptions;
     market?: Record<string, any>;
+    creditRuntime?: CreditRuntimeAdapterOptions;
 }
 
 export interface ClawBridgeOptions {

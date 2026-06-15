@@ -503,6 +503,67 @@ const CLAW_TOOL_CATALOG = Object.freeze([
     toolName: 'claw_mpa_position'
   }),
   createToolDefinition({
+    command: 'credit-runtime-status',
+    description: 'Return the credit/MPA runtime state snapshot for a bot (debt, collateral, CR, deals, pending reborrows)',
+    args: {
+      payload_json: 'JSON object with botRef (bot key or name)'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      botRef: stringSchema('Bot key or name as defined in profiles/bots.json')
+    }, ['botRef']),
+    toolName: 'claw_credit_runtime_status'
+  }),
+  createToolDefinition({
+    command: 'credit-runtime-refresh',
+    description: 'Force re-read of on-chain MPA call orders and credit deals for a bot, updating the runtime state snapshot',
+    risk: 'plan',
+    args: {
+      payload_json: 'JSON object with botRef (bot key or name)'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      botRef: stringSchema('Bot key or name as defined in profiles/bots.json')
+    }, ['botRef']),
+    toolName: 'claw_credit_runtime_refresh'
+  }),
+  payloadTool(
+    'JSON object with botRef (bot key or name)',
+    objectSchema({
+      botRef: stringSchema('Bot key or name as defined in profiles/bots.json')
+    }, ['botRef']),
+    {
+      command: 'credit-runtime-maintenance',
+      description: 'Run the full credit/MPA maintenance cycle for a bot (MPA CR adjustment, credit repay/reborrow, collateral bump, pending reborrows)',
+      risk: 'execute',
+      toolName: 'claw_credit_runtime_maintenance'
+    }
+  ),
+  payloadTool(
+    'JSON object with botRef (bot key or name)',
+    objectSchema({
+      botRef: stringSchema('Bot key or name as defined in profiles/bots.json')
+    }, ['botRef']),
+    {
+      command: 'credit-runtime-watchdog',
+      description: 'Run the credit watchdog cycle for a bot (proactive deal renewal, auto_repay enforcement, collateral monitoring)',
+      risk: 'execute',
+      toolName: 'claw_credit_runtime_watchdog'
+    }
+  ),
+  payloadTool(
+    'JSON object with botRef (bot key or name)',
+    objectSchema({
+      botRef: stringSchema('Bot key or name as defined in profiles/bots.json')
+    }, ['botRef']),
+    {
+      command: 'credit-runtime-reborrows',
+      description: 'Process the pending reborrow queue for a bot (repay + reborrow operations that were deferred)',
+      risk: 'execute',
+      toolName: 'claw_credit_runtime_reborrows'
+    }
+  ),
+  createToolDefinition({
     command: 'launcher-run',
     description: 'Start/run bots with auto-detected deployment mode. Modes: claw-only (daemon only), dexbot-direct (foreground testing), pm2 (production service), unlock (single-prompt, no PM2; legacy alias unlock-start accepted). Auto-detects mode from config or asks user on first call.',
     args: {

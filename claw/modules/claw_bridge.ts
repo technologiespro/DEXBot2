@@ -315,6 +315,36 @@ async function runClawCommand(command: string, options: ClawBridgeOptions = {}):
     case 'mpa-position':
       return getMpaPosition(safeOptions.accountName || safeOptions.accountRef || accountName, safeOptions.mpaAsset);
 
+    case 'credit-runtime-status':
+      return bridge.creditRuntime.getStatus(
+        safeOptions.botRef || safeOptions.identifier || null
+      );
+
+    case 'credit-runtime-refresh':
+      return bridge.creditRuntime.refresh(
+        safeOptions.botRef || safeOptions.identifier || null
+      );
+
+    case 'credit-runtime-maintenance':
+      return bridge.creditRuntime.runMaintenance(
+        safeOptions.botRef || safeOptions.identifier || null,
+        safeOptions.context || 'periodic',
+        safeOptions,
+        options.privateKey
+      );
+
+    case 'credit-runtime-watchdog':
+      return bridge.creditRuntime.runWatchdog(
+        safeOptions.botRef || safeOptions.identifier || null,
+        options.privateKey
+      );
+
+    case 'credit-runtime-reborrows':
+      return bridge.creditRuntime.processReborrows(
+        safeOptions.botRef || safeOptions.identifier || null,
+        options.privateKey
+      );
+
     case 'launcher-run':
       return launcherRun(safeOptions.botName || null, safeOptions);
 

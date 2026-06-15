@@ -8,6 +8,7 @@ const clawInfra = require('./modules/claw_infra');
 const clawManifest = require('./modules/claw_manifest');
 const clawRuntimeMatrix = require('./modules/claw_runtime_matrix');
 const clawSkillMd = require('./modules/claw_skill_md');
+const creditRuntimeAdapter = require('./modules/credit_runtime_adapter');
 const hermesManifest = require('./modules/hermes_manifest');
 const openclawManifest = require('./modules/openclaw_manifest');
 const openfangBridge = require('./modules/openfang_bridge');
@@ -46,6 +47,7 @@ export = {
   ...clawManifest,
   ...clawRuntimeMatrix,
   ...clawSkillMd,
+  ...creditRuntimeAdapter,
   ...hermesManifest,
   ...openclawManifest,
   ...openfangBridge,

@@ -9,6 +9,7 @@ const {
   resolveAccountId,
   resolveAccountName
 } = require('./chain_queries');
+const { requireBtsBackedMpa, CORE_SYMBOL } = require('./mpa_utils');
 
 const FILL_ORDER_OPERATION_TYPE = 4;
 const accountSubscriptions = new Map();
@@ -145,6 +146,9 @@ async function buildBorrowMpaOperation({
   if (!backingAsset) {
     throw new Error(`Could not resolve backing asset for ${mpaAsset}`);
   }
+  if (backingAsset.symbol !== CORE_SYMBOL) {
+    throw new Error(`${mpaAsset} is backed by ${backingAsset.symbol}, not ${CORE_SYMBOL}; use short_mpa_strategy for non-BTS MPAs`);
+  }
 
   const floatToBlockchainInt = getFloatToBlockchainInt();
   const debtInt = floatToBlockchainInt(debtDelta, mpaMeta.precision);
@@ -181,6 +185,14 @@ async function buildSettleMpaOperation({ accountName, mpaAsset, amount }: any) {
   const mpaMeta = await resolveAssetMeta(mpaAsset);
   if (!mpaMeta.bitasset_data_id) {
     throw new Error(`${mpaAsset} is not a market-issued asset`);
+  }
+
+  const backingAsset = await getBackingAsset(mpaAsset);
+  if (!backingAsset) {
+    throw new Error(`Could not resolve backing asset for ${mpaAsset}`);
+  }
+  if (backingAsset.symbol !== CORE_SYMBOL) {
+    throw new Error(`${mpaAsset} is backed by ${backingAsset.symbol}, not ${CORE_SYMBOL}`);
   }
 
   const floatToBlockchainInt = getFloatToBlockchainInt();

@@ -15,7 +15,7 @@ const DEFAULT_ORDERS_DIR = 'orders';
 
 const KNOWN_BOT_KEYS = new Set([
   'active', 'activeOrders', 'assetA', 'assetAId', 'assetB', 'assetBId',
-  'botFunds', 'dryRun', 'gridPrice',
+  'botFunds', 'debtPolicy', 'dryRun', 'gridPrice',
   'incrementPercent', 'maxPrice',
   'minPrice', 'name', 'preferredAccount', 'startPrice', 'strategy',
   'targetSpreadPercent', 'weightDistribution',
@@ -31,6 +31,7 @@ const BOT_SETTINGS_TRIGGER_KEYS = new Set([
   'assetB',
   'assetBId',
   'botFunds',
+  'debtPolicy',
   'dryRun',
   'gridPrice',
   'incrementPercent',
@@ -390,6 +391,32 @@ function validateBotSettingsValue(field: any, value: any, errors: any[]) {
         }
         if (!Number.isInteger(Number(sideValue)) || Number(sideValue) < 0) {
           push(`activeOrders.${side} must be an integer greater than or equal to 0`);
+        }
+      }
+      break;
+
+    case 'debtPolicy':
+      if (value !== undefined && value !== null && typeof value !== 'object') {
+        push('debtPolicy must be an object');
+        break;
+      }
+      if (value && typeof value === 'object') {
+        const lending = Array.isArray(value.lending) ? value.lending : [];
+        for (let i = 0; i < lending.length; i++) {
+          const item = lending[i];
+          if (!item || typeof item !== 'object') {
+            push(`debtPolicy.lending[${i}] must be an object`);
+            continue;
+          }
+          if (!item.type || !['mpa', 'creditOffer'].includes(item.type)) {
+            push(`debtPolicy.lending[${i}].type must be "mpa" or "creditOffer"`);
+          }
+          if (!item.collateralAsset || typeof item.collateralAsset !== 'string') {
+            push(`debtPolicy.lending[${i}].collateralAsset must be a non-empty string`);
+          }
+          if (!item.asset || typeof item.asset !== 'string') {
+            push(`debtPolicy.lending[${i}].asset must be a non-empty string`);
+          }
         }
       }
       break;
