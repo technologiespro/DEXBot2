@@ -140,8 +140,8 @@ async function testHonestEcosystem() {
 
   try {
     const bridge = ecosystem.getHardcodedHonestMoneyBridge();
-    const hardcodedPrice = ecosystem.resolveHardcodedHonestMoneyPrice('HONEST.MONEY', 'BTS');
-    const inversePrice = ecosystem.resolveHardcodedHonestMoneyPrice('BTS', 'HONEST.MONEY');
+    const hardcodedPrice = await ecosystem.resolveHardcodedHonestMoneyPrice('HONEST.MONEY', 'BTS');
+    const inversePrice = await ecosystem.resolveHardcodedHonestMoneyPrice('BTS', 'HONEST.MONEY');
 
     assert.ok(hardcodedPrice > 0);
     assert.ok(Math.abs(hardcodedPrice * inversePrice - 1) < 1e-12);
@@ -195,7 +195,7 @@ async function testHonestEcosystem() {
     assert.strictEqual(calls.getBackingAsset.includes(referenceAsset.id), true);
     assert.strictEqual(calls.getCallOrders.some((entry) => entry.assetId === honestUsd.id), true);
 
-    const bridgePair = ecosystem.resolveHardcodedHonestMoneyPrice(coreAsset, referenceAsset);
+    const bridgePair = await ecosystem.resolveHardcodedHonestMoneyPrice(coreAsset, referenceAsset);
     assert.ok(bridgePair > 0);
   } finally {
     cleanup();

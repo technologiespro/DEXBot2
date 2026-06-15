@@ -133,7 +133,7 @@ async function resolveHardcodedHonestMoneyPrice(assetA: any, assetB: any) {
 }
 
 async function resolveHonestPairPrice(assetA: any, assetB: any, options: Record<string, any> = {}) {
-  const hardcoded = resolveHardcodedHonestMoneyPrice(assetA, assetB);
+  const hardcoded = await resolveHardcodedHonestMoneyPrice(assetA, assetB);
   if (hardcoded !== null) {
     return hardcoded;
   }
