@@ -9,10 +9,6 @@ function normalizeBootstrapCredential(credential: any): any {
         return credential;
     }
 
-    if (typeof credential === 'string' && credential.length > 0) {
-        return chainKeys.unlockWithPassword(credential);
-    }
-
     throw new Error('Invalid bootstrap credential payload');
 }
 

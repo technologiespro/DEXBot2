@@ -344,3 +344,59 @@ accounts or after an unclean exit.
 | `delete process.env.DEXBOT_CRED_BOOTSTRAP_PATH_FILE` | Daemon startup | Bootstrap path cannot be inherited by child processes or read from /proc |
 | Attempt limit (3) + immediate exit | Interactive auth | Limits online brute-force window |
 | SHA-256 hash deleted after migration | Legacy vault upgrade | Weak verifier removed on first successful unlock |
+
+---
+
+### 8. Multi-sig / Authority Delegation
+
+The credential daemon can sign for accounts that are not directly stored in
+`keys.json` by walking on-chain authority structures. This is an **intended
+feature** of the authority resolver (`modules/authority_resolver.ts`), but it
+has security implications that every operator should understand.
+
+#### How it works
+
+When a signing request arrives for an account with no direct key in the vault,
+`resolvePrivateKey` fetches the account's active authority from the chain and
+checks:
+
+1. **Direct key lookup** — does `keys.json` have a key for this account?
+2. **`account_auths`** — does another account (referenced in the active
+   authority, recursive up to depth 2) have a stored key whose weight
+   individually meets the threshold?
+3. **`key_auths`** — does any stored private key produce a public key that
+   matches an entry in the key auth list (again, weight must individually meet
+   the threshold)?
+
+#### Blast radius
+
+If you store **account A**'s key, and **account B** lists A (or A's key) in its
+`account_auths` / `key_auths` with sufficient weight:
+
+- The daemon can sign operations for **account B** even though B's key was never
+  added to `keys.json`.
+- This also applies transitively: if B is in C's `account_auths`, the daemon
+  can sign for C (depth ≤ 2).
+- The same HMAC session / policy enforcement rules apply to these
+  authority-resolved accounts.
+
+#### Limitations
+
+- Only single-authority entries whose individual weight meets the full
+  `weight_threshold` are supported. BitShares multi-signature (combining
+  multiple entries to cross the threshold) is **not** supported and produces
+  an explicit error.
+- Recursion is capped at depth 2 to prevent infinite loops from cyclic
+  authority graphs.
+
+#### Operational guidance
+
+- Review the `account_auths` and `key_auths` of all accounts that have keys
+  in your vault, and of accounts they reference. A stored key may grant signing
+  authority to accounts you did not expect.
+- If you want to restrict which accounts the daemon can sign for, enforce this
+  at the policy layer (`daemon-policies.json` per-account policies) rather than
+  relying on key absence.
+- Removing an account from `keys.json` does **not** revoke authority if another
+  stored key still reaches the account through `account_auths` or `key_auths`.
+  Consider the full authority graph when rotating keys.

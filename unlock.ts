@@ -43,6 +43,7 @@ const { getCredentialReadyFilePath, getCredentialSocketPath } = require('./modul
 const foreignCredDaemon = require('./modules/launcher/foreign_cred_daemon');
 const { normalizeBotEntry, resolveRawBotEntries, loadSettingsFile } = require('./modules/bot_settings');
 const chainKeys = require('./modules/chain_keys');
+const credentialPolicy = require('./modules/credential_policy');
 const { ensureDir, readJSON, safeUnlink, writeJSON } = require('./modules/utils/fs_utils');
 
 const CODE_ROOT = __dirname;
@@ -866,6 +867,9 @@ function isLikelyAdapterProcessRunning(): boolean {
  * @returns {Promise<void>}
  */
 async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRACE_MS } = {}) {
+    if (typeof chainKeys.checkKeysFileSecurity === 'function') chainKeys.checkKeysFileSecurity();
+    if (typeof credentialPolicy.checkPolicyFileSecurity === 'function') credentialPolicy.checkPolicyFileSecurity(path.join(ROOT, 'profiles', 'daemon-policies.json'));
+
     const parsed = parseUnlockArgs(argv);
     const isDetachedSupervisorChild = process.env.DEXBOT_ISOLATED_CHILD === '1';
     const forceForegroundIsolated = process.env.DEXBOT_ISOLATED_FOREGROUND === '1';

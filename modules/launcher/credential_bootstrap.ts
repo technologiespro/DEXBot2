@@ -4,6 +4,7 @@ const os = require('os');
 const path = require('path');
 const { TIMING } = require('../constants');
 const { safeUnlink } = require('../utils/fs_utils');
+const { assertPrivatePathSecurity } = require('../credential_runtime');
 
 const BOOTSTRAP_SOCKET_PREFIX = 'dexbot-cred-bootstrap-';
 const DEFAULT_TIMEOUT_MS = TIMING.DAEMON_STARTUP_TIMEOUT_MS;
@@ -84,8 +85,9 @@ async function createBootstrapSocketDir() {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), BOOTSTRAP_SOCKET_PREFIX));
     try {
         fs.chmodSync(dir, 0o700);
+        assertPrivatePathSecurity(dir, { expectedType: 'dir', requiredMode: 0o700 });
     } catch (err: any) {
-        debugLog(`Unable to chmod bootstrap dir ${dir}`, err);
+        debugLog(`Unable to secure bootstrap dir ${dir}`, err);
     }
     return dir;
 }
@@ -301,9 +303,6 @@ async function createPasswordBootstrapServer({
 
     return {
         socketPath,
-        credentialEnv: {
-            DEXBOT_CRED_BOOTSTRAP_SOCKET: socketPath,
-        },
         close: cleanup,
         waitForTransfer: () => transferPromise.finally(() => cleanup()),
     };

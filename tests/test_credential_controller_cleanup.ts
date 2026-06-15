@@ -41,7 +41,7 @@ function installStubs() {
 
     setCachedModule(bootstrapPath, {
         createPasswordBootstrapServer: async () => ({
-            credentialEnv: { DEXBOT_CRED_BOOTSTRAP_SOCKET: '/tmp/bootstrap.sock' },
+            socketPath: '/tmp/bootstrap.sock',
             close: () => {},
             waitForTransfer: async () => {},
         }),
@@ -102,7 +102,10 @@ const { createCredentialDaemonController } = require('../modules/launcher/creden
         assert.deepStrictEqual(state.killSignals, ['SIGTERM'], 'controller should terminate the daemon it owns');
         assert.ok(elapsed < 1000, `cleanup should resolve quickly after daemon exit, elapsed=${elapsed}ms`);
         assert.strictEqual(state.spawnOptions[0].env.TEST_DAEMON_SECRET, undefined, 'credential daemon controller should not forward arbitrary parent secrets');
-        assert.strictEqual(state.spawnOptions[0].env.DEXBOT_CRED_BOOTSTRAP_SOCKET, '/tmp/bootstrap.sock', 'credential daemon controller should keep explicit bootstrap env');
+        assert.strictEqual(state.spawnOptions[0].env.DEXBOT_CRED_BOOTSTRAP_SOCKET, undefined, 'credential daemon controller should not pass bootstrap socket env');
+        assert.ok(state.spawnOptions[0].env.DEXBOT_CRED_BOOTSTRAP_PATH_FILE, 'credential daemon controller should pass bootstrap path file');
+        assert.ok(state.spawnOptions[0].env.DEXBOT_CRED_DAEMON_SOCKET, 'credential daemon controller should pass daemon socket path');
+        assert.ok(state.spawnOptions[0].env.DEXBOT_CRED_DAEMON_READY_FILE, 'credential daemon controller should pass daemon ready file path');
 
         console.log('credential controller cleanup tests passed');
         process.exit(0);

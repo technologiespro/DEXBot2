@@ -86,11 +86,30 @@ function createCredentialDaemonController({
             scriptSegments: ['credential-daemon'],
         });
 
+        // Write the bootstrap socket path to a stable file in the runtime dir
+        // so the credential daemon can find it via DEXBOT_CRED_BOOTSTRAP_PATH_FILE
+        // instead of a PM2-persistable env var.
+        const bootstrapPathFile = path.join(path.dirname(socketPath), '.dexbot-cred-bootstrap-path');
+        try {
+            fs.writeFileSync(bootstrapPathFile, bootstrap.socketPath, { mode: 0o600 });
+        } catch (err: any) {
+            bootstrap.close();
+            throw new Error(
+                `Cannot write bootstrap path file at ${bootstrapPathFile}: ${err.message}`
+            );
+        }
+
         try {
             const childStdio: StdioOptions = stdioOption ?? (detached ? 'ignore' : 'inherit');
             daemonProcess = spawn(process.execPath, daemonArgs, {
                 cwd: root,
-                env: buildScopedChildEnv({ extra: bootstrap.credentialEnv }),
+                env: buildScopedChildEnv({
+                    extra: {
+                        DEXBOT_CRED_DAEMON_SOCKET: socketPath,
+                        DEXBOT_CRED_DAEMON_READY_FILE: readyFilePath,
+                        DEXBOT_CRED_BOOTSTRAP_PATH_FILE: bootstrapPathFile,
+                    },
+                }),
                 stdio: childStdio,
                 detached,
             });

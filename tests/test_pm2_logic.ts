@@ -54,7 +54,7 @@ assert.deepStrictEqual(
 
 const credentialApp = buildCredentialDaemonApp({
     credentialEnv: {
-        DEXBOT_CRED_BOOTSTRAP_SOCKET: '/tmp/test-bootstrap.sock',
+        DEXBOT_CRED_BOOTSTRAP_PATH_FILE: '/tmp/test-bootstrap-path',
     },
 });
 assert.deepStrictEqual(
@@ -62,7 +62,7 @@ assert.deepStrictEqual(
     {
         DEXBOT_CRED_DAEMON_SOCKET: credentialApp.env.DEXBOT_CRED_DAEMON_SOCKET,
         DEXBOT_CRED_DAEMON_READY_FILE: credentialApp.env.DEXBOT_CRED_DAEMON_READY_FILE,
-        DEXBOT_CRED_BOOTSTRAP_SOCKET: '/tmp/test-bootstrap.sock',
+        DEXBOT_CRED_BOOTSTRAP_PATH_FILE: '/tmp/test-bootstrap-path',
     },
     'credential bootstrap env should only be attached to dexbot-cred'
 );
@@ -70,12 +70,12 @@ assert.strictEqual(credentialApp.autorestart, false, 'credential daemon should r
 assert.strictEqual(credentialApp.merge_logs, false, 'credential daemon should use the same merge_logs setting as managed apps');
 assert.strictEqual(credentialApp.combine_logs, true, 'credential daemon should use the same combine_logs setting as managed apps');
 process.env.TEST_PM2_SECRET = 'should-not-leak';
-const scopedEnv = buildScopedChildEnv({ extra: { DEXBOT_CRED_BOOTSTRAP_SOCKET: '/tmp/test-bootstrap.sock' } });
+const scopedEnv = buildScopedChildEnv({ extra: { DEXBOT_CRED_BOOTSTRAP_PATH_FILE: '/tmp/test-bootstrap-path' } });
 delete process.env.TEST_PM2_SECRET;
 assert.strictEqual(scopedEnv.TEST_PM2_SECRET, undefined, 'scoped child env should not forward arbitrary parent secrets');
-assert.strictEqual(scopedEnv.DEXBOT_CRED_BOOTSTRAP_SOCKET, '/tmp/test-bootstrap.sock', 'scoped child env should keep explicit launcher extras');
+assert.strictEqual(scopedEnv.DEXBOT_CRED_BOOTSTRAP_PATH_FILE, '/tmp/test-bootstrap-path', 'scoped child env should keep explicit launcher extras');
 assert.strictEqual(
-    buildEcosystemApps([{ name: 'XRP-BTS' }], { includeUpdater: false, credentialEnv: { SECRET: 'scoped' } })
+    buildEcosystemApps([{ name: 'XRP-BTS' }], { includeUpdater: false, credentialEnv: { DEXBOT_CRED_BOOTSTRAP_PATH_FILE: '/tmp/test-bootstrap-path' } })
         .find((app) => app.name === 'XRP-BTS').env,
     undefined,
     'bot apps should not receive credential bootstrap env'

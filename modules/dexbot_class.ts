@@ -5245,6 +5245,12 @@ class DEXBot {
             `avgProcessingTime=${metrics.fillsProcessed > 0 ? Format.formatMetric2(metrics.fillProcessingTimeMs / metrics.fillsProcessed) : 0}ms, ` +
             `lockContentions=${metrics.lockContentionEvents}, maxQueueDepth=${metrics.maxQueueDepth}`);
 
+        // Drop botHmacSecret reference from the signing token (V8 string cannot
+        // be zeroed in place, but dropping the reference allows GC to reclaim it).
+        if (this.privateKey && chainKeys.isDaemonSigningToken(this.privateKey)) {
+            this.privateKey.botHmacSecret = null;
+        }
+
         await this.manager?.logger?.flush();
     }
 }

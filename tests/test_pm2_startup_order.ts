@@ -94,9 +94,6 @@ const { startManagedRuntimePM2 } = require('../pm2');
         const bootstrapSocketPath = '/tmp/test-bootstrap.sock';
         const bootstrap = {
             socketPath: bootstrapSocketPath,
-            credentialEnv: {
-                DEXBOT_CRED_BOOTSTRAP_SOCKET: bootstrapSocketPath,
-            },
             waitForTransfer: async () => {
                 events.push('wait-transfer-start');
                 await new Promise((resolve) => setTimeout(resolve, 10));

@@ -75,9 +75,6 @@ function installStubs() {
     setCachedModule(bootstrapPath, {
         createPasswordBootstrapServer: async () => ({
             socketPath: '/tmp/bootstrap.sock',
-            credentialEnv: {
-                DEXBOT_CRED_BOOTSTRAP_SOCKET: '/tmp/bootstrap.sock',
-            },
             close() {},
             waitForTransfer: async () => {},
         }),

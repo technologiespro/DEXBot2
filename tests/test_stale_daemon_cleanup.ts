@@ -106,7 +106,7 @@ function makeMockChild() {
         const bootstrapPath = require.resolve('../modules/launcher/credential_bootstrap');
         const originalBootstrapModule = setCachedModule(bootstrapPath, {
             createPasswordBootstrapServer: async () => ({
-                credentialEnv: { DEXBOT_CRED_BOOTSTRAP_SOCKET: '/tmp/test-bootstrap.sock' },
+                socketPath: '/tmp/test-bootstrap.sock',
                 close() {},
                 waitForTransfer: async () => {},
             }),

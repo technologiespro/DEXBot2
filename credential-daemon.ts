@@ -79,7 +79,6 @@ let _nativeNodeList: any[] = [];
 const native = require('./modules/bitshares-native');
 _nativeChainClient = native.createChainClient({ rpcTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS, connectTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS });
 _nativeNodeList = [];
-const { execSync } = require('child_process');
 const {
     assertPrivatePathSecurity,
     ensureCredentialRuntimeDirSync,
@@ -200,28 +199,23 @@ function performAuditLogPrune() {
             return;
         }
 
-        fs.readFile(auditLogPath, 'utf8', (err: any, data: any) => {
-            if (err || !data.trim()) {
+        try {
+            const stat = fs.statSync(auditLogPath);
+            const perFileLimit = Math.floor(TIMING.AUDIT_LOG_MAX_SIZE / (TIMING.AUDIT_LOG_MAX_FILES + 1));
+            if (stat.size >= perFileLimit) {
+                for (let i = TIMING.AUDIT_LOG_MAX_FILES - 1; i >= 1; i--) {
+                    const oldPath = auditLogPath + '.' + i;
+                    const newPath = auditLogPath + '.' + (i + 1);
+                    try { if (fs.existsSync(oldPath)) fs.renameSync(oldPath, newPath); } catch (err: any) { debugLog('Audit log rotation rename failed', err); }
+                }
+                try { if (fs.existsSync(auditLogPath)) fs.renameSync(auditLogPath, auditLogPath + '.1'); } catch (err: any) { debugLog('Audit log rotation rename failed', err); }
                 resolve();
                 return;
             }
-
-            const cutoff = Date.now() - TIMING.AUDIT_LOG_RETENTION_MS;
-            const lines = data.split('\n').filter((line: string) => {
-                if (!line.trim()) return false;
-                try {
-                    const entry = JSON.parse(line);
-                    return new Date(entry.timestamp).getTime() > cutoff;
-                } catch {
-                    return false;
-                }
-            });
-
-            fs.writeFile(auditLogPath, lines.join('\n') + '\n', (writeErr: any) => {
-                if (writeErr) debugLog('Audit log prune failed', writeErr);
-                resolve();
-            });
-        });
+        } catch (err: any) {
+            debugLog('Audit log size check failed', err);
+        }
+        resolve();
     });
 }
 
@@ -253,8 +247,7 @@ async function resolveVaultSecret() {
     // The launcher writes the one-shot bootstrap socket path to this file
     // before starting the daemon.  We read it, connect, get the secret,
     // and delete the file.  Future restarts will not find the file and
-    // will fall through to the env-var path below (which will also be
-    // absent, landing on interactive auth).
+    // will fall through to interactive auth.
     const bootstrapPathFile = process.env.DEXBOT_CRED_BOOTSTRAP_PATH_FILE;
     if (bootstrapPathFile) {
         try {
@@ -285,41 +278,6 @@ async function resolveVaultSecret() {
             );
         }
         delete process.env.DEXBOT_CRED_BOOTSTRAP_PATH_FILE;
-    }
-
-    const bootstrapSocket = process.env.DEXBOT_CRED_BOOTSTRAP_SOCKET;
-    delete process.env.DEXBOT_CRED_BOOTSTRAP_SOCKET;
-
-    if (bootstrapSocket) {
-        daemonLogger.log?.(`[credential-daemon] Resolving vault secret from one-shot bootstrap socket: ${bootstrapSocket}`);
-        try {
-            const secret = await fetchBootstrapPassword({ socketPath: bootstrapSocket, retries: 2 });
-            daemonLogger.log?.('[credential-daemon] Bootstrap secret transfer completed');
-            return normalizeBootstrapCredential(secret);
-        } catch (err: any) {
-            daemonLogger.error(
-                `[credential-daemon] Bootstrap secret transfer failed: ${err.message}.`
-            );
-            if (!process.stdin || !process.stdin.isTTY) {
-                // Stale DEXBOT_CRED_BOOTSTRAP_SOCKET persisted by PM2 from a
-                // previous launcher run.  Delete the PM2 app entry to stop the
-                // restart loop, then exit.
-                daemonLogger.error(
-                    '[credential-daemon] No TTY available for interactive fallback. ' +
-                    'Removing stale PM2 app entry to stop restart loop.'
-                );
-                try {
-                    execSync('pm2 delete dexbot-cred', { stdio: 'ignore', timeout: 5000 });
-                } catch (_) {
-                    // pm2 may not be installed or already deleted — proceed
-                }
-                daemonLogger.error(
-                    '[credential-daemon] Restart the unlock flow with: node pm2 restart dexbot-cred'
-                );
-                process.exit(1);
-            }
-            daemonLogger.log?.('[credential-daemon] Falling back to interactive authentication.');
-        }
     }
 
     daemonLogger.log?.('[credential-daemon] Resolving vault secret from interactive authentication');

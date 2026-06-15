@@ -196,7 +196,8 @@ let TIMING = {
     FILL_RECORD_RETENTION_MS: 7 * 24 * 60 * 60 * 1000, // 7 days - how long to keep persisted fill records (was 1h, increased to close double-credit window on restarts >1h apart)
     PROCESSED_FILL_PERSIST_BATCH_MS: 250, // 250ms - coalesce processed-fill persistence writes under burst load
     PROCESSED_FILL_PERSIST_BATCH_SIZE: 25, // Flush immediately once this many processed fills are queued
-    AUDIT_LOG_RETENTION_MS: 7 * 24 * 60 * 60 * 1000, // 7 days - retention window for daemon audit logs
+    AUDIT_LOG_MAX_SIZE: 100 * 1024 * 1024,  // 100 MB total disk budget for audit logs (current + rotated)
+    AUDIT_LOG_MAX_FILES: 5,                 // number of rotated audit log files to retain
 
     // Order locking timing
     // Reduced from 30s to 10s to prevent lock-based starvation under high fill rates.

@@ -410,6 +410,9 @@ async function assertActiveBotTarget(target: any) {
  * @returns {Promise<void>}
  */
 async function main({ botNameFilter = null, clawOnly = false } = {}) {
+    if (typeof chainKeys.checkKeysFileSecurity === 'function') chainKeys.checkKeysFileSecurity();
+    if (typeof credentialPolicy.checkPolicyFileSecurity === 'function') credentialPolicy.checkPolicyFileSecurity(path.join(ROOT, 'profiles', 'daemon-policies.json'));
+
     console.log('='.repeat(50));
     console.log('DEXBot2 PM2 Launcher');
     if (clawOnly) {

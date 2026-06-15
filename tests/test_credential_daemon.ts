@@ -79,16 +79,16 @@ async function testBootstrapPasswordTransfer() {
     }
 
     try {
-        assert.ok(fs.existsSync(bootstrap.credentialEnv.DEXBOT_CRED_BOOTSTRAP_SOCKET), 'bootstrap socket should exist before transfer');
+        assert.ok(fs.existsSync(bootstrap.socketPath), 'bootstrap socket should exist before transfer');
 
         const password = await fetchBootstrapPassword({
-            socketPath: bootstrap.credentialEnv.DEXBOT_CRED_BOOTSTRAP_SOCKET,
+            socketPath: bootstrap.socketPath,
             timeoutMs: 1000,
         });
 
         assert.strictEqual(password, 'test-secret', 'bootstrap client should receive the original password');
         await bootstrap.waitForTransfer();
-        assert.ok(!fs.existsSync(bootstrap.credentialEnv.DEXBOT_CRED_BOOTSTRAP_SOCKET), 'bootstrap socket should be removed after transfer');
+        assert.ok(!fs.existsSync(bootstrap.socketPath), 'bootstrap socket should be removed after transfer');
     } finally {
         if (bootstrap) bootstrap.close();
     }
@@ -114,7 +114,7 @@ async function testBootstrapSecretTransfer() {
 
     try {
         const response = await fetchBootstrapPassword({
-            socketPath: bootstrap.credentialEnv.DEXBOT_CRED_BOOTSTRAP_SOCKET,
+            socketPath: bootstrap.socketPath,
             timeoutMs: 1000,
         });
 
@@ -157,26 +157,6 @@ async function testStaleBootstrapDirsAreCleanedBeforeNewServer() {
     }
 }
 
-function testNormalizeBootstrapCredentialAcceptsLegacyPassword() {
-    const secret = { kind: 'dexbot-vault-secret', vaultKeyHex: 'abc123' };
-    let unlockArg = null;
-    const { credentialSecret, restore } = loadCredentialSecretWithStubbedChainKeys({
-        isVaultSecret: () => false,
-        unlockWithPassword: (password) => {
-            unlockArg = password;
-            return secret;
-        },
-    });
-
-    try {
-        const normalized = credentialSecret.normalizeBootstrapCredential('legacy-password');
-        assert.strictEqual(unlockArg, 'legacy-password', 'legacy bootstrap passwords should be upgraded through unlockWithPassword');
-        assert.deepStrictEqual(normalized, secret, 'legacy bootstrap passwords should produce a usable vault secret');
-    } finally {
-        restore();
-    }
-}
-
 function testNormalizeBootstrapCredentialKeepsDerivedSecret() {
     const secret = { kind: 'dexbot-vault-secret', vaultKeyHex: 'abc123' };
     let unlockCalled = false;
@@ -202,7 +182,6 @@ function testNormalizeBootstrapCredentialKeepsDerivedSecret() {
     await testBootstrapPasswordTransfer();
     await testBootstrapSecretTransfer();
     await testStaleBootstrapDirsAreCleanedBeforeNewServer();
-    testNormalizeBootstrapCredentialAcceptsLegacyPassword();
     testNormalizeBootstrapCredentialKeepsDerivedSecret();
     console.log('credential daemon tests passed');
     process.exit(0);
