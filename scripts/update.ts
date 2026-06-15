@@ -216,13 +216,10 @@ try {
      * Updates URL if it differs, or adds origin remote if missing
      */
     try {
-        const currentRemote = execSync('git remote get-url origin').toString().trim();
-        if (currentRemote !== repoUrl) {
-            log(`Updating origin URL to: ${repoUrl}`);
-            run(`git remote set-url origin ${repoUrl}`);
-        }
+        const currentRemote = execSync('git remote get-url origin', { stdio: 'pipe' }).toString().trim();
+        log(`Remote origin already configured (${currentRemote}). Keeping existing remote.`);
     } catch (e) {
-        // Remote doesn't exist, add it
+        // Remote doesn't exist, add it from config
         log(`Adding origin remote: ${repoUrl}`);
         run(`git remote add origin ${repoUrl}`);
     }
