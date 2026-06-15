@@ -83,6 +83,18 @@ const BUILTIN_DEFAULT_POLICY = Object.freeze({
 const policyCache = new Map();
 const assetRefResolutionCache = new Map();
 
+type AssetResolver = (assetRef: string) => Promise<string | null>;
+let _externalAssetResolver: AssetResolver | null = null;
+
+/**
+ * Register an external asset-ref resolver used by the credential daemon.
+ * The daemon's native chain client is connected and can resolve symbol names,
+ * whereas the global BitShares object may not be initialised in daemon context.
+ */
+function setExternalAssetResolver(resolver: AssetResolver | null): void {
+    _externalAssetResolver = resolver;
+}
+
 async function resolveAssetRefToId(assetRef: string): Promise<string | null> {
     if (!assetRef || typeof assetRef !== 'string') return null;
     const cacheKey = String(assetRef);
@@ -91,6 +103,25 @@ async function resolveAssetRefToId(assetRef: string): Promise<string | null> {
     }
 
     let resolvedId = null;
+
+    // Try external resolver first (credential daemon with native chain client).
+    // Only registered by the daemon; the legacy bot process path never sets one.
+    // If it fails (e.g. native client not yet connected), fall through to the
+    // legacy BitShares path below.
+    if (_externalAssetResolver) {
+        try {
+            const result = await _externalAssetResolver(cacheKey);
+            if (result) {
+                assetRefResolutionCache.set(cacheKey, result);
+                return result;
+            }
+        } catch (_: any) {
+            // fall through — native client may not be connected yet
+        }
+        // Don't cache null from external resolver; the native client may not
+        // be connected yet and would have returned a transient failure.
+    }
+
     try {
         if (ASSET_OBJECT_ID_PATTERN.test(cacheKey)) {
             resolvedId = cacheKey;
@@ -107,7 +138,7 @@ async function resolveAssetRefToId(assetRef: string): Promise<string | null> {
         resolvedId = null;
     }
 
-    assetRefResolutionCache.set(cacheKey, resolvedId);
+    if (resolvedId) assetRefResolutionCache.set(cacheKey, resolvedId);
     return resolvedId;
 }
 
@@ -1530,4 +1561,5 @@ export = {
     evaluatePolicy,
     verifySourceHmac,
     loadBotHmacSecret,
+    setExternalAssetResolver,
 };

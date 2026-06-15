@@ -78,6 +78,26 @@ let _nativeNodeList: any[] = [];
 
 const native = require('./modules/bitshares-native');
 _nativeChainClient = native.createChainClient({ rpcTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS, connectTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS });
+
+// Register asset-ref resolver so the credential policy can resolve symbol
+// names (e.g. "BTS" -> "1.3.0") using the native chain client instead of
+// the legacy global BitShares object (which is not initialised in daemon
+// context).
+const assetResolver = async (assetRef: string): Promise<string | null> => {
+    try {
+        if (_nativeChainClient.getStatus() !== 'connected') {
+            _nativeChainClient.setNodes(_nativeNodeList.length > 0 ? _nativeNodeList : NODE_MANAGEMENT.DEFAULT_NODES);
+            await _nativeChainClient.connect();
+        }
+        const result = await _nativeChainClient.db.lookup_asset_symbols([assetRef]);
+        const asset = Array.isArray(result) ? result[0] : null;
+        return asset?.id ? String(asset.id) : null;
+    } catch (_: any) {
+        return null;
+    }
+};
+credentialPolicy.setExternalAssetResolver(assetResolver);
+
 _nativeNodeList = [];
 const {
     assertPrivatePathSecurity,
@@ -482,6 +502,10 @@ async function initialize() {
         // bitshares_client.ts so both stay aligned.
         const settings = readGeneralSettings({ fallback: null });
         refreshNodeList();
+
+        // Fire-and-forget connect so the asset resolver works on first request
+        _nativeChainClient.setNodes(_nativeNodeList.length > 0 ? _nativeNodeList : NODE_MANAGEMENT.DEFAULT_NODES);
+        _nativeChainClient.connect().catch(() => {});
 
         // Lightweight node list refresh from the health cache. This is separate
         // from updater schedules and does not run active node probes.
