@@ -41,36 +41,6 @@ async function findPoolByAssets(assetAId: any, assetBId: any, options: any = {})
         }
     }
 
-    if (typeof BitShares.db?.get_liquidity_pools_by_assets === 'function') {
-        try {
-            const pools = await BitShares.db.get_liquidity_pools_by_assets(assetAId, assetBId, 10, false);
-            if (Array.isArray(pools) && pools.length > 0) {
-                if (sortBy === 'assetABalance') {
-                    const idAStr = String(assetAId);
-                    return pools.sort((a: any, b: any) => {
-                        const bal = (p: any) => {
-                            const assetA = String(p.asset_a ?? p.asset_ids?.[0] ?? '');
-                            const assetB = String(p.asset_b ?? p.asset_ids?.[1] ?? '');
-                            const value = assetA === idAStr
-                                ? Number(p.balance_a)
-                                : assetB === idAStr
-                                    ? Number(p.balance_b)
-                                    : Number.NEGATIVE_INFINITY;
-                            return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
-                        };
-                        return bal(b) - bal(a);
-                    })[0];
-                }
-                return pools.sort((x: any, y: any) => {
-                    const bal = (p: any) => Number(p.balance_a ?? 0) + Number(p.balance_b ?? 0);
-                    return bal(y) - bal(x);
-                })[0];
-            }
-        } catch (_: any) {
-            console.warn(`[chain] get_liquidity_pools_by_assets failed for ${assetAId}/${assetBId}`);
-        }
-    }
-
     const listFn = BitShares.db?.list_liquidity_pools ?? BitShares.db?.get_liquidity_pools;
     if (typeof listFn === 'function') {
         let startId = '1.19.0';

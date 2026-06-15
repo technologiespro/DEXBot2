@@ -239,6 +239,23 @@ function parseWsFrame(chunk) {
     return { opcode, payload };
 }
 
+function sendWsFrameRaw(socket: any, opcode: number, payload: Buffer) {
+    const finOpcode = 0x80 | opcode;
+    let header: Buffer;
+    if (payload.length < 126) {
+        header = Buffer.from([finOpcode, payload.length]);
+    } else if (payload.length < 65536) {
+        header = Buffer.alloc(4);
+        header[0] = finOpcode; header[1] = 126;
+        header.writeUInt16BE(payload.length, 2);
+    } else {
+        header = Buffer.alloc(10);
+        header[0] = finOpcode; header[1] = 127;
+        header.writeBigUInt64BE(BigInt(payload.length), 2);
+    }
+    socket.write(Buffer.concat([header, payload]));
+}
+
 function sendWsFrame(socket, data) {
     const payload = Buffer.from(data, 'utf8');
     let header;
@@ -420,6 +437,145 @@ async function testKeepAlive() {
     }
 }
 
+// ── Test 7: Keep-alive failure recovery ──────────────────────────────────
+
+async function testKeepAliveRecovery() {
+    const { createTransport } = require('../modules/bitshares-native/transport');
+    const port = 18000 + Math.floor(Math.random() * 1000);
+
+    // We need a stateful server: first login per connection succeeds (for chain setup),
+    // subsequent login calls fail (simulating a dead remote node).
+    // The transport should reconnect after 3 consecutive keep-alive failures.
+    let connectionCount = 0;
+    const loginsPerSocket: Map<any, number> = new Map();
+
+    const server = http.createServer((req, res) => {
+        res.writeHead(200);
+        res.end('ok');
+    });
+
+    server.on('upgrade', (req, socket, head) => {
+        connectionCount++;
+        loginsPerSocket.set(socket, 0);
+
+        // Complete WebSocket upgrade handshake
+        const key = req.headers['sec-websocket-key'];
+        const acceptKey = crypto
+            .createHash('sha1')
+            .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
+            .digest('base64');
+        socket.write(
+            'HTTP/1.1 101 Switching Protocols\r\n' +
+            'Upgrade: websocket\r\n' +
+            'Connection: Upgrade\r\n' +
+            'Sec-WebSocket-Accept: ' + acceptKey + '\r\n\r\n'
+        );
+
+        const respond = (id: any, result?: any, error?: any) => {
+            sendWsFrame(socket, JSON.stringify({ id, jsonrpc: '2.0', result, error }));
+        };
+
+        socket.on('data', (chunk) => {
+            try {
+                const frame = parseWsFrame(chunk);
+                if (!frame) return;
+
+                // Handle WebSocket close frame — echo it back so client onclose fires
+                if (frame.opcode === 0x08) {
+                    const statusCode = frame.payload.length >= 2 ? frame.payload.readUInt16BE(0) : 1000;
+                    const closePayload = Buffer.alloc(2);
+                    closePayload.writeUInt16BE(statusCode, 0);
+                    sendWsFrameRaw(socket, 0x08, closePayload);
+                    socket.end();
+                    return;
+                }
+
+                const msg = JSON.parse(frame.payload.toString());
+                if (msg.method !== 'call') return;
+                const id = msg.id;
+                const [apiId, method, params] = msg.params;
+
+                if (method === 'login') {
+                    const count = loginsPerSocket.get(socket) || 0;
+                    loginsPerSocket.set(socket, count + 1);
+                    if (count === 0) {
+                        respond(id, true);          // first login on this socket → succeed
+                    } else {
+                        respond(id, null, { code: 1, message: 'keep-alive failure' });  // subsequent → fail
+                    }
+                } else if (method === 'database') {
+                    respond(id, 2);
+                } else if (method === 'history') {
+                    respond(id, 3);
+                } else if (method === 'network_broadcast') {
+                    respond(id, 4);
+                } else if (method === 'get_chain_id') {
+                    respond(id, '4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a8dad512c8');
+                } else if (method === 'get_chain_properties') {
+                    respond(id, { address_prefix: 'BTS' });
+                } else if (method === 'get_global_properties') {
+                    respond(id, { parameters: { current_fees: { parameters: [], scale: 10000 } } });
+                } else if (method === 'get_dynamic_global_properties') {
+                    respond(id, { head_block_number: 12345, head_block_id: '00cafe0000000000000000000000000000000000' });
+                } else if (method === 'get_objects') {
+                    respond(id, [{ id: '2.0.0' }, { id: '2.1.0', head_block_number: 12300, head_block_id: '00cafe0000000000000000000000000000000000' }]);
+                } else if (method === 'get_assets') {
+                    respond(id, [{ id: '1.3.0', precision: 5, symbol: 'BTS' }]);
+                } else if (method === 'lookup_asset_symbols') {
+                    respond(id, [{ id: '1.3.0', precision: 5, symbol: 'BTS' }]);
+                } else if (method === 'set_subscribe_callback') {
+                    respond(id, null);
+                } else {
+                    respond(id, {});
+                }
+            } catch (_) {}
+        });
+
+        socket.on('end', () => loginsPerSocket.delete(socket));
+        socket.on('error', () => loginsPerSocket.delete(socket));
+    });
+
+    await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(port, '127.0.0.1', resolve);
+    });
+
+    try {
+        const initialConnections = connectionCount;
+        const transport = createTransport({
+            keepAliveIntervalMs: 30,
+            rpcTimeoutMs: 100,
+            connectTimeoutMs: 500,
+        });
+
+        await transport.connect([`ws://127.0.0.1:${port}/ws`]);
+        assert.ok(transport.isConnected(), 'Should connect initially');
+
+        // Keep-alive fails immediately (server sends error for login call #2+).
+        // After 3 consecutive failures, ws.close() → onclose → scheduleReconnect → tryConnect.
+        // The cycle repeats (each reconnect triggers keep-alive again).
+        // Poll for at least one reconnect (connectionCount increment) with a 12s timeout.
+        const pollStart = Date.now();
+        const pollTimeout = 12000;
+        let reconnected = false;
+        while (Date.now() - pollStart < pollTimeout) {
+            if (connectionCount >= initialConnections + 1) {
+                reconnected = true;
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        assert.ok(reconnected,
+            `Expected at least 1 reconnect within ${pollTimeout}ms (connections: ${initialConnections} → ${connectionCount})`);
+
+        transport.disconnect();
+        console.log('  PASS: Keep-alive failure recovery');
+    } finally {
+        server.close();
+    }
+}
+
 // ── Run all tests ────────────────────────────────────────────────────────
 
 (async () => {
@@ -430,6 +586,7 @@ async function testKeepAlive() {
         testRpcErrorHandling();
         await testStatusCallbacks();
         await testKeepAlive();
+        await testKeepAliveRecovery();
         console.log('\n=== All transport tests passed ===');
     } catch (e) {
         if (!STRICT_TEST && isEnvironmentError(e)) {

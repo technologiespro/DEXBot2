@@ -105,6 +105,8 @@ function createTransport(config: TransportConfig = {}) {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
     let keepAliveInFlight = false;
+    let keepAliveFailures = 0;
+    const MAX_KEEPALIVE_FAILURES = 3;
     let nodeList: string[] = [];
     let nodeIndex = 0;
     let autoreconnect = false;
@@ -142,6 +144,7 @@ function createTransport(config: TransportConfig = {}) {
             keepAliveTimer = null;
         }
         keepAliveInFlight = false;
+        keepAliveFailures = 0;
         onMessageHandlers = [];
         for (const [, req] of pendingRequests) {
             if (req.timer) clearTimeout(req.timer);
@@ -175,8 +178,21 @@ function createTransport(config: TransportConfig = {}) {
                 keepAliveInFlight = false;
             }, Math.min(rpcTimeoutMs, 15000));
             call('call', [1, 'login', ['', '']], Math.min(rpcTimeoutMs, 10000))
+                .then(() => {
+                    keepAliveFailures = 0;
+                })
                 .catch(() => {
-                    console.warn('[TRANSPORT] Keep-alive call failed');
+                    keepAliveFailures++;
+                    if (keepAliveFailures >= MAX_KEEPALIVE_FAILURES) {
+                        console.warn(`[TRANSPORT] Keep-alive failed ${keepAliveFailures} times, forcing reconnect`);
+                        autoreconnect = true;
+                        intentionalClose = false;
+                        if (ws) {
+                            try { ws.close(); } catch (_: any) {}
+                        }
+                    } else {
+                        console.warn(`[TRANSPORT] Keep-alive call failed (${keepAliveFailures}/${MAX_KEEPALIVE_FAILURES})`);
+                    }
                 })
                 .finally(() => {
                     clearTimeout(safe);

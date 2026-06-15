@@ -278,48 +278,95 @@ function createReadOnlyClient(config: ReadOnlyClientConfig = {}) {
         expectedChainId = GRAPHENE_CHAIN_ID,
     } = config;
 
+    let _dbApiId: number | null = null;
+    let _historyApiId: number | null = null;
+    let _recoverPromise: Promise<void> | null = null;
+
+    function resetApiIds(): void {
+        _dbApiId = null;
+        _historyApiId = null;
+    }
+
     const transport = createTransport({
         rpcTimeoutMs: config.rpcTimeoutMs,
         connectTimeoutMs: config.connectTimeoutMs,
+        onStatusChange: (status: string) => {
+            if (status === 'closed') resetApiIds();
+        },
     });
-
-    let _dbApiId: number | null = null;
-    let _historyApiId: number | null = null;
 
     async function connect(servers?: string[]): Promise<void> {
         const effectiveNodes = Array.isArray(servers) && servers.length > 0
             ? servers
             : nodes;
         await transport.connect(effectiveNodes, false);
-        const loginOk = await transport.call('call', [1, 'login', ['', '']]);
-        if (!loginOk) throw new ConnectionError('Login error');
-        _dbApiId = await transport.call('call', [1, 'database', []]);
-        _historyApiId = await transport.call('call', [1, 'history', []]);
+        await recoverApis();
+        const err = await validateChain();
+        if (err) throw err;
+    }
 
-        if (validateChainId) {
+    async function recoverApis(): Promise<void> {
+        // Serialize concurrent db()/history() recoveries after reconnect
+        if (_recoverPromise) return _recoverPromise;
+        _recoverPromise = (async () => {
+            const loginOk = await transport.call('call', [1, 'login', ['', '']]);
+            if (!loginOk) {
+                resetApiIds();
+                throw new ConnectionError('Login error');
+            }
+            if (_dbApiId == null) {
+                _dbApiId = await transport.call('call', [1, 'database', []]);
+            }
+            if (_historyApiId == null) {
+                _historyApiId = await transport.call('call', [1, 'history', []]);
+            }
+        })().finally(() => {
+            _recoverPromise = null;
+        });
+        return _recoverPromise;
+    }
+
+    async function validateChain(): Promise<Error | null> {
+        if (!validateChainId || _dbApiId == null) return null;
+        try {
             const chainId: string = await transport.call('call', [_dbApiId, 'get_chain_id', []]);
             if (chainId !== expectedChainId) {
                 disconnect();
-                throw new ChainConfigError(
+                return new ChainConfigError(
                     `Chain ID mismatch: expected ${expectedChainId}, got ${chainId}`
                 );
             }
+        } catch (err: any) {
+            if (err instanceof ChainConfigError) return err;
+            // Transient RPC failure — reset API IDs so the next call retries cleanly.
+            // The caller must treat null API IDs after validateChain() as a failure
+            // and abort the current call; the next call will recover.
+            resetApiIds();
+            return new ConnectionError('Chain validation failed after reconnect');
         }
+        return null;
     }
 
     function disconnect(): void {
-        _dbApiId = null;
-        _historyApiId = null;
+        resetApiIds();
         transport.disconnect();
     }
 
     async function db(method: string, args?: any[]): Promise<any> {
-        if (_dbApiId == null) throw new Error('Not connected');
+        if (_dbApiId == null) {
+            await recoverApis();
+            const err = await validateChain();
+            if (err) throw err;
+        }
         return transport.call('call', [_dbApiId, toRpcMethodName(method), args || []]);
     }
 
     async function history(method: string, args?: any[]): Promise<any> {
-        if (_historyApiId == null) throw new Error('Not connected');
+        if (_historyApiId == null) {
+            await recoverApis();
+            const err = await validateChain();
+            if (err) throw err;
+        }
         return transport.call('call', [_historyApiId, toRpcMethodName(method), args || []]);
     }
 

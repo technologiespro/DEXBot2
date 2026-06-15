@@ -60,43 +60,6 @@ function normalizeSymbol(value: any): string {
     return String(value || '').trim().toUpperCase();
 }
 
-function isExactPair(a: any, b: any, ta: any, tb: any): boolean {
-    return normalizeSymbol(a) === normalizeSymbol(ta) && normalizeSymbol(b) === normalizeSymbol(tb);
-}
-
-function isSamePair(a: any, b: any, ta: any, tb: any): boolean {
-    return isExactPair(a, b, ta, tb) || isExactPair(a, b, tb, ta);
-}
-
-function isExactPairIds(aId: any, bId: any, taId: any, tbId: any): boolean {
-    return String(aId || '') === String(taId || '') && String(bId || '') === String(tbId || '');
-}
-
-function isSamePairIds(aId: any, bId: any, taId: any, tbId: any): boolean {
-    return isExactPairIds(aId, bId, taId, tbId) || isExactPairIds(aId, bId, tbId, taId);
-}
-
-function matchProfileToBot(bot: any, profile: any): number {
-    // Returns match rank: 2=exact, 1=symmetric, 0=no match
-    const botA = normalizeSymbol(bot?.assetA);
-    const botB = normalizeSymbol(bot?.assetB);
-    const pA = normalizeSymbol(profile?.assetA);
-    const pB = normalizeSymbol(profile?.assetB);
-    const botAId = String(bot?.assetAId || '');
-    const botBId = String(bot?.assetBId || '');
-    const pAId = String(profile?.assetAId || '');
-    const pBId = String(profile?.assetBId || '');
-
-    const exactSym = botA && botB && pA && pB && isExactPair(botA, botB, pA, pB);
-    const exactId = botAId && botBId && pAId && pBId && isExactPairIds(botAId, botBId, pAId, pBId);
-    const symSym = botA && botB && pA && pB && isSamePair(botA, botB, pA, pB);
-    const symId = botAId && botBId && pAId && pBId && isSamePairIds(botAId, botBId, pAId, pBId);
-
-    if (exactId || exactSym) return 2;
-    if (symId || symSym) return 1;
-    return 0;
-}
-
 function loadJsonFile(filePath: string): { data: any; ok: boolean; error?: string } {
     try {
         const data = readJSON(filePath);
@@ -346,13 +309,7 @@ function validateCrossFileConsistency(problems: ProblemList) {
                     `Bot "${name}" uses gridPrice: "${gp}" but is not in the AMA whitelist (or ama=false) — market adapter runs in dry-run mode`, 'warn');
             }
 
-            // Check market profile: find matching profile by symbol or ID
-            const matchedProfile = profiles.find((p) => matchProfileToBot(bot, p) > 0);
-            if (!matchedProfile) {
-                const pairHint = bot.assetA && bot.assetB ? ` for pair "${normalizeSymbol(bot.assetA)}|${normalizeSymbol(bot.assetB)}"` : '';
-                push(problems, mpFile, `profiles`,
-                    `Bot "${name}" uses gridPrice: "${gp}" but no market profile matches${pairHint} — will use built-in AMA defaults`, 'warn');
-            }
+            // No market profile check needed: AMA falls back to built-in defaults by design
         });
     }
 

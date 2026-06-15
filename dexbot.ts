@@ -88,7 +88,7 @@
 // keys.json and daemon-policies.json from world-readable exposure.
 process.umask(0o077);
 
-const { BitShares, waitForConnected, setSuppressConnectionLog } = require('./modules/bitshares_client');
+const { BitShares, waitForConnected, setSuppressConnectionLog, disconnectClient } = require('./modules/bitshares_client');
 const fs = require('fs');
 const path = require('path');
 const chainKeys = require('./modules/chain_keys');
@@ -248,7 +248,7 @@ class DEXBot extends SharedDEXBot {
 // Register BitShares cleanup on shutdown
 registerCleanup('BitShares connection', () => {
     try {
-        BitShares.disconnect();
+        disconnectClient();
     } catch (err) {
         // BitShares may already be disconnected
     }
@@ -281,10 +281,10 @@ async function runAccountManager({ waitForConnection = false, exitAfter = false,
      } finally {
          if (disconnectAfter) {
              try {
-                 BitShares.disconnect();
-    } catch (err: any) {
-        console.warn('Failed to disconnect BitShares connection after key manager exited:', err.message || err);
-    }
+                 disconnectClient();
+     } catch (err: any) {
+         console.warn('Failed to disconnect BitShares connection after key manager exited:', err.message || err);
+     }
          }
      }
 
@@ -762,7 +762,7 @@ async function handleCLICommands() {
                  await accountBots.main();
              } finally {
                  try {
-                     BitShares.disconnect();
+                     disconnectClient();
                   } catch (err: any) {
                       console.warn('Failed to disconnect BitShares after bot helper exit:', err && err.message ? err.message : err);
                   }
@@ -1121,7 +1121,7 @@ function handleFatalBootstrapError(err: any) {
     }
 
     try {
-        BitShares.disconnect();
+        disconnectClient();
     } catch (disconnectErr) {
     }
 
