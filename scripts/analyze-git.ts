@@ -341,17 +341,30 @@ class RepoAnalyzer {
      * @param {Array<[string, Object]>} sortedFiles - Sorted files with their stats
      */
     generateHtmlChart(sortedFiles: [string, { added: number; deleted: number; edits: number }][]): void {
-        // Prepare file labels with truncation for readability in charts
-        const labels = sortedFiles.map(([file]) => {
-            // Truncate long filenames to 50 chars, add ellipsis
-            const short = file.length > 50 ? file.slice(0, 47) + '...' : file;
+        // Show only the top N most-changed files in the bar chart so labels stay readable.
+        // Reverse so the most-changed file is at the top of the chart.
+        const MAX_BAR_FILES = 25;
+        const barFiles = sortedFiles.slice(0, MAX_BAR_FILES).reverse();
+        const totalTrackedFiles = sortedFiles.length;
+
+        // Prepare file labels: prefer basename, keep paths readable and short
+        const labels = barFiles.map(([file]) => {
+            let short = file;
+            // For long paths keep the basename plus one parent dir when useful
+            if (short.length > 36) {
+                const parts = short.split('/');
+                const base = parts.pop() || '';
+                const parent = parts.pop();
+                short = parent ? parent + '/' + base : base;
+            }
+            if (short.length > 36) short = '...' + short.slice(-33);
             // Escape quotes for safe JSON embedding in HTML
             return short.replace(/"/g, '\\"');
         });
 
         // Extract added/deleted data arrays for chart datasets
-        const addedData = sortedFiles.map(([_, stats]) => stats.added);
-        const deletedData = sortedFiles.map(([_, stats]) => stats.deleted);
+        const addedData = barFiles.map(([_, stats]) => stats.added);
+        const deletedData = barFiles.map(([_, stats]) => stats.deleted);
 
         /**
          * Daily Statistics Preparation
@@ -418,106 +431,94 @@ class RepoAnalyzer {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="darkreader-lock">
+    <meta name="color-scheme" content="dark">
     <title>DEXBot2 Repository Statistics</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="../../lib/uplot/uPlot.min.css">
+    <script src="../../lib/uplot/uPlot.iife.min.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
+            background: #0e1117;
+            color: #e0e0e0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
             padding: 40px 20px;
         }
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        .header {
-            text-align: center;
-            color: white;
-            margin-bottom: 40px;
-        }
-        .header h1 {
-            font-size: 3em;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-        .header p {
-            font-size: 1.3em;
-            opacity: 0.9;
-        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 40px; }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; color: #e6edf3; }
+        .header p { font-size: 1.2em; color: #8b949e; }
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
             margin-bottom: 40px;
         }
         .stat-card {
-            background: white;
+            background: #161b22;
             border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            padding: 24px;
+            border: 1px solid #30363d;
             text-align: center;
         }
         .stat-card h3 {
-            color: #667eea;
-            font-size: 1.1em;
+            color: #8b949e;
+            font-size: 0.9em;
             text-transform: uppercase;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             letter-spacing: 1px;
-            font-weight: 600;
         }
         .stat-card .value {
-            font-size: 3em;
+            font-size: 2.5em;
             font-weight: bold;
-            color: #333;
         }
-        .stat-card.added .value { color: #10b981; }
-        .stat-card.deleted .value { color: #ef4444; }
-        .stat-card.total .value { color: #667eea; }
+        .stat-card.added .value { color: #3fb950; }
+        .stat-card.deleted .value { color: #ff7b72; }
+        .stat-card.total .value { color: #58a6ff; }
         .chart-container {
-            background: white;
+            background: #161b22;
             border-radius: 12px;
-            padding: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            margin-bottom: 40px;
+            padding: 24px;
+            border: 1px solid #30363d;
+            margin-bottom: 32px;
         }
         .chart-container h2 {
-            color: #333;
-            margin-bottom: 30px;
-            font-size: 1.8em;
+            color: #e6edf3;
+            margin-bottom: 6px;
+            font-size: 1.4em;
             text-align: center;
-            font-weight: 600;
         }
-        .chart-wrapper {
+        .chart-subtitle {
+            color: #8b949e;
+            font-size: 0.9em;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .chart-wrap {
             position: relative;
-            height: 600px;
+            height: 500px;
         }
-        .footer {
-            text-align: center;
-            color: white;
-            margin-top: 40px;
-            font-size: 1.1em;
-            opacity: 0.8;
+        .chart-wrap.tall { height: 600px; }
+        .chart-wrap.short { height: 350px; }
+        .uplot { background: transparent; }
+        .u-axis.u-left .u-value,
+        .u-axis.u-3 .u-value {
+            text-align: right;
+            white-space: nowrap;
         }
+        .u-title { display: none; }
+        .footer { text-align: center; margin-top: 40px; font-size: 1em; color: #484f58; }
         @media (max-width: 768px) {
-            .header h1 {
-                font-size: 1.8em;
-            }
-            .chart-wrapper {
-                height: 400px;
-            }
+            .header h1 { font-size: 1.6em; }
+            .chart-wrap { height: 350px; }
+            .chart-wrap.tall { height: 400px; }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 DEXBot2 Repository Statistics</h1>
+            <h1>&#x1f4ca; DEXBot2 Repository Statistics</h1>
             <p>Lines Added vs Deleted Analysis</p>
         </div>
 
@@ -540,39 +541,30 @@ class RepoAnalyzer {
             </div>
         </div>
 
-        <div class="chart-container">
-            <h2>➕➖ Core: Added vs Deleted by File</h2>
-            <div class="chart-wrapper">
-                <canvas id="addDelChart"></canvas>
-            </div>
+        <div class="chart-container" style="padding-top:8px;padding-bottom:36px">
+            <h2>Added vs Deleted by File</h2>
+            <p class="chart-subtitle">Showing top ${labels.length} of ${totalTrackedFiles} tracked files by total changes</p>
+            <div class="chart-wrap" id="barChart" style="height:${Math.max(300, labels.length * 24 + 60)}px"></div>
         </div>
 
-        <div class="chart-container">
-            <h2>📈 Core: Changes Over Time (Daily)</h2>
-            <div class="chart-wrapper" style="height: 400px;">
-                <canvas id="timeChart"></canvas>
-            </div>
+        <div class="chart-container" style="padding-bottom:34px">
+            <h2>Changes Over Time (Daily)</h2>
+            <div class="chart-wrap short" id="timeChart"></div>
         </div>
 
-        <div class="chart-container">
-            <h2>📊 Core: Cumulative Changes Over Time</h2>
-            <div class="chart-wrapper" style="height: 400px;">
-                <canvas id="cumulativeChart"></canvas>
-            </div>
+        <div class="chart-container" style="padding-bottom:34px">
+            <h2>Cumulative Changes Over Time</h2>
+            <div class="chart-wrap short" id="cumulativeChart"></div>
         </div>
 
-        <div class="chart-container">
-            <h2>📝 Total Net Core Lines Over Time</h2>
-            <div class="chart-wrapper" style="height: 400px;">
-                <canvas id="netLinesChart"></canvas>
-            </div>
+        <div class="chart-container" style="padding-bottom:34px">
+            <h2>Net Core Lines Over Time</h2>
+            <div class="chart-wrap short" id="netLinesChart"></div>
         </div>
 
-        <div class="chart-container">
-            <h2>📝 Total Net Repo Lines Over Time</h2>
-            <div class="chart-wrapper" style="height: 400px;">
-                <canvas id="allNetLinesChart"></canvas>
-            </div>
+        <div class="chart-container" style="padding-bottom:34px">
+            <h2>Net Repo Lines Over Time</h2>
+            <div class="chart-wrap short" id="allNetLinesChart"></div>
         </div>
 
         <div class="footer">
@@ -581,389 +573,324 @@ class RepoAnalyzer {
     </div>
 
     <script>
-        // Chart: Added vs Deleted stacked bar
-        const ctx = document.getElementById('addDelChart').getContext('2d');
-        const chart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: ${JSON.stringify(labels)},
-                datasets: [
-                    {
-                        label: '➕ Added',
-                        data: ${JSON.stringify(addedData)},
-                        backgroundColor: '#10b981',
-                        borderRadius: 4,
-                        borderSkipped: false
-                    },
-                    {
-                        label: '🔴 Deleted',
-                        data: ${JSON.stringify(deletedData)},
-                        backgroundColor: '#ef4444',
-                        borderRadius: 4,
-                        borderSkipped: false
-                    }
-                ]
-            },
-            options: {
-                indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: {
-                        stacked: true,
-                        beginAtZero: true,
-                        ticks: {
-                            font: { size: 14 }
-                        }
-                    },
-                    y: {
-                        stacked: true,
-                        ticks: {
-                            font: { size: 14 }
-                        }
-                    }
-                },
-                plugins: {
-                    legend: {
-                        position: 'top',
-                        labels: {
-                            usePointStyle: true,
-                            padding: 20,
-                            font: { size: 15 }
-                        }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                let label = context.dataset.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                if (context.parsed.x !== null) {
-                                    label += context.parsed.x.toLocaleString();
-                                }
-                                return label;
-                            }
-                        }
-                    }
-                }
-            }
+    // ===== Shared helpers =====
+    function initChart(id, opts, data) {
+        const el = document.getElementById(id);
+        const rect = el.getBoundingClientRect();
+        opts.width = Math.max(320, Math.floor(rect.width));
+        opts.height = Math.max(200, Math.floor(rect.height));
+        const chart = new uPlot(opts, data, el);
+        const ro = new ResizeObserver(function() {
+            const r = el.getBoundingClientRect();
+            chart.setSize({ width: Math.max(320, Math.floor(r.width)), height: Math.max(200, Math.floor(r.height)) });
         });
+        ro.observe(el);
+        return chart;
+    }
 
-        // Chart: Changes over time
-        const ctxTime = document.getElementById('timeChart').getContext('2d');
-        const timeChart = new Chart(ctxTime, {
-            type: 'line',
-            data: {
-                labels: ${JSON.stringify(dailyDates)},
-                datasets: [
-                    {
-                        label: '➕ Added',
-                        data: ${JSON.stringify(dailyAdded)},
-                        borderColor: '#10b981',
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        borderWidth: 2,
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: 3,
-                        pointBackgroundColor: '#10b981'
-                    },
-                    {
-                        label: '🔴 Deleted',
-                        data: ${JSON.stringify(dailyDeleted)},
-                        borderColor: '#ef4444',
-                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                        borderWidth: 2,
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: 3,
-                        pointBackgroundColor: '#ef4444'
-                    },
-                    {
-                        label: '📊 Total Edits',
-                        data: ${JSON.stringify(dailyEdits)},
-                        borderColor: '#667eea',
-                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                        borderWidth: 2,
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: 3,
-                        pointBackgroundColor: '#667eea',
-                        borderDash: [5, 5]
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                        labels: {
-                            usePointStyle: true,
-                            padding: 20,
-                            font: { size: 15 }
-                        }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                let label = context.dataset.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                if (context.parsed.y !== null) {
-                                    label += context.parsed.y.toLocaleString();
-                                }
-                                return label;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        ticks: {
-                            font: { size: 13 }
-                        }
-                    },
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            font: { size: 13 }
-                        }
-                    }
-                }
-            }
-        });
+    function fmt(v) { return typeof v === 'number' ? v.toLocaleString() : String(v); }
 
-        // Chart: Cumulative changes over time
-        const ctxCumulative = document.getElementById('cumulativeChart').getContext('2d');
-        const cumulativeChart = new Chart(ctxCumulative, {
-            type: 'line',
-            data: {
-                labels: ${JSON.stringify(dailyDates)},
-                datasets: [
-                    {
-                        label: '📈 Total Added (Cumulative)',
-                        data: ${JSON.stringify(cumulativeAddedData)},
-                        borderColor: '#10b981',
-                        backgroundColor: 'rgba(16, 185, 129, 0.15)',
-                        borderWidth: 3,
-                        fill: true,
-                        tension: 0.3,
-                        pointRadius: 3,
-                        pointBackgroundColor: '#10b981',
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 2
-                    },
-                    {
-                        label: '📉 Total Deleted (Cumulative)',
-                        data: ${JSON.stringify(cumulativeDeletedData)},
-                        borderColor: '#ef4444',
-                        backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                        borderWidth: 3,
-                        fill: true,
-                        tension: 0.3,
-                        pointRadius: 3,
-                        pointBackgroundColor: '#ef4444',
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 2
-                    },
-                    {
-                        label: '🎯 Total Edits (Cumulative)',
-                        data: ${JSON.stringify(cumulativeEditsData)},
-                        borderColor: '#667eea',
-                        backgroundColor: 'transparent',
-                        borderWidth: 3,
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: 4,
-                        pointBackgroundColor: '#667eea',
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 2,
-                        borderDash: [5, 5]
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                        labels: {
-                            usePointStyle: true,
-                            padding: 20,
-                            font: { size: 15 }
-                        }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                let label = context.dataset.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                if (context.parsed.y !== null) {
-                                    label += context.parsed.y.toLocaleString();
-                                }
-                                return label;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        ticks: {
-                            font: { size: 13 }
-                        }
-                    },
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            font: { size: 11 },
-                            callback: function(value) {
-                                return value.toLocaleString();
-                            }
-                        }
-                    }
-                }
-            }
-        });
+    function line( label, color, fill, dash ) {
+        var s = {
+            label: label,
+            stroke: color,
+            width: 2,
+            points: { show: false },
+        };
+        if (fill) s.fill = fill;
+        if (dash) s.dash = dash;
+        return s;
+    }
 
-        // Chart: Net lines over time
-        const ctxNetLines = document.getElementById('netLinesChart').getContext('2d');
-        const netLinesChart = new Chart(ctxNetLines, {
-            type: 'line',
-            data: {
-                labels: ${JSON.stringify(dailyDates)},
-                datasets: [
-                    {
-                        label: '📝 Net Lines (Added - Deleted)',
-                        data: ${JSON.stringify(netLinesData)},
-                        borderColor: '#8b5cf6',
-                        backgroundColor: 'rgba(139, 92, 246, 0.15)',
-                        borderWidth: 3,
-                        fill: true,
-                        tension: 0.3,
-                        pointRadius: 4,
-                        pointBackgroundColor: '#8b5cf6',
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 2
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                        labels: {
-                            usePointStyle: true,
-                            padding: 20,
-                            font: { size: 15 }
-                        }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                let label = context.dataset.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                if (context.parsed.y !== null) {
-                                    label += context.parsed.y.toLocaleString();
-                                }
-                                return label;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        ticks: {
-                            font: { size: 13 }
-                        }
-                    },
-                    y: {
-                        ticks: {
-                            font: { size: 13 },
-                            callback: function(value) {
-                                return value.toLocaleString();
-                            }
-                        }
-                    }
-                }
-            }
-        });
+    function clamp(mn, mx, lo, hi) {
+        var nmin = mn, nmax = mx;
+        if (nmin < lo) { nmax += lo - nmin; nmin = lo; }
+        if (nmax > hi) { nmin -= nmax - hi; nmax = hi; }
+        if (nmin < lo) nmin = lo;
+        if (nmax > hi) nmax = hi;
+        if (nmax <= nmin) return { min: lo, max: hi };
+        return { min: nmin, max: nmax };
+    }
 
-        // Chart: All files net lines over time
-        const ctxAllNetLines = document.getElementById('allNetLinesChart').getContext('2d');
-        const allNetLinesChart = new Chart(ctxAllNetLines, {
-            type: 'line',
-            data: {
-                labels: ${JSON.stringify(allDailyDates)},
-                datasets: [
-                    {
-                        label: '📝 Net Lines — All Folders (Added - Deleted)',
-                        data: ${JSON.stringify(allNetLinesData)},
-                        borderColor: '#f59e0b',
-                        backgroundColor: 'rgba(245, 158, 11, 0.15)',
-                        borderWidth: 3,
-                        fill: true,
-                        tension: 0.3,
-                        pointRadius: 4,
-                        pointBackgroundColor: '#f59e0b',
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 2
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                        labels: {
-                            usePointStyle: true,
-                            padding: 20,
-                            font: { size: 15 }
-                        }
+    function makeTimeAxis(side) {
+        return {
+            stroke: '#8b949e',
+            grid: { stroke: '#21262d', width: 1 },
+            ticks: { stroke: '#30363d' },
+            size: 50,
+            font: '12px sans-serif',
+            values: (u, vals) => vals.map(function(v) {
+                var d = new Date(v * 1000);
+                var mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+                var dd = String(d.getUTCDate()).padStart(2, '0');
+                return mm + '/' + dd;
+            }),
+        };
+    }
+
+    function makeValAxis(side) {
+        return {
+            stroke: '#8b949e',
+            grid: { stroke: '#21262d', width: 1 },
+            ticks: { stroke: '#30363d' },
+            size: 70,
+            font: '12px sans-serif',
+            values: (u, vals) => vals.map(function(v) { return fmt(v); }),
+        };
+    }
+
+    function addWheelZoom(chart, lo, hi) {
+        chart.root.addEventListener('wheel', function(e) {
+            if (!e.ctrlKey && !e.metaKey) return;
+            e.preventDefault();
+            e.stopPropagation();
+            var rect = chart.root.getBoundingClientRect();
+            var left = e.clientX - rect.left - (chart.bbox.left / (chart.pxRatio || 1));
+            var center = chart.posToVal(left, 'x');
+            var s = chart.scales.x || {};
+            var currMin = Number.isFinite(s.min) ? s.min : lo;
+            var currMax = Number.isFinite(s.max) ? s.max : hi;
+            var span = currMax - currMin;
+            if (!Number.isFinite(span) || span <= 0) return;
+            var factor = e.deltaY < 0 ? 0.85 : 1.15;
+            var nextSpan = Math.max(1, Math.min(hi - lo, span * factor));
+            var ratio = (center - currMin) / span;
+            var nmin = center - nextSpan * ratio;
+            var nmax = nmin + nextSpan;
+            var clamped = clamp(nmin, nmax, lo, hi);
+            chart.batch(function() { chart.setScale('x', clamped); });
+        }, { passive: false });
+    }
+
+    // ===== Chart 1: Added vs Deleted by File (horizontal stacked bars via uPlot.paths.bars) =====
+    (function() {
+        // Stacking helper (from uPlot demos/stack.js)
+        function stack(data, omit) {
+            var data2 = [];
+            var bands = [];
+            var d0Len = data[0].length;
+            var accum = [];
+            for (var i = 0; i < d0Len; i++) accum[i] = 0;
+            for (var i = 1; i < data.length; i++)
+                data2.push(omit(i) ? data[i] : data[i].map(function(v, j) { return (accum[j] += +v); }));
+            for (var i = 1; i < data.length; i++)
+                !omit(i) && bands.push({
+                    series: [data.findIndex(function(s, j) { return j > i && !omit(j); }), i],
+                });
+            bands = bands.filter(function(b) { return b.series[1] > -1; });
+            return { data: [data[0]].concat(data2), bands: bands };
+        }
+
+        var labels = ${JSON.stringify(labels)};
+        var added = ${JSON.stringify(addedData)};
+        var deleted = ${JSON.stringify(deletedData)};
+
+        labels.reverse();
+        added.reverse();
+        deleted.reverse();
+
+        var idx = labels.map(function(_, i) { return i; });
+        var rawData = [idx, added, deleted];
+        var stacked = stack(rawData, function() { return false; });
+
+        var opts = {
+            padding: [0, null, -20, null],
+            scales: {
+                x: {
+                    time: false,
+                    distr: 2,
+                    ori: 1,
+                    dir: -1,
+                    range: function(u, min, max) {
+                        return [-0.5, u.data[0].length - 0.5];
                     },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                let label = context.dataset.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                if (context.parsed.y !== null) {
-                                    label += context.parsed.y.toLocaleString();
-                                }
-                                return label;
-                            }
-                        }
-                    }
                 },
-                scales: {
-                    x: {
-                        ticks: {
-                            font: { size: 13 }
-                        }
+                y: {
+                    range: [0, null],
+                    ori: 0,
+                },
+            },
+            bands: stacked.bands,
+            series: [
+                { label: 'File' },
+                {
+                    label: 'Added',
+                    fill: '#3fb950',
+                    stroke: '#3fb950',
+                    width: 0,
+                    paths: uPlot.paths.bars({ size: [0.7, 100] }),
+                    value: function(u, v, si, di) { return added[di]; },
+                },
+                {
+                    label: 'Deleted',
+                    fill: '#ff7b72',
+                    stroke: '#ff7b72',
+                    width: 0,
+                    paths: uPlot.paths.bars({ size: [0.7, 100] }),
+                    value: function(u, v, si, di) { return deleted[di]; },
+                },
+            ],
+            axes: [
+                {
+                    scale: 'x',
+                    side: 3,
+                    splits: function(u) { return u._data[0].slice(); },
+                    values: function(u, vals) {
+                        return (vals || u.data[0]).map(function(v) {
+                            var lbl = labels[v] || '';
+                            if (lbl.length > 34) lbl = lbl.slice(0, 31) + '...';
+                            return lbl;
+                        });
                     },
-                    y: {
-                        ticks: {
-                            font: { size: 13 },
-                            callback: function(value) {
-                                return value.toLocaleString();
-                            }
+                    gap: 15,
+                    size: function(u, values, axisIdx, cycleNum) {
+                        var axis = u.axes[axisIdx];
+                        if (cycleNum > 2) return axis._size;
+                        var size = (axis.ticks ? axis.ticks.size : 0) + axis.gap;
+                        var longest = '';
+                        var vals = values || [];
+                        for (var i = 0; i < vals.length; i++) {
+                            if (vals[i].length > longest.length) longest = vals[i];
                         }
-                    }
-                }
+                        if (longest !== '') {
+                            var font = Array.isArray(axis.font) ? axis.font[0] : axis.font;
+                            u.ctx.font = font;
+                            size += u.ctx.measureText(longest).width / (u.pxRatio || 1);
+                        }
+                        return Math.ceil(size);
+                    },
+                    font: '12px sans-serif',
+                    stroke: '#8b949e',
+                    grid: { show: false },
+                    ticks: { show: false },
+                },
+                {
+                    scale: 'y',
+                    side: 2,
+                    stroke: '#8b949e',
+                    grid: { stroke: '#21262d', width: 1 },
+                    ticks: { stroke: '#30363d' },
+                    font: '12px sans-serif',
+                    size: 70,
+                    splits: function(u, axisIdx, scaleMin, scaleMax) {
+                        var out = [];
+                        for (var v = 0; v <= scaleMax; v += 2000) out.push(v);
+                        return out;
+                    },
+                    values: function(u, vals) { return vals.map(function(v) { return fmt(v); }); },
+                },
+            ],
+            cursor: {
+                show: true,
+                drag: { x: true, y: false },
+            },
+            legend: { show: true },
+        };
+
+        initChart('barChart', opts, stacked.data);
+    })();
+
+    // ===== Charts 2-4: Time series (shared date domain) =====
+    (function() {
+        var dates = ${JSON.stringify(dailyDates)};
+        var ts = dates.map(function(d) { return new Date(d).getTime() / 1000; });
+        var xMin = ts[0], xMax = ts[ts.length - 1];
+
+        var dailyAdded    = ${JSON.stringify(dailyAdded)};
+        var dailyDeleted  = ${JSON.stringify(dailyDeleted)};
+        var dailyEdits    = ${JSON.stringify(dailyEdits)};
+        var cumAdded      = ${JSON.stringify(cumulativeAddedData)};
+        var cumDeleted    = ${JSON.stringify(cumulativeDeletedData)};
+        var cumEdits      = ${JSON.stringify(cumulativeEditsData)};
+        var netLines      = ${JSON.stringify(netLinesData)};
+
+        function makeTimeSeries(titleHtml, id, seriesDefs, dataArrays) {
+            var opts = {
+                scales: {
+                    x: { time: true, range: [xMin, xMax] },
+                    y: { range: function(u, min, max) { return min === max ? [0, max * 1.1 || 1] : [Math.min(0, min), max * 1.05]; } },
+                },
+                series: [{ label: 'Date' }].concat(seriesDefs),
+                axes: [
+                    makeTimeAxis(2),
+                    makeValAxis(3),
+                ],
+            cursor: {
+                show: true,
+                drag: { x: true, y: false },
+            },
+            legend: { show: true },
+            };
+            var chart = initChart(id, opts, [ts].concat(dataArrays));
+            addWheelZoom(chart, xMin, xMax);
+
+            var over = chart.over;
+            var legend = document.createElement('div');
+            legend.style.cssText = 'position:absolute;top:-6px;left:12px;font-size:11px;color:#8b949e;display:flex;gap:14px;z-index:10;pointer-events:none;white-space:nowrap;';
+            var items = '';
+            for (var i = 0; i < seriesDefs.length; i++) {
+                var s = seriesDefs[i];
+                items += '<span><span style="color:' + s.stroke + ';">' + s.label + '</span></span>';
             }
-        });
+            legend.innerHTML = items;
+            over.parentElement.appendChild(legend);
+        }
+
+        // Chart 2: Daily changes
+        makeTimeSeries('Daily Changes', 'timeChart', [
+            line('Added',   '#3fb950'),
+            line('Deleted', '#ff7b72'),
+            line('Edits',   '#58a6ff', null, [5, 5]),
+        ], [dailyAdded, dailyDeleted, dailyEdits]);
+
+        // Chart 3: Cumulative changes
+        makeTimeSeries('Cumulative Changes', 'cumulativeChart', [
+            line('Cum Added',   '#3fb950', 'rgba(63,185,80,0.10)'),
+            line('Cum Deleted', '#ff7b72', 'rgba(255,123,114,0.10)'),
+            line('Cum Edits',   '#58a6ff', null, [5, 5]),
+        ], [cumAdded, cumDeleted, cumEdits]);
+
+        // Chart 4: Net core lines
+        makeTimeSeries('Net Core Lines', 'netLinesChart', [
+            line('Net Lines', '#d2a8ff', 'rgba(210,168,255,0.10)'),
+        ], [netLines]);
+    })();
+
+    // ===== Chart 5: Net repo lines (all files, separate date domain) =====
+    (function() {
+        var dates = ${JSON.stringify(allDailyDates)};
+        var ts = dates.map(function(d) { return new Date(d).getTime() / 1000; });
+        var xMin = ts[0], xMax = ts[ts.length - 1];
+        var allNet = ${JSON.stringify(allNetLinesData)};
+
+        var opts = {
+            scales: {
+                x: { time: true, range: [xMin, xMax] },
+                y: { range: function(u, min, max) { return min === max ? [0, max * 1.1 || 1] : [Math.min(0, min), max * 1.05]; } },
+            },
+            series: [
+                { label: 'Date' },
+                line('Net Lines (All)', '#d29922', 'rgba(210,153,34,0.10)'),
+            ],
+            axes: [
+                makeTimeAxis(2),
+                makeValAxis(3),
+            ],
+            cursor: {
+                show: true,
+                drag: { x: true, y: false },
+            },
+            legend: { show: true },
+        };
+        var chart = initChart('allNetLinesChart', opts, [ts, allNet]);
+        addWheelZoom(chart, xMin, xMax);
+
+        var over = chart.over;
+        var legend = document.createElement('div');
+        legend.style.cssText = 'position:absolute;top:-20px;left:12px;font-size:11px;color:#8b949e;display:flex;gap:14px;z-index:10;pointer-events:none;';
+        legend.innerHTML = '<span><span style="color:#d29922;">Net Lines (All)</span></span>';
+        over.parentElement.appendChild(legend);
+    })();
     </script>
 </body>
 </html>`;
@@ -971,8 +898,8 @@ class RepoAnalyzer {
         const outputPath = path.join(process.cwd(), 'analysis', 'charts', 'repo-stats.html');
         ensureDir(path.dirname(outputPath));
         fs.writeFileSync(outputPath, html);
-        console.log(`✅ HTML chart generated: ${outputPath}`);
-        console.log(`   Open in browser: file://${outputPath}`);
+        console.log('HTML chart generated: ' + outputPath);
+        console.log('   Open in browser: file://' + outputPath);
     }
 }
 

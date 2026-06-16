@@ -70,6 +70,17 @@ This release marks the project's first stable milestone. Includes 54 commits on 
 - **Fix**: remove misleading "PM2 is not installed" message from `dexbot stat` — the `stat`/`status` command's PM2 fallback now prints "No DEXBot2 processes running." instead of confusing users when PM2 is not installed (`92e12c0`).
 - **Fix**: demote fill-history polling logs from info to debug — 11 lines in `subscriptions.ts` changed from `.info()` to `.debug()` to reduce noise from messages that fire on every notice/tick (`8c7d029`).
 
+### 2026-06-16
+
+- **Fix**: include `daemon-audit.jsonl` in `node dexbot clear` log cleanup — the credential daemon's audit log was never deleted by `clear-logs.sh`, making historical `sign_denied` entries persist across restarts (`ab121e8`).
+- **Docs**: add constants and overrides section to root README — explains frozen defaults in `modules/constants.ts` and how to override via `general.settings.json`; adds three-level JSON override example (global, pair, bot) to `market_adapter/README.md` (`9e41e30`).
+- **Feat**: replace timing settings editor (fetch interval, sync delay, lock timeout) with a node configuration editor in the interactive general-settings menu — supports viewing/editing the node list, health check interval, and preferred node selection (`8662a0c`).
+- **Feat**: consolidate settings merge into a single shared `modules/settings_merge.ts` — replaces dual merge paths (constants.ts and account_bots.ts) that used different strategies and missed sections. Adds 7 previously non-overridable sections and a 25-case test suite (`4d0ca0d`).
+- **Feat**: shared-account fund registry (`modules/fund_registry.ts`) with stable bot keys and cross-bot invariants — prevents multiple bots sharing one BitShares account from over-allocating chain balance. Includes deterministic bot IDs (sha256-derived), atomic config writes, centralized percentage parsing, and 11 review-finding fixes covering broken key migration, regex collisions, TOCTOU races, and inline `require()` hoisting (`69543d8`).
+- **Feat**: extend fund registry for credit/MPA collateral proportional allocation — coordinates credit bot collateral allocation across shared-account bots. Unifies registry key scheme to `botKey` (with stable 8-char id) to eliminate name-collision risks. Adds 16-test coverage (`cc3cb53`).
+- **Feat**: vendor uPlot v1.6.32 as internal library under `lib/uplot/` — replaces CDN-based uPlot loading in all 7 chart generators with local files, removing a runtime network dependency for offline analysis (`62efc53`).
+- **Fix**: migrate `analyze-git` charts from Chart.js to uPlot — replaces CDN-dependent Chart.js with vendored `lib/uplot/` for all 5 charts (bar chart, daily, cumulative, net core, net repo). Implements horizontal stacked bars via `uPlot.paths.bars()` with `stack()` + `bands`, swapped orientation (`x.ori=1`, `dir=-1`), dark theme styling, wheel-zoom support, and responsive resize (`b8b7b5f`).
+
 ## [0.7.18] - 2026-06-11 - @ts-nocheck Removal, Type Annotations, Race-Condition Batch 1 & DRY Refactoring
 
 This release removes all remaining `@ts-nocheck` directives across production and analysis code (89 files), adds type annotations to 67 files resolving 1783 TS2339 errors, applies a comprehensive race-condition fix batch (atomic JSON writes, per-context in-flight flags, snapshot persist), tightens timeouts across the board, plugs a subscribe orphan-callback leak, and DRYs duplicated code across claw modules, tests, and unlock into shared utilities (~460 lines removed).

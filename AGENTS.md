@@ -127,6 +127,8 @@ File: <path>
 - `modules/constants.ts` - Centralized configuration and tuning parameters
 - `modules/bitshares_client.ts` - BitShares connection and node management
 - `modules/node_manager.ts` - Multi-node health checking and failover
+- `modules/fund_registry.ts` - Shared-account fund registry with cross-bot invariants
+- `modules/settings_merge.ts` - Consolidated settings merge (single source of truth)
 
 ### Order Management (`modules/order/`)
 - `manager.ts` - Order lifecycle and state management
@@ -158,6 +160,7 @@ File: <path>
 
 ### Claw Integration (`claw/`)
 - `claw/index.ts` - Main export combining all modules
+- `claw/skills/` - Agent skill packages (bitshares-guide, launcher-ops, margin-trading, etc.)
 - `claw/modules/claw_bridge.ts` - JSON bridge for runtime integration
 - `claw/modules/claw_catalog.ts` - Command catalog for bridge dispatch
 - `claw/modules/claw_manifest.ts` - Runtime manifest
@@ -172,6 +175,9 @@ File: <path>
 - `claw/modules/position_manager.ts` - Position tracking
 - `claw/modules/position_health.ts` - Position health monitoring
 - `claw/modules/short_mpa_strategy.ts` - Short MPA workflow
+
+### Vendored Libraries
+- `lib/uplot/` - uPlot v1.6.32 charting library (vendored, no CDN dependency)
 
 ### Analysis Tools (`analysis/`)
 Research scripts for parameter tuning — output interactive HTML charts, not used in production.
@@ -189,15 +195,15 @@ Research scripts for parameter tuning — output interactive HTML charts, not us
 ## Quick Commands
 ```bash
 # Create feature
-git checkout test && git pull
+git checkout test && git pull origin test
 git checkout -b feature/my-feature test
 
 # Merge to test
-git checkout test && git pull && git merge --no-ff feature/my-feature && git push
+git checkout test && git pull origin test && git merge --no-ff feature/my-feature && git push origin test
 
 # Integrate to dev
-git checkout dev && git pull && git merge --no-ff test && git push
+git checkout dev && git pull origin dev && git merge --no-ff test && git push origin dev
 
 # Release to main
-git checkout main && git pull && git merge --no-ff dev && git push
+git checkout main && git pull origin main && git merge --no-ff dev && git push origin main
 ```

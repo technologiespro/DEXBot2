@@ -16,8 +16,8 @@ feature branches
 
 ## Branch Purposes
 
-- **test**: Staging branch for feature testing before integration
-- **dev**: Active development branch where features are integrated
+- **test**: Primary development branch where feature work lands
+- **dev**: Integration/staging branch (receives merges from test)
 - **main**: Stable, production-ready branch
 - **feature/\***: Feature branches for specific features/fixes
 

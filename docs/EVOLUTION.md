@@ -54,7 +54,7 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 
 **Jun 10–11**: Pipeline hardening, BUILD_DIR centralization, HMAC recovery, codebase audit — v0.7.16–v0.7.17. All @ts-nocheck removed (67 files annotated), race-condition batch 1, timeout hardening, DRY refactoring — v0.7.18.
 
-**Jun 12–15**: First stable release v1.0.0 — profile validation, logging overhaul, AMA delta threshold, on-chain authority resolution, credential hardening, centralization of project-root/fs/math/magic-number utilities, error-path hardening. Post-release: docker context, root bypass, keep-alive recovery, phantom LP cleanup, chain client reconnect, headless unlock mode, Credit/MPA Claw bridge, credit runtime fixes, test auto-discovery.
+**Jun 12–16**: First stable release v1.0.0 — profile validation, logging overhaul, AMA delta threshold, on-chain authority resolution, credential hardening, centralization of project-root/fs/math/magic-number utilities, error-path hardening. Post-release: docker context, root bypass, keep-alive recovery, phantom LP cleanup, chain client reconnect, headless unlock mode, Credit/MPA Claw bridge, credit runtime fixes, test auto-discovery. New: shared-account fund registry with cross-bot invariants, credit/MPA collateral proportional allocation, settings merge consolidation, uPlot vendored as local library, node config editor, audit log cleanup.
 
 ---
 
@@ -145,8 +145,8 @@ BUILD_DIR centralization, source-mode runtime, HMAC recovery, error hardening, z
 ### v0.7.17 → v0.7.18 (8 commits)
 Removed all 89 @ts-nocheck directives, added type annotations across 67 files. Race-condition batch 1 (atomic JSON writes, in-flight flags, snapshot persist). Across-the-board timeout hardening and leak fixes. DRY refactoring extracting shared utilities (~460 lines removed).
 
-### v0.7.18 → v1.0.0 (54 commits)
-First stable release. Profile validation, logging overhaul, AMA delta threshold, on-chain authority resolution, credential hardening (8 finding groups), centralization of project-root/fs/math/magic-number utilities, error-path hardening, doc sweep. Post-release: headless unlock mode, Credit/MPA Claw bridge, credit runtime fixes, credential daemon hardening, test auto-discovery.
+### v0.7.18 → v1.0.0 (63 commits)
+First stable release. Profile validation, logging overhaul, AMA delta threshold, on-chain authority resolution, credential hardening (8 finding groups), centralization of project-root/fs/math/magic-number utilities, error-path hardening, doc sweep. Post-release: headless unlock mode, Credit/MPA Claw bridge, credit runtime fixes, credential daemon hardening, test auto-discovery, settings merge consolidation, shared-account fund registry, credit/MPA collateral proportional allocation, vendored uPlot library, node config editor, analyze-git Chart.js→uPlot migration.
 
 ---
 
@@ -196,7 +196,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: June 15, 2026
-**Total Commits**: 1600
-**Date Range**: December 2, 2025 - June 15, 2026 (ongoing)
+**Last Updated**: June 16, 2026
+**Total Commits**: 1608
+**Date Range**: December 2, 2025 - June 16, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)
