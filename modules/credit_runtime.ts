@@ -2550,20 +2550,15 @@ class CreditRuntime {
                     const collateralAsset = await this._resolveAsset(deal.collateralAssetId);
                     const repayAmount = blockchainAmountToFloat(deal.debtAmount, debtAsset);
                     const existingCollateralAmount = blockchainAmountToFloat(deal.collateralAmount, collateralAsset);
-                    const assignedCollateralBudget = positiveOrNull(posState.assignedCollateralBudget);
-                    const reborrowCollateralAmount = assignedCollateralBudget ?? existingCollateralAmount;
                     if (!Number.isFinite(repayAmount) || repayAmount <= 0) {
                         throw new Error(`unable to convert deal ${deal.id} debt amount for repay`);
                     }
                     if (!Number.isFinite(existingCollateralAmount) || existingCollateralAmount <= 0) {
                         throw new Error(`unable to convert deal ${deal.id} collateral amount for release`);
                     }
-                    if (!Number.isFinite(reborrowCollateralAmount) || reborrowCollateralAmount <= 0) {
-                        throw new Error(`unable to convert deal ${deal.id} collateral amount for reborrow`);
-                    }
                     await this.repayCreditDeal(deal, repayAmount, {
                         autoReborrow: true,
-                        collateralAmount: reborrowCollateralAmount,
+                        collateralAmount: existingCollateralAmount,
                         pendingReleaseCollateralAmount: existingCollateralAmount,
                         specificPolicy: lendingItem,
                         fillLockAlreadyHeld: runtimeContext?.options?.fillLockAlreadyHeld === true,

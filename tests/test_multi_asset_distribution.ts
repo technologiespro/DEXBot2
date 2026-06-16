@@ -597,8 +597,8 @@ async function testRunMaintenanceIteratesLending() {
     console.log('Test passed!');
 }
 
-async function testCreditMaintenanceUsesAssignedBudget() {
-    console.log('Testing credit maintenance reborrow uses assignedCollateralBudget...');
+async function testCreditMaintenanceUsesDealCollateral() {
+    console.log('Testing credit maintenance reborrow uses deal collateral...');
 
     const bot = {
         config: {
@@ -636,27 +636,99 @@ async function testCreditMaintenanceUsesAssignedBudget() {
         activeDealIds: ['1.19.1'],
     };
 
-    let capturedAmount = null;
-    let capturedCollateralAmount = null;
-    runtime.repayCreditDeal = async (deal, amount, options) => {
-        capturedAmount = amount;
-        capturedCollateralAmount = options.collateralAmount;
-        return { tx_id: 'tx-test' };
-    };
-    runtime._getOfferById = async () => ({ id: '1.18.1', enabled: true });
-    runtime.buildCreditOfferAcceptOperation = async ({ collateralAmount }) => ({
-        op_name: 'credit_offer_accept',
-        op_data: { collateral: { amount: collateralAmount || 0, asset_id: '1.3.0' } }
+    let capturedOps = null;
+    runtime.buildCreditDealRepayOperation = async () => ({ op_name: 'credit_deal_repay', op_data: {} });
+    runtime._getOfferById = async () => ({
+        id: '1.18.1',
+        asset_type: '1.3.2',
+        fee_rate: 1,
+        max_duration_seconds: 86400,
+        enabled: true,
+        acceptable_collateral: {
+            '1.3.0': { base: { amount: 2, asset_id: '1.3.0' }, quote: { amount: 1, asset_id: '1.3.2' } }
+        }
     });
-    runtime.executeOperations = async () => ({ tx_id: 'tx-test' });
+    runtime._resolveAccountId = async () => '1.2.3';
+    runtime.executeOperations = async (ops) => { capturedOps = ops; return { tx_id: 'tx-test' }; };
+    runtime._fetchBorrowerDeals = async () => [];
     runtime.refreshCreditState = async () => {};
     runtime.persistState = async () => {};
 
     const specificPolicy = bot.config.debtPolicy.lending[0];
     await runtime._runCreditMaintenance(specificPolicy, '1.3.2');
 
-    assert.strictEqual(capturedAmount, 0.001, 'reborrow renewal should pass repay amount in user units');
-    assert.strictEqual(capturedCollateralAmount, 5000, 'reborrow should receive the full assignedCollateralBudget');
+    assert.ok(capturedOps, 'executeOperations should have been called');
+    const acceptOp = capturedOps.find((op) => op.op_name === 'credit_offer_accept');
+    assert.ok(acceptOp, 'reborrow should build a credit_offer_accept operation via real buildCreditOfferAcceptOperation');
+    assert.strictEqual(acceptOp.op_data.collateral.amount, 250, 'reborrow collateral should be 250 (existingCollateralAmount 0.0025 → floatToBlockchainInt with BTS precision 5)');
+
+    console.log('Test passed!');
+}
+
+async function testCreditMaintenanceResistsAssignedBudgetUnderflow() {
+    console.log('Testing credit maintenance reborrow resists undersized assignedCollateralBudget...');
+
+    const bot = {
+        config: {
+            preferredAccount: 'my-account',
+            debtPolicy: {
+                lending: [
+                    { asset: 'CNY',
+                    collateralAsset: 'BTS', type: 'creditOffer', ratio: 1, maxCollateralRatio: 2.0, autoReborrow: true }
+                ]
+            }
+        },
+        _log: () => {},
+        _warn: () => {}
+    };
+
+    const runtime = new CreditRuntime(bot);
+    runtime._resolveAsset = async (ref) => {
+        if (ref === 'BTS' || ref === '1.3.0') return { id: '1.3.0', symbol: 'BTS', precision: 5 };
+        if (ref === 'CNY' || ref === '1.3.2') return { id: '1.3.2', symbol: 'CNY', precision: 5 };
+        return { id: '1.3.99', symbol: ref, precision: 5 };
+    };
+    runtime.state.positions['1.3.2:1.3.0'] = {
+        assignedCollateralBudget: 0.0001,
+        creditDeals: [{
+            id: '1.19.2',
+            offerId: '1.18.1',
+            debtAssetId: '1.3.2',
+            debtAmount: 100,
+            collateralAssetId: '1.3.0',
+            collateralAmount: 250,
+            feeRate: 30000,
+            latestRepayTime: new Date(Date.now() + 3600_000).toISOString(),
+            autoRepay: 0,
+        }],
+        activeDealIds: ['1.19.2'],
+    };
+
+    let capturedOps = null;
+    runtime.buildCreditDealRepayOperation = async () => ({ op_name: 'credit_deal_repay', op_data: {} });
+    runtime._getOfferById = async () => ({
+        id: '1.18.1',
+        asset_type: '1.3.2',
+        fee_rate: 1,
+        max_duration_seconds: 86400,
+        enabled: true,
+        acceptable_collateral: {
+            '1.3.0': { base: { amount: 2, asset_id: '1.3.0' }, quote: { amount: 1, asset_id: '1.3.2' } }
+        }
+    });
+    runtime._resolveAccountId = async () => '1.2.3';
+    runtime.executeOperations = async (ops) => { capturedOps = ops; return { tx_id: 'tx-test' }; };
+    runtime._fetchBorrowerDeals = async () => [];
+    runtime.refreshCreditState = async () => {};
+    runtime.persistState = async () => {};
+
+    const specificPolicy = bot.config.debtPolicy.lending[0];
+    await runtime._runCreditMaintenance(specificPolicy, '1.3.2');
+
+    assert.ok(capturedOps, 'executeOperations should have been called');
+    const acceptOp = capturedOps.find((op) => op.op_name === 'credit_offer_accept');
+    assert.ok(acceptOp, 'reborrow should build a credit_offer_accept operation');
+    assert.strictEqual(acceptOp.op_data.collateral.amount, 250, 'reborrow collateral should use deal collateral (250), not the undersized assignedCollateralBudget (0.0001)');
 
     console.log('Test passed!');
 }
@@ -1152,7 +1224,8 @@ async function runTests() {
         await testBuildMpaPlanFallsBackToPolicyMaxCollateral();
         await testBackwardCompatibilityFlatMpa();
         await testRunMaintenanceIteratesLending();
-        await testCreditMaintenanceUsesAssignedBudget();
+        await testCreditMaintenanceUsesDealCollateral();
+        await testCreditMaintenanceResistsAssignedBudgetUnderflow();
         await testCreditAcceptUsesSpecificPolicy();
         await testCreditMaintenancePassesSpecificPolicy();
         await testMpaDistributionWithDifferentFeedPrices();
