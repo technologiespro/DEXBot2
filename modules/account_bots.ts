@@ -76,7 +76,7 @@
 const fs = require('fs');
 const path = require('path');
 const { ensureProfilesDirectory, readInput } = require('./order/utils/system');
-const { DEFAULT_CONFIG, GRID_LIMITS, TIMING, LOG_LEVEL, UPDATER, MARKET_ADAPTER, NODE_MANAGEMENT } = require('./constants');
+const { DEFAULT_CONFIG, GRID_LIMITS, TIMING, LOG_LEVEL, UPDATER, MARKET_ADAPTER, NODE_MANAGEMENT, FILL_PROCESSING, PIPELINE_TIMING, CREDENTIAL_PROMPTS, MAINTENANCE, COW_PERFORMANCE, INCREMENT_BOUNDS, FEE_PARAMETERS, API_LIMITS, LOGGING_CONFIG, NATIVE_CLIENT, LAUNCHER } = require('./constants');
 const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const { SETTINGS_FILE, readGeneralSettings, writeGeneralSettings } = require('./general_settings');
 
@@ -126,30 +126,31 @@ function saveBotsConfig(config: any, filePath: string): void {
 
 /**
  * Loads general settings from profiles/general.settings.json.
+ * Delegates all merge logic to mergeSettings() in settings_merge.ts,
+ * which handles per-section strategies, NODES⇄NODE_MANAGEMENT mapping,
+ * and passthrough of unmapped NODES sub-keys.
  * @returns {Object} The loaded settings or default settings if the file doesn't exist.
  */
 function loadGeneralSettings() {
     const defaults = {
         LOG_LEVEL: LOG_LEVEL,
-        NODES: {
-            enabled: false,
-            list: NODE_MANAGEMENT.DEFAULT_NODES,
-            healthCheck: {
-                enabled: true,
-                intervalMs: NODE_MANAGEMENT.HEALTH_CHECK_INTERVAL_MS,
-                timeoutMs: NODE_MANAGEMENT.HEALTH_CHECK_TIMEOUT_MS,
-                maxPingMs: NODE_MANAGEMENT.MAX_PING_MS,
-                blacklistThreshold: NODE_MANAGEMENT.BLACKLIST_THRESHOLD,
-            },
-            selection: {
-                strategy: NODE_MANAGEMENT.SELECTION_STRATEGY,
-                preferredNode: null,
-            },
-        },
         GRID_LIMITS: { ...GRID_LIMITS },
         TIMING: { ...TIMING },
         UPDATER: { ...UPDATER },
         MARKET_ADAPTER: { ...MARKET_ADAPTER },
+        NODE_MANAGEMENT: { ...NODE_MANAGEMENT },
+        DEFAULT_CONFIG: { ...DEFAULT_CONFIG },
+        FILL_PROCESSING: { ...FILL_PROCESSING },
+        PIPELINE_TIMING: { ...PIPELINE_TIMING },
+        CREDENTIAL_PROMPTS: { ...CREDENTIAL_PROMPTS },
+        MAINTENANCE: { ...MAINTENANCE },
+        COW_PERFORMANCE: { ...COW_PERFORMANCE },
+        INCREMENT_BOUNDS: { ...INCREMENT_BOUNDS },
+        FEE_PARAMETERS: { ...FEE_PARAMETERS },
+        API_LIMITS: { ...API_LIMITS },
+        LOGGING_CONFIG: { ...LOGGING_CONFIG },
+        NATIVE_CLIENT: { ...NATIVE_CLIENT },
+        LAUNCHER: { ...LAUNCHER },
     };
 
     const settings = readGeneralSettings({
@@ -159,78 +160,17 @@ function loadGeneralSettings() {
         }
     });
 
-    if (!settings || typeof settings !== 'object') {
-        return defaults;
-    }
+    const { mergeSettings } = require('./settings_merge');
+    const merged = mergeSettings(settings, defaults);
 
-    const incomingGridLimits = (settings.GRID_LIMITS && typeof settings.GRID_LIMITS === 'object') ? settings.GRID_LIMITS : {};
-    settings.GRID_LIMITS = {
-        ...GRID_LIMITS,
-        ...incomingGridLimits,
-        GRID_COMPARISON: {
-            ...GRID_LIMITS.GRID_COMPARISON,
-            ...(incomingGridLimits.GRID_COMPARISON && typeof incomingGridLimits.GRID_COMPARISON === 'object'
-                ? incomingGridLimits.GRID_COMPARISON
-                : {}),
-        },
-    };
-
-    settings.TIMING = {
-        ...TIMING,
-        ...((settings.TIMING && typeof settings.TIMING === 'object') ? settings.TIMING : {}),
-    };
-
-    settings.UPDATER = {
-        ...UPDATER,
-        ...((settings.UPDATER && typeof settings.UPDATER === 'object') ? settings.UPDATER : {}),
-    };
-    if (!settings.MARKET_ADAPTER || typeof settings.MARKET_ADAPTER !== 'object') {
-        settings.MARKET_ADAPTER = { ...MARKET_ADAPTER };
-    }
-
-    // Merge NODES config, preserving existing settings
-    if (!settings.NODES || typeof settings.NODES !== 'object') {
-        settings.NODES = {
-            enabled: false,
-            list: NODE_MANAGEMENT.DEFAULT_NODES,
-            healthCheck: {
-                enabled: true,
-                intervalMs: NODE_MANAGEMENT.HEALTH_CHECK_INTERVAL_MS,
-                timeoutMs: NODE_MANAGEMENT.HEALTH_CHECK_TIMEOUT_MS,
-                maxPingMs: NODE_MANAGEMENT.MAX_PING_MS,
-                blacklistThreshold: NODE_MANAGEMENT.BLACKLIST_THRESHOLD,
-            },
-            selection: {
-                strategy: NODE_MANAGEMENT.SELECTION_STRATEGY,
-                preferredNode: null,
-            },
-        };
-    } else {
-        // Ensure healthCheck sub-object exists
-        if (!settings.NODES.healthCheck || typeof settings.NODES.healthCheck !== 'object') {
-            settings.NODES.healthCheck = {
-                enabled: true,
-                intervalMs: NODE_MANAGEMENT.HEALTH_CHECK_INTERVAL_MS,
-                timeoutMs: NODE_MANAGEMENT.HEALTH_CHECK_TIMEOUT_MS,
-                maxPingMs: NODE_MANAGEMENT.MAX_PING_MS,
-                blacklistThreshold: NODE_MANAGEMENT.BLACKLIST_THRESHOLD,
-            };
-        }
-        if (!settings.NODES.selection || typeof settings.NODES.selection !== 'object') {
-            settings.NODES.selection = {
-                strategy: NODE_MANAGEMENT.SELECTION_STRATEGY,
-                preferredNode: null,
-            };
-        }
-    }
-
-    const configuredDeltaPercent = Number(settings.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT);
+    // MARKET_ADAPTER validation for AMA_DELTA_THRESHOLD_PERCENT
+    const configuredDeltaPercent = Number(merged.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT);
     const effectiveDeltaPercent = Number.isFinite(configuredDeltaPercent) && configuredDeltaPercent > 0
         ? configuredDeltaPercent
         : MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT;
-    settings.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT = effectiveDeltaPercent;
+    merged.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT = effectiveDeltaPercent;
 
-    return settings;
+    return merged;
 }
 
 /**

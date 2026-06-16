@@ -1027,16 +1027,18 @@ async function bootstrap() {
 
         // Generate default general.settings.json for new installations
         const SETTINGS_FILE = path.join(PROFILES_DIR, 'general.settings.json');
-        const { LOG_LEVEL, GRID_LIMITS, TIMING, UPDATER, NODE_MANAGEMENT, MARKET_ADAPTER } = require('./modules/constants');
+        const {
+            LOG_LEVEL, GRID_LIMITS, TIMING, UPDATER, NODE_MANAGEMENT,
+            MARKET_ADAPTER, DEFAULT_CONFIG, FILL_PROCESSING,
+            PIPELINE_TIMING, CREDENTIAL_PROMPTS, MAINTENANCE,
+            COW_PERFORMANCE, INCREMENT_BOUNDS, FEE_PARAMETERS,
+            API_LIMITS, LOGGING_CONFIG, NATIVE_CLIENT, LAUNCHER,
+        } = require('./modules/constants');
 const { writeJSON } = require('./modules/utils/fs_utils');
-
-        // Create a copy of GRID_LIMITS and remove any legacy fields if necessary
-        // (Though constants.js was already updated, this ensures a clean object)
-        const gridLimits = { ...GRID_LIMITS };
 
         // Create NODES config from NODE_MANAGEMENT constants
         const nodesConfig = {
-            enabled: false,
+            enabled: NODE_MANAGEMENT.DEFAULT_ENABLED,
             list: NODE_MANAGEMENT.DEFAULT_NODES,
             healthCheck: {
                 enabled: true,
@@ -1054,10 +1056,22 @@ const { writeJSON } = require('./modules/utils/fs_utils');
         const defaultSettings = {
             LOG_LEVEL,
             NODES: nodesConfig,
-            GRID_LIMITS: gridLimits,
+            GRID_LIMITS: { ...GRID_LIMITS },
             TIMING: { ...TIMING },
             UPDATER: { ...UPDATER },
             MARKET_ADAPTER: { ...MARKET_ADAPTER },
+            DEFAULT_CONFIG: { ...DEFAULT_CONFIG },
+            FILL_PROCESSING: { ...FILL_PROCESSING },
+            PIPELINE_TIMING: { ...PIPELINE_TIMING },
+            CREDENTIAL_PROMPTS: { ...CREDENTIAL_PROMPTS },
+            MAINTENANCE: { ...MAINTENANCE },
+            COW_PERFORMANCE: { ...COW_PERFORMANCE },
+            INCREMENT_BOUNDS: { ...INCREMENT_BOUNDS },
+            FEE_PARAMETERS: { ...FEE_PARAMETERS },
+            API_LIMITS: { ...API_LIMITS },
+            LOGGING_CONFIG: { ...LOGGING_CONFIG },
+            NATIVE_CLIENT: { ...NATIVE_CLIENT },
+            LAUNCHER: { ...LAUNCHER },
         };
         writeJSON(SETTINGS_FILE, defaultSettings);
         console.log(startupSuccess('✓ Created default general.settings.json'));

@@ -1507,120 +1507,45 @@ const settings = readGeneralSettings({
 });
 
 if (settings) {
-    if (settings.LOG_LEVEL) LOG_LEVEL = settings.LOG_LEVEL;
-
-    if (settings.TIMING) {
-        // Filter out comment fields (keys starting with _) before merging
-        const timingSettings = Object.fromEntries(
-            Object.entries(settings.TIMING).filter(([key]) => !key.startsWith('_'))
-        );
-        TIMING = { ...TIMING, ...timingSettings };
-    }
-
-    if (settings.GRID_LIMITS) {
-        const gridSettings = settings.GRID_LIMITS;
-        // Filter out comment fields before merging
-        const filteredGridSettings = Object.fromEntries(
-            Object.entries(gridSettings).filter(([key]) => !key.startsWith('_'))
-        );
-        GRID_LIMITS = {
-            ...GRID_LIMITS,
-            ...filteredGridSettings,
-            GRID_COMPARISON: { ...GRID_LIMITS.GRID_COMPARISON, ...((filteredGridSettings.GRID_COMPARISON || {}) as object) }
-        };
-    }
-
-    // Load expert settings (for advanced troubleshooting)
-    if (settings.FILL_PROCESSING) {
-        const fillSettings = Object.fromEntries(
-            Object.entries(settings.FILL_PROCESSING).filter(([key]) => !key.startsWith('_'))
-        );
-        FILL_PROCESSING = { ...FILL_PROCESSING, ...fillSettings };
-    }
-
-    if (settings.PIPELINE_TIMING) {
-        const pipelineSettings = Object.fromEntries(
-            Object.entries(settings.PIPELINE_TIMING).filter(([key]) => !key.startsWith('_'))
-        );
-        PIPELINE_TIMING = { ...PIPELINE_TIMING, ...pipelineSettings };
-    }
-
-    if (settings.EXPERT) {
-        if (settings.EXPERT.GRID_LIMITS) {
-            const filteredExpertGridSettings = Object.fromEntries(
-                Object.entries(settings.EXPERT.GRID_LIMITS).filter(([key]) => !key.startsWith('_'))
-            );
-            GRID_LIMITS = { ...GRID_LIMITS, ...filteredExpertGridSettings };
-        }
-        if (settings.EXPERT.TIMING) {
-            const expertTimingSettings = Object.fromEntries(
-                Object.entries(settings.EXPERT.TIMING).filter(([key]) => !key.startsWith('_'))
-            );
-            TIMING = { ...TIMING, ...expertTimingSettings };
-        }
-    }
-
-    if (settings.DEFAULT_CONFIG) {
-        DEFAULT_CONFIG = { ...DEFAULT_CONFIG, ...settings.DEFAULT_CONFIG };
-    }
-
-    if (settings.UPDATER) {
-        UPDATER = { ...UPDATER, ...settings.UPDATER };
-    }
-
-    if (settings.LAUNCHER) {
-        // Deep-merge LAUNCHER so the MONOLITHIC sub-object can be overridden
-        // piecewise without losing other (future) sub-sections.
-        for (const key of Object.keys(settings.LAUNCHER)) {
-            if (
-                settings.LAUNCHER[key]
-                && typeof settings.LAUNCHER[key] === 'object'
-                && !Array.isArray(settings.LAUNCHER[key])
-            ) {
-                LAUNCHER[key] = { ...LAUNCHER[key], ...settings.LAUNCHER[key] };
-            } else {
-                LAUNCHER[key] = settings.LAUNCHER[key];
-            }
-        }
-    }
-
-    if (settings.CREDENTIAL_PROMPTS) {
-        const credPromptSettings = Object.fromEntries(
-            Object.entries(settings.CREDENTIAL_PROMPTS).filter(([key]) => !key.startsWith('_'))
-        );
-        CREDENTIAL_PROMPTS = { ...CREDENTIAL_PROMPTS, ...credPromptSettings };
-    }
-
-    if (settings.NATIVE_CLIENT) {
-        const mergeNested = (target: any, source: any) => {
-            const sf = Object.fromEntries(
-                Object.entries(source).filter(([key]) => !key.startsWith('_'))
-            );
-            for (const key of Object.keys(sf)) {
-                if (sf[key] && typeof sf[key] === 'object' && !Array.isArray(sf[key])) {
-                    if (!target[key]) target[key] = {};
-                    target[key] = { ...target[key], ...sf[key] };
-                }
-            }
-        };
-        mergeNested(NATIVE_CLIENT, settings.NATIVE_CLIENT);
-    }
-
-    if (settings.LOGGING_CONFIG) {
-        // Deep merge logging config to preserve defaults not specified in settings
-        const mergeConfig = (target: any, source: any) => {
-            for (const key in source) {
-                if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-                    target[key] = { ...target[key], ...source[key] };
-                    mergeConfig(target[key], source[key]);
-                } else {
-                    target[key] = source[key];
-                }
-            }
-            return target;
-        };
-        LOGGING_CONFIG = mergeConfig({ ...LOGGING_CONFIG }, settings.LOGGING_CONFIG);
-    }
+    const { mergeSettings } = require('./settings_merge');
+    const merged = mergeSettings(settings, {
+        LOG_LEVEL,
+        TIMING,
+        GRID_LIMITS,
+        FILL_PROCESSING,
+        PIPELINE_TIMING,
+        DEFAULT_CONFIG,
+        UPDATER,
+        CREDENTIAL_PROMPTS,
+        MAINTENANCE,
+        COW_PERFORMANCE,
+        INCREMENT_BOUNDS,
+        FEE_PARAMETERS,
+        API_LIMITS,
+        LOGGING_CONFIG,
+        NATIVE_CLIENT,
+        LAUNCHER,
+        NODE_MANAGEMENT,
+        MARKET_ADAPTER,
+    });
+    LOG_LEVEL = merged.LOG_LEVEL;
+    TIMING = merged.TIMING;
+    GRID_LIMITS = merged.GRID_LIMITS;
+    FILL_PROCESSING = merged.FILL_PROCESSING;
+    PIPELINE_TIMING = merged.PIPELINE_TIMING;
+    DEFAULT_CONFIG = merged.DEFAULT_CONFIG;
+    UPDATER = merged.UPDATER;
+    CREDENTIAL_PROMPTS = merged.CREDENTIAL_PROMPTS;
+    MAINTENANCE = merged.MAINTENANCE;
+    COW_PERFORMANCE = merged.COW_PERFORMANCE;
+    INCREMENT_BOUNDS = merged.INCREMENT_BOUNDS;
+    FEE_PARAMETERS = merged.FEE_PARAMETERS;
+    API_LIMITS = merged.API_LIMITS;
+    LOGGING_CONFIG = merged.LOGGING_CONFIG;
+    NATIVE_CLIENT = merged.NATIVE_CLIENT;
+    LAUNCHER = merged.LAUNCHER;
+    NODE_MANAGEMENT = merged.NODE_MANAGEMENT;
+    MARKET_ADAPTER = merged.MARKET_ADAPTER;
 }
 
 // Freeze objects to prevent accidental runtime modifications
