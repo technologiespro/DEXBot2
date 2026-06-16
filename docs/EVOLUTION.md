@@ -6,7 +6,7 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
-- **Growth Phase**: 1,582+ commits over ~6 active months
+- **Growth Phase**: 1,600+ commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~58,000+ LoC intelligent TypeScript system
 - **Stability**: Progression from manual testing to a suite of 200+ automated test files
 - **Releases**: 35 release entries (v0.1.0 to v1.0.0)
@@ -43,37 +43,18 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 
 ---
 
-### Phase 5: Signal Intelligence & Debt Runtime (March - May 2026)
-**Duration**: March 4 - May 31, 2026
-**Focus**: Market adapter signal pipeline, dynamic-weight/Kalman research, credit/debt runtime, TypeScript migration, and production stabilization
+### Phase 5: Signal Intelligence & Debt Runtime (March – June 2026)
+**Mar–Apr**: Derivative signal engine (SMA/MACD/RSI), dynamic-weight system with Kalman confirmation and ATR volatility scaling, Hurst/PE regime detection, credit/debt runtime for MPA borrow/repay and credit offers.
 
-**Mar–Apr**: Added derivative signal engine (SMA/MACD/RSI), dynamic-weight system with Kalman confirmation and ATR volatility scaling, Hurst/PE regime detection, and credit/debt runtime for MPA borrow/repay and credit offers.
+**May**: Market adapter stabilization, AMA warmup rework, credential daemon hardening — v0.7.0. Shared AMA strategy, Kalman stability, adapter consolidation — v0.7.1–v0.7.4. Native BitShares integration (replaced `btsdex`), zero-dependency policy, full TypeScript migration — v0.7.5. Fill detection overhaul, BTS fee via AMM pool, centralized logging. Unlock hardening, background daemon, auto-update, per-bot logs — v0.7.6–v0.7.8.
 
-**May 1–18**: Market adapter stabilization, AMA warmup rework, credential daemon hardening, AMA slope offset, credit maintenance hardening — v0.7.0.
+**Jun 1–3**: Unlock status health, runtime self-healing (structural resync, targeted reconciliation), `node dexbot order` subcommand — v0.7.9–v0.7.10. COW grid-integrity closure, uncertainty-recovery hardening, foreign-daemon defense, CLI polish — v0.7.11.
 
-**May 21–22**: Shared AMA strategy with market adapter runtime, Kalman stability patch, adapter packaging consolidation, documentation refresh. Released v0.7.1–v0.7.4.
+**Jun 4–9**: CLI polish, terminal color brightening, TradingView orientation, CEX seeding, quiet orderbook candles, whitelist/dynamic-weight hardening — v0.7.12–v0.7.15.
 
-**May 23–25**: Native BitShares integration (replaced `btsdex`), zero-dependency policy, full TypeScript migration — v0.7.5.
+**Jun 10–11**: Pipeline hardening, BUILD_DIR centralization, HMAC recovery, codebase audit — v0.7.16–v0.7.17. All @ts-nocheck removed (67 files annotated), race-condition batch 1, timeout hardening, DRY refactoring — v0.7.18.
 
-**May 26–28**: Fill detection overhaul, BTS fee via AMM pool, centralized logging, credential daemon security hardening.
-
-**May 29–31**: Unlock hardening (signal cleanup, polling guards), legacy migration cleanup, doc sweep — v0.7.6. Background daemon, auto-update, per-bot logs, MPA `debtOnly` — v0.7.7. Rename `unlock-start` → `unlock`, launcher unification, comparison docs — v0.7.8.
-
-**Jun 1**: Unlock status health indicators, PM2 reload wrapper removal, unlock mode clarity — v0.7.9. Runtime self-healing (structural resync, targeted reconciliation, post-reset spread guard), shared sync/fill helper, launcher wrappers without `dist/`, `node dexbot order` subcommand — v0.7.10.
-
-**Jun 2–3**: COW grid-integrity windows closed, uncertainty-recovery hardening, launcher foreign-daemon defense, native transport improvements, CLI polish (`clear`, aliases, `status`, dynamic-weight alerts) — v0.7.11.
-
-**Jun 4**: CLI polish (`default`, `white`/`stat` aliases, `start`→`test`, `restart all`/`stop all`), terminal color brightening, doubled-log fix, 20-file doc sweep. Released v0.7.12.
-
-**Jun 6**: TradingView pair orientation toggle, CEX synthetic candle seeding, AMA default tuning, key manager quieting, masked input editing, stale doc cleanup — v0.7.13.
-
-**Jun 9**: Analyze-orders display overhaul, market-adapter whitelist/dynamic-weight hardening, idempotent unlock startup, simplified runtime controls — v0.7.14. Quiet orderbook candles, TTY-safe terminal polish — v0.7.15.
-
-**Jun 10**: Pipeline blocking hardening, dead code removal — v0.7.16. Then BUILD_DIR centralization, HMAC recovery, error handling hardening, plus a full codebase audit fixing stale types, dead tests, hardcoded paths, empty dirs, and comments — v0.7.17.
-
-**Jun 11**: Gradual strict typing (all @ts-nocheck removed, 67 files annotated), race-condition batch 1 (atomic JSON, in-flight flags, snapshot persist), timeout hardening and leak fixes across the board, DRY refactoring claw/tests/unlock — v0.7.18.
-
-**Jun 12–15**: First stable release v1.0.0 — profile validation, logging overhaul, AMA delta threshold, on-chain authority resolution, credential hardening, centralization of project-root/fs/math/magic-number utilities, error-path hardening, doc sweep. Post-release: docker context, root credential bypass, keep-alive zombie recovery, phantom LP cleanup, AMA warning removal, chain client reconnect, git remote preservation, esbuild bump.
+**Jun 12–15**: First stable release v1.0.0 — profile validation, logging overhaul, AMA delta threshold, on-chain authority resolution, credential hardening, centralization of project-root/fs/math/magic-number utilities, error-path hardening. Post-release: docker context, root bypass, keep-alive recovery, phantom LP cleanup, chain client reconnect, headless unlock mode, Credit/MPA Claw bridge, credit runtime fixes, test auto-discovery.
 
 ---
 
@@ -162,12 +143,10 @@ Pipeline blocking hardening: stale `_gridSidesUpdated` self-blocking fix, dead `
 BUILD_DIR centralization, source-mode runtime, HMAC recovery, error hardening, zero-budget shortfall suppression, plus a full codebase audit fixing stale types, dead tests, hardcoded paths, empty dirs, and doc references.
 
 ### v0.7.17 → v0.7.18 (8 commits)
+Removed all 89 @ts-nocheck directives, added type annotations across 67 files. Race-condition batch 1 (atomic JSON writes, in-flight flags, snapshot persist). Across-the-board timeout hardening and leak fixes. DRY refactoring extracting shared utilities (~460 lines removed).
 
-Massive gradual typing effort removing all 89 @ts-nocheck directives and adding full type annotations across 67 files, race-condition batch 1 (atomic JSON writes, per-context in-flight flags, snapshot persist, sync engine lock ownership), across-the-board timeout hardening and leak fixes (withTimeout utility, subscribe orphan cleanup, consumer backoff watchdog, history page cap, master password limit), DRY refactoring extracting shared MCP/skill/test utilities (~460 lines removed), Claw HMAC recovery alignment with the main path, plus remaining audit cleanup (BUILD_DIR paths, fd leak, CEX rate limiting).
-
-### v0.7.18 → v1.0.0 (42 commits)
-
-First stable release. Profile validation, logging overhaul, AMA delta threshold, on-chain authority resolution, credential hardening (8 finding groups), centralization of project-root/fs/math/magic-number utilities with regression fixes, error-path hardening, mainnet corpus generator, doc sweep. Post-release: docker context, root bypass, keep-alive recovery, phantom LP cleanup, AMA warning removal, chain client reconnect, git remote preservation, esbuild bump.
+### v0.7.18 → v1.0.0 (54 commits)
+First stable release. Profile validation, logging overhaul, AMA delta threshold, on-chain authority resolution, credential hardening (8 finding groups), centralization of project-root/fs/math/magic-number utilities, error-path hardening, doc sweep. Post-release: headless unlock mode, Credit/MPA Claw bridge, credit runtime fixes, credential daemon hardening, test auto-discovery.
 
 ---
 
@@ -218,6 +197,6 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 
 **Report Originally Generated**: February 19, 2026
 **Last Updated**: June 15, 2026
-**Total Commits**: 1588
+**Total Commits**: 1600
 **Date Range**: December 2, 2025 - June 15, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

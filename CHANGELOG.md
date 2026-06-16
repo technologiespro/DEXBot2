@@ -4,24 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ## [1.0.0] - 2026-06-14 - First Stable Release
 
-This release marks the project's first stable milestone. Includes 42 commits on top of 0.7.18: startup profile schema validation, a full logging system overhaul (write queue, rotation, JSON output, critical level, correlation IDs), AMA slope delta threshold from `maxSlopePct` × `deltaThresholdPct/100`, dashboard isolation to `dashboard-draft`, `--dryrun` flag for unlock launcher, `modules/README.md` for new-user orientation, final 54 TS strict error resolutions across test files, deferred race-condition items #9/#10/#13, on-chain authority resolution for signing key lookup, credential security hardening across 8 finding groups, comprehensive centralization of project-root resolution / fs+math utilities / magic numbers with regression fixing, error-path fallback hardening eliminating all silent catches, and a multi-wave stale-doc sweep (version numbers, test counts, broken links, default values, .js→.ts references). Post-release fixes add root credential file ownership bypass, transport keep-alive zombie connection recovery, phantom LP API method cleanup, stale AMA default-profile warning removal, read-only chain client API re-registration on reconnect, git remote preservation in the update script, and an esbuild security patch.
+This release marks the project's first stable milestone. Includes 54 commits on top of 0.7.18: startup profile schema validation, a full logging system overhaul (write queue, rotation, JSON output, critical level, correlation IDs), AMA slope delta threshold from `maxSlopePct` × `deltaThresholdPct/100`, dashboard isolation to `dashboard-draft`, `--dryrun` flag for unlock launcher, `modules/README.md` for new-user orientation, final 54 TS strict error resolutions across test files, deferred race-condition items #9/#10/#13, on-chain authority resolution for signing key lookup, credential security hardening across 8 finding groups, comprehensive centralization of project-root resolution / fs+math utilities / magic numbers with regression fixing, error-path fallback hardening eliminating all silent catches, and a multi-wave stale-doc sweep (version numbers, test counts, broken links, default values, .js→.ts references). Post-release fixes add root credential file ownership bypass, transport keep-alive zombie connection recovery, phantom LP API method cleanup, stale AMA default-profile warning removal, read-only chain client API re-registration on reconnect, git remote preservation in the update script, an esbuild security patch, headless master password unlock mode for Docker/PaaS, Credit/MPA runtime embedded in the Claw bridge, credit runtime stale-cache and silent-drop fixes, credential daemon asset symbol resolution, credential policy empty-array truthiness fix, live pool reserves with fallback, and auto-discovery of test files.
 
-### 2026-06-14
+### 2026-06-11
+
+- **Fix**: resolve last 54 TS strict errors across test files (`22f5857`, `d8f6373`, `294f834`, `11b13a2`, `e3022fb`, `48d4e90`, `65677a8`, `0ac4837`).
+- **Fix**: deferred race items #9 (credential daemon shutdown guard), #10 (creator-use-pay from auth token refresh), #13 (double event re-subscription guard) (`e0ac76d`).
+- **Docs**: add `modules/README.md` with new-user orientation and module map (`577cd32`).
+
+### 2026-06-12
 
 - **Feat**: startup profile schema validator — validates `bots.json` at boot and fixes 5 config risk patterns including `minPrice`/`maxPrice` type coercion, missing `gridPrice` fallback, overflow `incrementPercent`, and `botFunds` cap (`1e3afc6`).
 - **Feat**: overhaul logging system — write queue (100ms batch flush), size-based rotation (1.1GB total budget, 5 files), JSON structured output, `critical` severity level, and correlation ID tracing across fill/order/adapter operations (`dc85882`).
 - **Feat**: compute AMA slope delta threshold from `maxSlopePct × deltaThresholdPct/100` instead of requiring a literal threshold override (`d160839`).
 - **Feat**: add `--dryrun` flag to unlock launcher (`b84a33e`).
-- **Docs**: add `modules/README.md` with new-user orientation and module map (`577cd32`).
+- **Feat**: add repo-wide net lines chart to `analyze-git` — cumulative added/removed line delta from `--numstat` per merge-base (`0f69d95`).
+- **Feat**: bump to v1.0.0 and sweep stale documentation (`1e7075f`).
+- **Fix**: address 9 review issues — flush wiring, flush resolve, JSON separation, rotation test, JSDoc, and more (`c6e7c41`).
+- **Refactor**: isolate `dashboard/` to `dashboard-draft` branch in repo (`8697d28`).
 - **Docs**: remove `--isolated` flag from README (`3ebb025`).
 - **Docs**: remove `AUDIT_v0.7.5_to_HEAD.md` (`1d584b2`).
-- **Refactor**: isolate `dashboard/` to `dashboard-draft` branch in repo (`8697d28`).
-- **Fix**: address 9 review issues — flush wiring, flush resolve, JSON separation, rotation test, JSDoc, and more (`c6e7c41`).
-- **Fix**: resolve last 54 TS strict errors across test files (`22f5857`, `d8f6373`, `294f834`, `11b13a2`, `e3022fb`, `48d4e90`, `65677a8`, `0ac4837`).
-- **Fix**: deferred race items #9 (credential daemon shutdown guard), #10 (creator-use-pay from auth token refresh), #13 (double event re-subscription guard) (`e0ac76d`).
-- **Feat**: on-chain authority resolution for signing key lookup — `getBtsKeyFromAccount` resolves active/memo keys via full account authority graph traversal with multi-sig weight threshold evaluation (`a06d465`).
-- **Feat**: add repo-wide net lines chart to `analyze-git` — cumulative added/removed line delta from `--numstat` per merge-base (`0f69d95`).
+- **Docs**: sweep stale `.js→.ts` references and fix wrong inline docs across the codebase (`329b072`).
+- **Chore**: post-sprint cleanup — dashboard isolation, claw warning, doc updates (`4a11683`).
+
+### 2026-06-13
+
 - **Feat**: unblock v1.0.0 native release gate with mainnet corpus generator — generates realistic mainnet-sized test data for runtime validation (`ad6b628`).
+
+### 2026-06-14
+
+- **Feat**: on-chain authority resolution for signing key lookup — `getBtsKeyFromAccount` resolves active/memo keys via full account authority graph traversal with multi-sig weight threshold evaluation (`a06d465`).
 - **Fix**: credential security hardening across 8 finding groups — C1 (credential socket cleanup), C2 (SIGHUP handler race), H1-H4 (HMAC token rotation gaps), M1/M4/M5 (master password verification and retry logic), L1-L8 (logging and lock file races) (`b74dfe4`).
 - **Fix**: credential policy reload diagnostics, path-root helper resolution, and test accuracy improvements (`cc05428`).
 - **Fix**: harden critical fallbacks and add logging to silent error paths — replaces bare `.catch(() => {})` patterns with proper error logging in remaining uncovered sites (`6b97b3f`).
@@ -32,21 +44,31 @@ This release marks the project's first stable milestone. Includes 42 commits on 
 - **Refactor**: finish centralizing path-root and script-ext helpers — extracts `runtime_entry.ts` path helpers into shared utility (`c1b3fb3`).
 - **Refactor**: centralize fs and math utilities with regression fixes — extracts `fs_utils.ts` (atomic JSON, read/write, mkdirp) and `math_utils.ts` (clamp, precision rounding, integer math) from duplicated inline logic; regression fixes discovered during extraction applied (`dd8a510`).
 - **Refactor**: centralize magic numbers and enforce explicit precision — extracts named constants across order sizing, fee calculation, and timeout domains; enforces explicit precision guards on all grid calculations (`1ca0802`).
-- **Docs**: sweep stale `.js→.ts` references and fix wrong inline docs across the codebase (`329b072`).
+- **Fix**: tighten docker build context — add `dist`, `claw`, and `market_adapter/inputs/data` to `.dockerignore`; document `market_adapter/data` and `market_adapter/state` volume mounts in `Dockerfile` run comment (`dc70c40`).
 - **Version**: bump from 0.7.18 to 1.0.0 across all package.json manifests.
 - **Docs**: fix stale version references in `DEXBOT_COMPARISON.md`, `EVOLUTION.md`, `FUND_MOVEMENT_AND_ACCOUNTING.md`, `README.md`.
 - **Docs**: fix AMA delta threshold default in `README.md` (2% → 1%) and `GRID_RECALCULATION.md` example.
 - **Docs**: remove broken `TEST_UPDATES_SUMMARY.md` links in `architecture.md`, `developer_guide.md`, `DEXBOT_COMPARISON.md` — replaced with `tests/README.md`.
 - **Docs**: update test counts (188 `test_*.ts` files, 211 entries in `scripts/run-tests.ts`) and commit stats (1564) in `EVOLUTION.md` and `DEXBOT_COMPARISON.md`.
 - **Docs**: remove `Pre-DEXBot2` section from `EVOLUTION.md`.
-- **Fix**: tighten docker build context — add `dist`, `claw`, and `market_adapter/inputs/data` to `.dockerignore`; document `market_adapter/data` and `market_adapter/state` volume mounts in `Dockerfile` run comment (`dc70c40`).
 
 ### 2026-06-15
 
 - **Fix**: resolve keep-alive zombie connections (3 consecutive failures trigger autoreconnect via `ws.close()`), replace static `BitShares.disconnect()` with `disconnectClient()` at 4 shutdown call sites to eliminate ~12 misleading WARN entries per day, remove phantom `get_liquidity_pools_by_assets` LP API call (non-existent in BitShares Core 7.0.2), remove stale "no market profile matches — will use built-in AMA defaults" validation warning with 5 unused helper functions, add `onStatusChange` handler for read-only chain client to null and re-register stale API IDs after transport reconnect, reduce STALE hour counter noise in market adapter output (`36e1a95`).
 - **Fix**: allow root to bypass credential file ownership check — `assertPrivatePathSecurity` now skips owner check when `currentUid === 0` so root can read non-root-owned `keys.json` without crashing; adds test coverage (`94d0c39`).
 - **Fix**: preserve existing git remote in update script — remove remote-overwrite logic that forced HTTPS even when SSH keys were configured, preventing `git fetch` hangs (`9d6343a`).
-- **Chore**: bump esbuild 0.28.0→0.28.1 (npm audit fix, GHSA-gv7w-rqvm-qjhr) and remove noisy root owner-bypass debugLog from `credential_runtime.ts` (`2c4e446`).
+- **Chore**: bump esbuild 0.28.0→0.28.1 (npm audit fix, GHSA-gv7w-rqvm-qjhr) and remove noisy root owner-bypass debugLog from `credential_runtime.ts` (`ad874a9`).
+- **Feat**: headless (non-interactive) master password unlock mode — `--headless` + `--password-file` for Docker/PaaS deployments without an interactive TTY; password read from file or env var (`DEXBOT_MASTER_PASSWORD`), with security checks via `assertPrivatePathSecurity` (`b7b0040`).
+- **Feat**: embed Credit/MPA runtime into Claw bridge via adapter factory — AI agents can now query, refresh, and trigger maintenance cycles on credit/MPA positions through Claw tool calls; 5 new tools (`credit-runtime-status/refresh/maintenance/watchdog/reborrows`), reborrows-in-flight guard, stale posState fix in maintenance loop (`cd7ef25`).
+- **Fix**: credit runtime stale caches, silent drops, and proactive repay bundling — clear `_assetCache`/`_objectCache` on each `refreshState()`, strict-null check on `_borrowerDealsCache`, add logging to every reborrow drop/deferral path, fix `getMapEntries()` flat_map format for `[{key,value}]` pairs, new test for proactive-repay-with-inline-reborrow flow (`0dcbf93`).
+- **Fix**: credential daemon asset symbol resolution via native chain client — add `setExternalAssetResolver()` hook to `credential_policy.ts`, register a resolver in the daemon using native chain client's `db.lookup_asset_symbols` instead of the never-initialized legacy global `BitShares` object (`8806422`).
+- **Fix**: missing await in `resolveHonestPairPrice` and `test_claw_domain_logic` — the live-pool refactor made `resolveHardcodedHonestMoneyPrice` async but two callers still treated it as sync, silently breaking derived-price fallback for all non-HONEST.MONEY pairs (`a619193`).
+- **Fix**: credential_policy empty-array truthiness, fee_params coverage, live pool reserves — all 16 allowlist `if (constraints.allowedFoo)` checks changed to `Array.isArray(…​) && …​.length > 0` so empty `[]` means "allow all" instead of "block all" (root cause of credit not updating on offers); added all 57 missing fee_parameters serializer definitions; added `fetchLivePoolReserves()` with live-first hardcoded-fallback logic (`1983585`).
+- **Fix**: credential daemon security hardening and bootstrap env cleanup — file security checks at launcher entry (unlock.ts, pm2.ts), bootstrap socket path moved from env var to temp file with 0o600 mode, audit log size rotation (100 MB budget, 5 files), authority delegation docs, dead password-string path removal, auto-zero `botHmacSecret` on shutdown, `assertPrivatePathSecurity` on bootstrap temp dir (`a127c22`).
+- **Fix**: auto-discover test files via `globSync`; purge TS types from chart template — replaces brittle 200-line manual test manifest with `fs.globSync` for `tests/test_*.ts` + `claw/tests/test_*.ts`; strips 3 TS annotations from browser-side chart template that caused `vm.Script` SyntaxError (`07cae81`).
+- **Fix**: clean up dead code and stale docs in `scripts/` — remove unreachable `examples/bots.json` validation path and its `stripComments` helper from `validate_bots.ts`, fix `create-bot-symlinks.sh` description in `scripts/README.md`, remove stale `APP_VERSION` reference (`2e7dd33`).
+- **Fix**: remove misleading "PM2 is not installed" message from `dexbot stat` — the `stat`/`status` command's PM2 fallback now prints "No DEXBot2 processes running." instead of confusing users when PM2 is not installed (`92e12c0`).
+- **Fix**: demote fill-history polling logs from info to debug — 11 lines in `subscriptions.ts` changed from `.info()` to `.debug()` to reduce noise from messages that fire on every notice/tick (`8c7d029`).
 
 ## [0.7.18] - 2026-06-11 - @ts-nocheck Removal, Type Annotations, Race-Condition Batch 1 & DRY Refactoring
 
