@@ -81,7 +81,11 @@ function createBotKey(bot, index) {
       : bot && bot.assetAId && bot.assetBId
         ? `${bot.assetAId}/${bot.assetBId}`
         : `bot-${index}`;
-  return `${sanitizeKey(identifier)}-${index}`;
+  const baseKey = sanitizeKey(identifier);
+  if (bot && bot.id) {
+    return `${baseKey}-${sanitizeKey(String(bot.id))}`;
+  }
+  return `${baseKey}-${index}`;
 }
 
 function hasBotsObject(data) {
@@ -131,7 +135,14 @@ function buildDynamicWeightInfo(botKey, config) {
   if (!isAmaGridPrice(config)) return null;
   const whitelistFlags = getWhitelistFlags(botKey);
   if (whitelistFlags.ama !== true) return null;
-  const snapshot = readDynamicGridSnapshot(botKey);
+  // Derive the correct dynamic-grid filename from config.id when available.
+  // The market adapter (modules/account_orders.ts createBotKey) produces
+  // ID-based keys (e.g. "h-bts-5b0be9af") while the order file still stores
+  // legacy index-based keys ("h-bts-1") internally.
+  const lookupKey = (config && config.id)
+    ? `${sanitizeKey(config.name)}-${sanitizeKey(String(config.id))}`
+    : botKey;
+  const snapshot = readDynamicGridSnapshot(lookupKey);
   if (!snapshot) return null;
   const dw = snapshot.dynamicWeights && typeof snapshot.dynamicWeights === 'object'
     ? snapshot.dynamicWeights

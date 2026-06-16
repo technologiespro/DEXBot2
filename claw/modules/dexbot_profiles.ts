@@ -595,7 +595,11 @@ function createBotKey(bot: any, index: any) {
       : bot && bot.assetAId && bot.assetBId
         ? `${bot.assetAId}/${bot.assetBId}`
         : `bot-${index}`;
-  return `${sanitizeKey(identifier)}-${index}`;
+  const baseKey = sanitizeKey(identifier);
+  if (bot && bot.id) {
+    return `${baseKey}-${sanitizeKey(String(bot.id))}`;
+  }
+  return `${baseKey}-${index}`;
 }
 
 function resolveRawBotEntries(settings: any) {
