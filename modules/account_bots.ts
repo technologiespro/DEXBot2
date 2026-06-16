@@ -1054,18 +1054,20 @@ async function promptGeneralSettings() {
                   : `${settings.GRID_LIMITS.DUST_CANCEL_DELAY_SEC}s`;
           console.log(`\x1b[1;33m1) Grid Health:\x1b[0m   \x1b[38;5;208mRatio:\x1b[0m ${settings.GRID_LIMITS.GRID_REGENERATION_PERCENTAGE}%, \x1b[38;5;208mRMS:\x1b[0m ${settings.GRID_LIMITS.GRID_COMPARISON.RMS_PERCENTAGE}%, \x1b[38;5;208mAMA Delta:\x1b[0m ${settings.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT}%`);
           console.log(`\x1b[1;33m2) Order Recovery:\x1b[0m \x1b[38;5;208mDust:\x1b[0m ${settings.GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE}%, \x1b[38;5;208mDustCancel:\x1b[0m ${dustCancelDisplay}`);
-          console.log(`\x1b[1;33m3) Timing (Core):\x1b[0m \x1b[38;5;208mFetchInterval:\x1b[0m ${settings.TIMING.BLOCKCHAIN_FETCH_INTERVAL_MIN}min, \x1b[38;5;208mSyncDelay:\x1b[0m ${settings.TIMING.SYNC_DELAY_MS / 1000}s, \x1b[38;5;208mLockTimeout:\x1b[0m ${settings.TIMING.LOCK_TIMEOUT_MS / 1000}s`);
-          console.log(`\x1b[1;33m4) Timing (Fill):\x1b[0m \x1b[38;5;208mDedupeWindow:\x1b[0m ${settings.TIMING.FILL_DEDUPE_WINDOW_MS / 1000}s, \x1b[38;5;208mRetention:\x1b[0m ${settings.TIMING.FILL_RECORD_RETENTION_MS / 1000}s`);
-          console.log(`\x1b[1;33m5) Log lvl:\x1b[0m      \x1b[38;5;208m${settings.LOG_LEVEL}\x1b[0m (debug, info, warn, error)`);
+          const nodeCount = (settings.NODES.list || []).length;
+          const hcIntervalMin = ((settings.NODES.healthCheck?.intervalMs || NODE_MANAGEMENT.HEALTH_CHECK_INTERVAL_MS) / 60000).toFixed(0);
+          const prefNodeDisplay = settings.NODES.selection?.preferredNode || 'none';
+          console.log(`\x1b[1;33m3) Node Config:\x1b[0m \x1b[38;5;208mNodes:\x1b[0m ${nodeCount}, \x1b[38;5;208mHealthChk:\x1b[0m ${hcIntervalMin}min, \x1b[38;5;208mPrefNode:\x1b[0m ${prefNodeDisplay}`);
+          console.log(`\x1b[1;33m4) Log lvl:\x1b[0m      \x1b[38;5;208m${settings.LOG_LEVEL}\x1b[0m (debug, info, warn, error)`);
           const updaterStatus = settings.UPDATER.ACTIVE ? `\x1b[92mON\x1b[0m` : `\x1b[38;5;160mOFF\x1b[0m`;
           const currentSched = parseCronToDelta(settings.UPDATER.SCHEDULE || "0 0 * * *");
-          console.log(`\x1b[1;33m6) Updater:\x1b[0m      [${updaterStatus}] \x1b[38;5;208mBranch:\x1b[0m ${settings.UPDATER.BRANCH}, \x1b[38;5;208mInterval:\x1b[0m ${currentSched.days}d, \x1b[38;5;208mTime:\x1b[0m ${currentSched.time}`);
+          console.log(`\x1b[1;33m5) Updater:\x1b[0m      [${updaterStatus}] \x1b[38;5;208mBranch:\x1b[0m ${settings.UPDATER.BRANCH}, \x1b[38;5;208mInterval:\x1b[0m ${currentSched.days}d, \x1b[38;5;208mTime:\x1b[0m ${currentSched.time}`);
           console.log('--------------------------------------------------');
           console.log('\x1b[1;32mS) Save & Exit\x1b[0m');
           console.log('\x1b[97mC) Cancel (Discard changes)\x1b[0m');
 
          const choice = (await readInput('Select section to edit or action: ', {
-             validate: (input: string) => ['1', '2', '3', '4', '5', '6', 's', 'c'].includes(input)
+              validate: (input: string) => ['1', '2', '3', '4', '5', 's', 'c'].includes(input)
          })).trim().toLowerCase();
 
         if (choice === '\x1b') {
@@ -1095,30 +1097,70 @@ async function promptGeneralSettings() {
                 settings.GRID_LIMITS.DUST_CANCEL_DELAY_SEC = dustCancel;
                 break;
             case '3':
-                const fetch = await askNumberWithBounds('Blockchain Fetch Interval (min)', settings.TIMING.BLOCKCHAIN_FETCH_INTERVAL_MIN, 1, 1440);
-                if (fetch === '\x1b') break;
-                const delay = await askNumberWithBounds('Sync Delay (s)', settings.TIMING.SYNC_DELAY_MS / 1000, 0.1, 10);
-                if (delay === '\x1b') break;
-                const lock = await askNumberWithBounds('Lock Timeout (s)', settings.TIMING.LOCK_TIMEOUT_MS / 1000, 1, 60);
-                if (lock === '\x1b') break;
-                settings.TIMING.BLOCKCHAIN_FETCH_INTERVAL_MIN = fetch;
-                settings.TIMING.SYNC_DELAY_MS = delay * 1000;
-                settings.TIMING.LOCK_TIMEOUT_MS = lock * 1000;
+                settings.NODES.enabled = true;
+                {
+                    const currentList = settings.NODES.list && settings.NODES.list.length > 0
+                        ? settings.NODES.list
+                        : NODE_MANAGEMENT.DEFAULT_NODES;
+                    let nodeList = [...currentList];
+                    let editorCancelled = false;
+
+                    while (true) {
+                        console.log('\x1b[1m  === Node List Editor ===\x1b[0m');
+                        nodeList.forEach((node, i) => {
+                            console.log(`  \x1b[38;5;208m${i + 1})\x1b[0m ${node}`);
+                        });
+                        console.log('  \x1b[1;32mA) Add node\x1b[0m');
+                        console.log('  \x1b[1;31mR) Remove node\x1b[0m');
+                        console.log('  \x1b[1;33mD) Done\x1b[0m');
+
+                        const nodeChoice = (await readInput('  Choice: ')).trim().toLowerCase();
+                        if (nodeChoice === '\x1b') {
+                            editorCancelled = true;
+                            break;
+                        }
+
+                        if (nodeChoice === 'a') {
+                            const newNode = await askString('  Enter node URL');
+                            if (newNode === '\x1b') continue;
+                            if (newNode && newNode.trim()) {
+                                nodeList.push(newNode.trim());
+                                console.log(`  \x1b[92mAdded.\x1b[0m Count: ${nodeList.length}`);
+                            }
+                        } else if (nodeChoice === 'r') {
+                            if (nodeList.length <= 1) {
+                                console.log('  \x1b[33mNeed at least one node. Add another first.\x1b[0m');
+                                continue;
+                            }
+                            const removeIdx = await askIntegerInRange('  Enter node number to remove', 1, 1, nodeList.length);
+                            if (removeIdx === '\x1b') continue;
+                            const removed = nodeList.splice(removeIdx - 1, 1)[0];
+                            console.log(`  \x1b[92mRemoved:\x1b[0m ${removed}`);
+                        } else if (nodeChoice === 'd') {
+                            settings.NODES.list = nodeList;
+                            break;
+                        }
+                    }
+
+                    if (editorCancelled) break;
+                }
+
+                const hcInterval = await askIntegerInRange('Health Check Interval (min)', (settings.NODES.healthCheck?.intervalMs || NODE_MANAGEMENT.HEALTH_CHECK_INTERVAL_MS) / 60000, 1, 43200);
+                if (hcInterval === '\x1b') break;
+                if (!settings.NODES.healthCheck) settings.NODES.healthCheck = {};
+                settings.NODES.healthCheck.intervalMs = hcInterval * 60000;
+
+                const prefNode = await askString('Preferred Node URL (leave empty for automatic selection)', settings.NODES.selection?.preferredNode || '');
+                if (prefNode === '\x1b') break;
+                if (!settings.NODES.selection) settings.NODES.selection = {};
+                settings.NODES.selection.preferredNode = prefNode.trim() || null;
                 break;
             case '4':
-                const dedupe = await askNumberWithBounds('Fill Dedup Window (s)', settings.TIMING.FILL_DEDUPE_WINDOW_MS / 1000, 0.1, 30);
-                if (dedupe === '\x1b') break;
-                const retain = await askNumberWithBounds('Fill Record Retention (s)', settings.TIMING.FILL_RECORD_RETENTION_MS / 1000, 600, 86400);
-                if (retain === '\x1b') break;
-                settings.TIMING.FILL_DEDUPE_WINDOW_MS = dedupe * 1000;
-                settings.TIMING.FILL_RECORD_RETENTION_MS = retain * 1000;
-                break;
-            case '5':
                 const newLevel = await askLogLevel('Enter log level', settings.LOG_LEVEL);
                 if (newLevel === '\x1b') break;
                 settings.LOG_LEVEL = newLevel;
                 break;
-            case '6':
+            case '5':
                 const upActive = await askBoolean('Enable Automated Updater', settings.UPDATER.ACTIVE !== false);
                 if (upActive === '\x1b') break;
                 settings.UPDATER.ACTIVE = upActive;
