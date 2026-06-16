@@ -8,6 +8,7 @@ const { blockchainToFloat, floatToBlockchainInt, resolveConfigValue } = require(
 const { deriveLiquidityPoolTokenValue } = require('./order/utils/system');
 const { toFiniteNumber } = require('./order/format');
 const { createBotKey } = require('./account_orders');
+const fundRegistry = require('./fund_registry');
 const { writeJsonFileAtomic } = require('./bots_file_lock');
 const {
     buildCollateralFallbackPlan,
@@ -950,7 +951,17 @@ class CreditRuntime {
             committed += blockchainAmountToFloat(deal?.collateralAmount, dealAsset || asset) || 0;
         }
 
-        return onChainTotal + committed;
+        const total = onChainTotal + committed;
+
+        // Apply registry proportional split for shared-account credit bots
+        const accountName = getAccountName(this.bot);
+        const botName = this.botKey;
+        if (accountName && botName) {
+            const effective = fundRegistry.getEffectiveCollateralAllocationSync(accountName, botName, assetId, total);
+            if (effective !== null) return effective;
+        }
+
+        return total;
     }
 
     async _enforceMaxCollateralAmount(policy, collateralInt, collateralAsset, accountId, options: Record<string, any> = {}) {
@@ -1219,7 +1230,18 @@ class CreditRuntime {
         const collateralAmount = blockchainAmountToFloat(callOrder?.collateral, collateralAsset) || 0;
         const collateralBalances = callOrderCollateralAssetId ? await chainOrders.getOnChainAssetBalances(accountRef, [callOrderCollateralAssetId]) : {};
         const collateralBalance = callOrderCollateralAssetId ? (collateralBalances?.[String(callOrderCollateralAssetId)] || collateralBalances?.[String(collateralAsset?.symbol)] || null) : null;
-        const currentCollateralFundsTotal = toFiniteNumber(collateralBalance?.total, null);
+        let currentCollateralFundsTotal = toFiniteNumber(collateralBalance?.total, null);
+
+        // Apply registry proportional split for shared-account credit bots
+        if (currentCollateralFundsTotal !== null && callOrderCollateralAssetId) {
+            const accountName = getAccountName(this.bot);
+            const botName = this.botKey;
+            if (accountName && botName) {
+                const effective = fundRegistry.getEffectiveCollateralAllocationSync(accountName, botName, callOrderCollateralAssetId, currentCollateralFundsTotal);
+                if (effective !== null) currentCollateralFundsTotal = effective;
+            }
+        }
+
         const feedPrice = this._computeBtsPerDebt(bitassetData?.current_feed?.settlement_price, debtAsset, collateralAsset);
         if (Number.isFinite(feedPrice) && feedPrice > 0) {
             if (!this.state.positions[posKey]) this.state.positions[posKey] = {};

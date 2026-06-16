@@ -40,8 +40,13 @@ function _ensureAccount(registry: any, account: string): any {
     if (!registry[account]) {
         registry[account] = {
             totalAllocatedPct: { buy: 0, sell: 0 },
+            totalAllocatedCollateralPct: {},
             bots: {}
         };
+    } else {
+        if (!registry[account].totalAllocatedCollateralPct) {
+            registry[account].totalAllocatedCollateralPct = {};
+        }
     }
     return registry[account];
 }
@@ -63,12 +68,63 @@ async function registerAllocation(account: string, botName: string, side: 'buy' 
         }
         const existingPct = acc.bots[botName][side];
         if (existingPct !== undefined) {
-            acc.totalAllocatedPct[side] -= _parsePercentage(existingPct);
+            acc.totalAllocatedPct[side] = Math.max(0, (acc.totalAllocatedPct[side] || 0) - _parsePercentage(existingPct));
         }
         acc.bots[botName][side] = percentage;
         acc.totalAllocatedPct[side] = (acc.totalAllocatedPct[side] || 0) + _parsePercentage(percentage);
         _saveRegistry();
     });
+}
+
+/**
+ * Register a credit bot's collateral allocation on an account for a given collateral asset.
+ * Called during bot startup for bots with debtPolicy.lending entries.
+ * @param {string} account - Blockchain account name (e.g., 'bbot9')
+ * @param {string} botName - Bot identifier (e.g., 'Credit-BTS-USDT-a1b2c3d4')
+ * @param {string} collateralAssetId - Canonical collateral asset ID (e.g., '1.3.0')
+ * @param {number|string} percentage - Percentage value (e.g., 1.0 or '100%')
+ */
+async function registerCollateralAllocation(account: string, botName: string, collateralAssetId: string, percentage: any): Promise<void> {
+    return _lock.acquire(async () => {
+        const registry = _loadRegistry();
+        const acc = _ensureAccount(registry, account);
+        if (!acc.bots[botName]) {
+            acc.bots[botName] = {};
+        }
+        if (!acc.bots[botName].collateral) {
+            acc.bots[botName].collateral = {};
+        }
+        const existingPct = acc.bots[botName].collateral[collateralAssetId];
+        if (existingPct !== undefined) {
+            const prevDecimal = _parsePercentage(existingPct);
+            acc.totalAllocatedCollateralPct[collateralAssetId] = Math.max(0, (acc.totalAllocatedCollateralPct[collateralAssetId] || 0) - prevDecimal);
+        }
+        acc.bots[botName].collateral[collateralAssetId] = percentage;
+        acc.totalAllocatedCollateralPct[collateralAssetId] = (acc.totalAllocatedCollateralPct[collateralAssetId] || 0) + _parsePercentage(percentage);
+        _saveRegistry();
+    });
+}
+
+/**
+ * Get the effective collateral allocation for a credit bot on a given account/collateral asset.
+ * Returns chainTotal * (myPercent / sum(allPercentages)).
+ * Synchronous — operates on in-memory cache.
+ * Returns null if no registry entry exists (caller falls back to direct balance resolution).
+ *
+ * @param {string} account - Blockchain account name
+ * @param {string} botName - Bot identifier
+ * @param {string} collateralAssetId - Canonical collateral asset ID
+ * @param {number} chainTotal - Total chain balance for this collateral asset
+ * @returns {number|null} Effective allocation, or null if not registered
+ */
+function getEffectiveCollateralAllocationSync(account: string, botName: string, collateralAssetId: string, chainTotal: number): number | null {
+    const registry = _loadRegistry();
+    const acc = registry[account];
+    if (!acc || !acc.bots || !acc.bots[botName] || !acc.bots[botName].collateral || acc.bots[botName].collateral[collateralAssetId] === undefined) return null;
+    const myPct = _parsePercentage(acc.bots[botName].collateral[collateralAssetId]);
+    const totalPct = acc.totalAllocatedCollateralPct[collateralAssetId] || 0;
+    if (totalPct <= 0 || myPct <= 0) return null;
+    return chainTotal * (myPct / totalPct);
 }
 
 /**
@@ -134,8 +190,24 @@ async function releaseAllocation(account: string, botName: string): Promise<void
         const acc = registry[account];
         if (!acc || !acc.bots[botName]) return;
         for (const side of Object.keys(acc.bots[botName])) {
-            const pct = _parsePercentage(acc.bots[botName][side]);
-            acc.totalAllocatedPct[side] = (acc.totalAllocatedPct[side] || 0) - pct;
+            if (side === 'collateral') {
+                // Clean up collateral asset entries separately
+                const collEntry = acc.bots[botName].collateral;
+                if (collEntry && typeof collEntry === 'object') {
+                    for (const assetId of Object.keys(collEntry)) {
+                        const pct = _parsePercentage(collEntry[assetId]);
+                        if (acc.totalAllocatedCollateralPct) {
+                            acc.totalAllocatedCollateralPct[assetId] = (acc.totalAllocatedCollateralPct[assetId] || 0) - pct;
+                            if (acc.totalAllocatedCollateralPct[assetId] <= 0) {
+                                delete acc.totalAllocatedCollateralPct[assetId];
+                            }
+                        }
+                    }
+                }
+            } else {
+                const pct = _parsePercentage(acc.bots[botName][side]);
+                acc.totalAllocatedPct[side] = (acc.totalAllocatedPct[side] || 0) - pct;
+            }
         }
         delete acc.bots[botName];
         if (Object.keys(acc.bots).length === 0) {
@@ -176,8 +248,10 @@ function resetRegistry(): void {
 
 export = {
     registerAllocation,
+    registerCollateralAllocation,
     releaseAllocation,
     getEffectiveAllocationSync,
+    getEffectiveCollateralAllocationSync,
     getTotalAllocatedPct,
     getBotAllocationPct,
     getRegisteredBots,

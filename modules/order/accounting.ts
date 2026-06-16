@@ -535,10 +535,10 @@ class Accountant {
         // Checks that this bot's committed ≤ expected proportional share, with
         // a wider tolerance than per-bot invariant to accommodate transient
         // over-allocation during mid-flight rebalances.
-        if (mgr.config?.preferredAccount && (mgr.config.name || mgr.config.botKey)) {
+        if (mgr.config?.preferredAccount && mgr.config.botKey) {
             try {
                 const account = mgr.config.preferredAccount;
-                const botName = mgr.config.name || mgr.config.botKey;
+                const botName = mgr.config.botKey;
                 const registeredBots = fundRegistry.getRegisteredBots(account);
                 if (registeredBots.length > 1) {
                     const crossBotTolerance = Math.max(PERCENT_TOLERANCE * 3, 0.15);

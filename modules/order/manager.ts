@@ -764,7 +764,7 @@ class OrderManager {
         const { chainTotalBuy, chainTotalSell } = computeChainFundTotals(this.accountTotals, this.funds?.committed?.chain);
 
         const account = this.config.preferredAccount;
-        const botName = this.config.name || this.config.botKey;
+        const botName = this.config.botKey;
         const allocatedBuy = resolveConfigValueWithRegistry(this.config.botFunds.buy, chainTotalBuy, account, botName, 'buy');
         const allocatedSell = resolveConfigValueWithRegistry(this.config.botFunds.sell, chainTotalSell, account, botName, 'sell');
 

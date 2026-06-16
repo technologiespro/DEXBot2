@@ -5242,7 +5242,7 @@ class DEXBot {
 
         // Release fund registry allocation
         if (this.config?.preferredAccount) {
-            const botName = this.config.name || this.config.botKey;
+            const botName = this.config.botKey;
             if (botName) {
                 fundRegistry.releaseAllocation(this.config.preferredAccount, botName).catch((err: any) => {
                     this._warn(`Failed to release fund allocation for ${botName}: ${err.message}`);
