@@ -36,6 +36,7 @@ const {
     computeChainFundTotals,
     hasValidAccountTotals,
     resolveConfigValue,
+    resolveConfigValueWithRegistry,
     isExplicitZeroAllocation,
     floatToBlockchainInt,
     getPrecisionSlack
@@ -762,8 +763,10 @@ class OrderManager {
         if (!this.config.botFunds || !this.accountTotals) return;
         const { chainTotalBuy, chainTotalSell } = computeChainFundTotals(this.accountTotals, this.funds?.committed?.chain);
 
-        const allocatedBuy = resolveConfigValue(this.config.botFunds.buy, chainTotalBuy);
-        const allocatedSell = resolveConfigValue(this.config.botFunds.sell, chainTotalSell);
+        const account = this.config.preferredAccount;
+        const botName = this.config.name || this.config.botKey;
+        const allocatedBuy = resolveConfigValueWithRegistry(this.config.botFunds.buy, chainTotalBuy, account, botName, 'buy');
+        const allocatedSell = resolveConfigValueWithRegistry(this.config.botFunds.sell, chainTotalSell, account, botName, 'sell');
 
         if (allocatedBuy === 0 && typeof this.config.botFunds.buy === 'string' && this.config.botFunds.buy.trim().endsWith('%')) {
             if (chainTotalBuy === 0) this._triggerAccountTotalsFetchIfNeeded();

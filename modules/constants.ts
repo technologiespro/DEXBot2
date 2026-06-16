@@ -188,6 +188,11 @@ let TIMING = {
     // Default: 240 minutes (4 hours). Set to 0 or non-number to disable periodic fetches.
     BLOCKCHAIN_FETCH_INTERVAL_MIN: 240,
 
+    // Override interval for shared accounts (multiple bots on same account).
+    // When the fund registry detects multiple bots on the same account, the fetch
+    // interval drops to this value to reduce stale balance window.
+    SHARED_ACCOUNT_FETCH_INTERVAL_MIN: 5,
+
     // BTS acquisition for non-BTS pairs: min cooldown between acquisition attempts (minutes)
     BTS_ACQUIRE_COOLDOWN_MIN: 60,
 

@@ -1,8 +1,9 @@
 const fs = require('fs');
 const { readBotsFileSync } = require('./bots_file_lock');
 const { parseJsonWithComments } = require('./order/utils/system');
+const crypto = require('crypto');
 const { createBotKey } = require('./account_orders');
-const { isPositiveNumber, isPositiveNumberOrPercent } = require('./order/utils/math');
+const { isPositiveNumber, isPositiveNumberOrPercent, toDecimal } = require('./order/utils/math');
 const { resolveMinCollateralIncreaseThreshold } = require('./cr_planner');
 const { writeJSON } = require('./utils/fs_utils');
 
@@ -44,8 +45,21 @@ function resolveRawBotEntries(settings: any): any[] {
     return [];
 }
 
+function _stableBotId(entry: any): string {
+    const stable = {
+        name: entry.name || '',
+        preferredAccount: entry.preferredAccount || '',
+        assetA: entry.assetA || entry.assetAId || '',
+        assetB: entry.assetB || entry.assetBId || '',
+    };
+    return crypto.createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 8);
+}
+
 function normalizeBotEntry(entry: any, index: number = 0): any {
     const normalized = { active: entry.active === undefined ? true : !!entry.active, ...entry };
+    if (!normalized.id) {
+        normalized.id = _stableBotId(normalized);
+    }
     return { ...normalized, botIndex: index, botKey: createBotKey(normalized, index) };
 }
 
@@ -61,6 +75,30 @@ function selectBotEntry(settings: any, botName: string): any {
 
 function selectActiveBotEntries(settings: any): any[] {
     return resolveRawBotEntries(settings).filter((entry: any) => entry && entry.active !== false);
+}
+
+/**
+ * Persist auto-generated `id` fields back to the config object and save it.
+ * Must be called with the live config object (not a file path) to avoid
+ * TOCTOU races. Returns true if any ids were added (config was saved).
+ *
+ * @param {Object} config - The full bots.json config object ({bots: [...]})
+ * @param {any[]} normalized - Normalized bot entries with generated ids
+ * @param {string} configPath - Path to write the config to
+ */
+function persistMissingIds(config: any, normalized: any[], configPath: string): boolean {
+    const botsArray = resolveRawBotEntries(config);
+    let changed = false;
+    for (let i = 0; i < normalized.length; i++) {
+        if (i < botsArray.length && normalized[i].id && !botsArray[i].id) {
+            botsArray[i].id = normalized[i].id;
+            changed = true;
+        }
+    }
+    if (changed) {
+        saveSettingsFile(config, configPath);
+    }
+    return changed;
 }
 
 function validateBotEntry(b: any, i: number, src: string): string | null {
@@ -226,6 +264,38 @@ function collectValidationIssues(entries: any[], sourceName: string): { errors: 
             else warnings.push(issue);
         }
     });
+
+    // Cross-bot validation: check if botFunds percentages sum > 100% per account
+    const accountFunds: Record<string, { buy: number; sell: number; botNames: string[] }> = {};
+    for (const entry of entries) {
+        if (!entry.active || !entry.preferredAccount || !entry.botFunds) continue;
+        if (!accountFunds[entry.preferredAccount]) {
+            accountFunds[entry.preferredAccount] = { buy: 0, sell: 0, botNames: [] };
+        }
+        const acc = accountFunds[entry.preferredAccount];
+        acc.buy += toDecimal(entry.botFunds.buy);
+        acc.sell += toDecimal(entry.botFunds.sell);
+        acc.botNames.push(entry.name || entry.botKey || `bot-${entries.indexOf(entry)}`);
+    }
+    for (const [account, funds] of Object.entries(accountFunds)) {
+        if (funds.botNames.length > 1) {
+            if (funds.buy > 1) {
+                warnings.push(
+                    `[SHARED ACCOUNT] '${account}': bots [${funds.botNames.join(', ')}] allocate ` +
+                    `${(funds.buy * 100).toFixed(0)}% of BUY funds (>100%). ` +
+                    `Each bot will receive a proportional share (myPct / totalPct × chainBalance).`
+                );
+            }
+            if (funds.sell > 1) {
+                warnings.push(
+                    `[SHARED ACCOUNT] '${account}': bots [${funds.botNames.join(', ')}] allocate ` +
+                    `${(funds.sell * 100).toFixed(0)}% of SELL funds (>100%). ` +
+                    `Each bot will receive a proportional share (myPct / totalPct × chainBalance).`
+                );
+            }
+        }
+    }
+
     return { errors, warnings };
 }
 
@@ -234,6 +304,7 @@ export = {
     loadSettingsFile,
     normalizeBotEntry,
     normalizeBotEntries,
+    persistMissingIds,
     resolveRawBotEntries,
     saveSettingsFile,
     selectActiveBotEntries,

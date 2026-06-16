@@ -81,6 +81,7 @@ const {
 const { resolveAccountRef } = require('./utils/system');
 const Format = require('./format');
 const { toFiniteNumber } = Format;
+const fundRegistry = require('../fund_registry');
 
 /**
  * Accountant engine - Specialized handler for fund tracking and calculations
@@ -528,6 +529,59 @@ class Accountant {
                 `CRITICAL: Fund invariant violation (SELL): blockchainTotal (${Format.formatAmountByPrecision(actualSell, sellPrecision)}) != trackedTotal (${Format.formatAmountByPrecision(expectedSell, sellPrecision)}) (diff: ${Format.formatAmountByPrecision(diffSell, sellPrecision)}, allowed: ${Format.formatAmountByPrecision(allowedSellTolerance, sellPrecision)})`,
                 'error'
             );
+        }
+
+        // INVARIANT 3: Cross-bot registry invariant (shared accounts)
+        // Checks that this bot's committed ≤ expected proportional share, with
+        // a wider tolerance than per-bot invariant to accommodate transient
+        // over-allocation during mid-flight rebalances.
+        if (mgr.config?.preferredAccount && (mgr.config.name || mgr.config.botKey)) {
+            try {
+                const account = mgr.config.preferredAccount;
+                const botName = mgr.config.name || mgr.config.botKey;
+                const registeredBots = fundRegistry.getRegisteredBots(account);
+                if (registeredBots.length > 1) {
+                    const crossBotTolerance = Math.max(PERCENT_TOLERANCE * 3, 0.15);
+                    const totalBuyPct = fundRegistry.getTotalAllocatedPct(account, 'buy');
+                    const totalSellPct = fundRegistry.getTotalAllocatedPct(account, 'sell');
+                    const myBuyPct = fundRegistry.getBotAllocationPct(account, botName, 'buy');
+                    const mySellPct = fundRegistry.getBotAllocationPct(account, botName, 'sell');
+
+                    if (myBuyPct !== null && totalBuyPct > 0) {
+                        const proportionalBuy = (chainFreeBuy + chainBuy) * (myBuyPct / totalBuyPct);
+                        const committedBuy = mgr.funds?.committed?.chain?.buy || 0;
+                        const maxAllowedBuy = proportionalBuy * (1 + crossBotTolerance);
+                        if (committedBuy > maxAllowedBuy && proportionalBuy > precisionSlackBuy) {
+                            hasViolation = true;
+                            this._logThrottled(
+                                'fund-invariant-crossbot-buy',
+                                `[SHARED ACCOUNT] BUY over-allocation: committed=${Format.formatAmountByPrecision(committedBuy, buyPrecision)}, ` +
+                                `proportionalShare=${Format.formatAmountByPrecision(proportionalBuy, buyPrecision)} ` +
+                                `(myPct=${(myBuyPct * 100).toFixed(1)}%, totalPct=${(totalBuyPct * 100).toFixed(1)}%)`,
+                                'error'
+                            );
+                        }
+                    }
+
+                    if (mySellPct !== null && totalSellPct > 0) {
+                        const proportionalSell = (chainFreeSell + chainSell) * (mySellPct / totalSellPct);
+                        const committedSell = mgr.funds?.committed?.chain?.sell || 0;
+                        const maxAllowedSell = proportionalSell * (1 + crossBotTolerance);
+                        if (committedSell > maxAllowedSell && proportionalSell > precisionSlackSell) {
+                            hasViolation = true;
+                            this._logThrottled(
+                                'fund-invariant-crossbot-sell',
+                                `[SHARED ACCOUNT] SELL over-allocation: committed=${Format.formatAmountByPrecision(committedSell, sellPrecision)}, ` +
+                                `proportionalShare=${Format.formatAmountByPrecision(proportionalSell, sellPrecision)} ` +
+                                `(myPct=${(mySellPct * 100).toFixed(1)}%, totalPct=${(totalSellPct * 100).toFixed(1)}%)`,
+                                'error'
+                            );
+                        }
+                    }
+                }
+            } catch (_err: any) {
+                mgr.logger?.log?.(`[INVARIANT] Cross-bot registry check skipped: ${_err.message}`, 'warn');
+            }
         }
 
         // NEW: Attempt immediate recovery if violation detected

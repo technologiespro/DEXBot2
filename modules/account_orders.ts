@@ -94,10 +94,19 @@ function sanitizeKey(source) {
 
 /**
  * Generate a unique key for identifying a bot in storage.
- * Uses bot name or asset pair, sanitized and indexed.
+ * Uses bot name or asset pair, sanitized.
+ * When an `id` field is present (stable identifier), the key does NOT include
+ * the array index, making it resilient to reordering in bots.json.
+ * Falls back to indexed key for backward compatibility with legacy bots.
+ *
+ * Key formats (in priority order):
+ *   - bot.id exists:  `${sanitizeKey(name)}-${sanitizeKey(id)}`
+ *   - bot.name exists: `${sanitizeKey(name)}`
+ *   - fallback:        `${sanitizeKey(identifier)}-${index}`
+ *
  * @param {Object} bot - Bot configuration
- * @param {number} index - Index in bots array
- * @returns {string} Sanitized key like 'mybot-0' or 'iob-xrp-bts-1'
+ * @param {number} index - Index in bots array (used for legacy fallback)
+ * @returns {string} Sanitized key
  */
 function createBotKey(bot, index) {
   const identifier = bot && bot.name
@@ -107,7 +116,38 @@ function createBotKey(bot, index) {
       : bot && bot.assetAId && bot.assetBId
         ? `${bot.assetAId}/${bot.assetBId}`
         : `bot-${index}`;
-  return `${sanitizeKey(identifier)}-${index}`;
+  const baseKey = sanitizeKey(identifier);
+  if (bot && bot.id) {
+    return `${baseKey}-${sanitizeKey(String(bot.id))}`;
+  }
+  return `${baseKey}-${index}`;
+}
+
+/**
+ * Migrate persisted order files from old index-based keys to new stable keys.
+ * Runs once per bot on first startup after the key format change.
+ * Renames `profiles/orders/{oldKey}.json` → `profiles/orders/{newKey}.json`
+ * and `profiles/orders/{oldKey}.dynamicgrid.json` → `profiles/orders/{newKey}.dynamicgrid.json`.
+ *
+ * @param {string} profilesDir - Path to the profiles directory
+ * @param {string} oldKey - Previous bot key (index-based)
+ * @param {string} newKey - New bot key (stable, without index)
+ */
+function migrateBotKeyFile(profilesDir, oldKey, newKey) {
+  if (oldKey === newKey) return;
+  const ordersDir = path.join(profilesDir, 'orders');
+  const extensions = ['.json', '.dynamicgrid.json'];
+  for (const ext of extensions) {
+    const oldPath = path.join(ordersDir, `${oldKey}${ext}`);
+    const newPath = path.join(ordersDir, `${newKey}${ext}`);
+    try {
+      if (fs.existsSync(oldPath) && !fs.existsSync(newPath)) {
+        fs.renameSync(oldPath, newPath);
+      }
+    } catch (_err) {
+      // Best-effort migration; ignore failures
+    }
+  }
 }
 
 /**
@@ -772,5 +812,6 @@ class AccountOrders {
 
 export = {
   AccountOrders,
-  createBotKey
+  createBotKey,
+  migrateBotKeyFile
 };

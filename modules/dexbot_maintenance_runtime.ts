@@ -22,6 +22,7 @@ const { updateDynamicGridSnapshotSync } = require('../market_adapter/utils/dynam
 const { reconcileGridOrders } = require('./order/grid_reconcile');
 const { formatUnmatchedChainOrder, getSideBudget } = require('./order/utils/order');
 const { ensureDir, safeUnlink } = require('./utils/fs_utils');
+const fundRegistry = require('./fund_registry');
 
 const CODE_ROOT = path.join(__dirname, '..');
 const ROOT = resolveProjectRoot(CODE_ROOT);
@@ -1040,7 +1041,22 @@ async function stopOpenOrdersSyncLoop() {
  * @this {import('./dexbot_class').DEXBot}
  */
 function setupBlockchainFetchInterval() {
-    const intervalMin = TIMING.BLOCKCHAIN_FETCH_INTERVAL_MIN;
+    let intervalMin = TIMING.BLOCKCHAIN_FETCH_INTERVAL_MIN;
+
+    // Use the per-instance override if set (e.g., from fund registry shared-account detection)
+    if (typeof this._blockchainFetchIntervalMin === 'number' && Number.isFinite(this._blockchainFetchIntervalMin) && this._blockchainFetchIntervalMin > 0) {
+        intervalMin = this._blockchainFetchIntervalMin;
+    } else if (this.config?.preferredAccount) {
+        // Fallback: check fund registry for shared accounts
+        try {
+            if (fundRegistry.isSharedAccount(this.config.preferredAccount)) {
+                intervalMin = TIMING.SHARED_ACCOUNT_FETCH_INTERVAL_MIN;
+                this._blockchainFetchIntervalMin = intervalMin;
+            }
+        } catch (_err: any) {
+            this?._warn?.(`Registry unavailable for shared-account interval check: ${_err.message}`);
+        }
+    }
 
     syncMarketAdapterOnPeriodicConfigCheck.call(this, 'startup blockchain fetch setup')
         .catch((err) => {

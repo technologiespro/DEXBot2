@@ -208,16 +208,31 @@ async function _getAssetPrecision(assetRef) {
 // Access MUST be protected by _preferredAccountLock to prevent race conditions
 let preferredAccountId: any = null;
 let preferredAccountName: any = null;
+const _multiBotWarnings = new Set<string>();
+
+function _warnOnce(key: string, message: string) {
+    if (_multiBotWarnings.has(key)) return;
+    _multiBotWarnings.add(key);
+    chainOrdersLogger.warn(message);
+}
 
 /**
  * Set the preferred account for subsequent operations.
  * This allows other functions to operate without requiring account parameters.
  * Uses AsyncLock to prevent race conditions when multiple functions access this simultaneously.
+ * Warns once when overwriting a different account (multi-bot monolithic mode detection).
  * @param {string} accountId - BitShares account ID (e.g., '1.2.12345')
  * @param {string} accountName - Human-readable account name
  */
 async function setPreferredAccount(accountId, accountName) {
     await _preferredAccountLock.acquire(async () => {
+        if (preferredAccountName && accountName && preferredAccountName !== accountName) {
+            _warnOnce(
+                `account-overwrite:${preferredAccountName}->${accountName}`,
+                `[MULTI-BOT] Preferred account overwritten: '${preferredAccountName}' -> '${accountName}'. ` +
+                `All functions without explicit account params now target '${accountName}'.`
+            );
+        }
         preferredAccountId = accountId;
         if (accountName) preferredAccountName = accountName;
     });
@@ -551,6 +566,14 @@ async function readOpenOrders(accountId = null, timeoutMs = TIMING.CONNECTION_TI
         if (!accId) {
             const pref = await getPreferredAccount();
             accId = pref.id;
+            if (!accId) {
+                throw new Error('No account selected. Please call selectAccount() first or pass an account id');
+            }
+            _warnOnce(
+                `readOpenOrders-no-accountId`,
+                `[MULTI-BOT] readOpenOrders called without explicit accountId — using preferred '${pref.name || accId}'. ` +
+                `Pass accountId explicitly in multi-bot mode.`
+            );
         }
         if (!accId) {
             throw new Error('No account selected. Please call selectAccount() first or pass an account id');

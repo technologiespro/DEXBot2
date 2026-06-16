@@ -8,7 +8,9 @@ function writeJSON(filePath: string, data: any, options?: { mode?: number }): vo
     let content = JSON.stringify(data, null, 2) + '\n';
     const opts: any = { encoding: 'utf8' };
     if (options?.mode !== undefined) opts.mode = options.mode;
-    fs.writeFileSync(filePath, content, opts);
+    const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
+    fs.writeFileSync(tmpPath, content, opts);
+    fs.renameSync(tmpPath, filePath);
 }
 
 function ensureDir(dirPath: string, options?: { mode?: number }): void {

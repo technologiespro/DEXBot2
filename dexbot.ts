@@ -94,13 +94,16 @@ const path = require('path');
 const chainKeys = require('./modules/chain_keys');
 const { initializeFeeCache, ensureProfilesDirectory, readInput } = require('./modules/order/utils/system');
 const accountBots = require('./modules/account_bots');
+const { migrateBotKeyFile } = require('./modules/account_orders');
 const SharedDEXBot = require('./modules/dexbot_class');
+const fundRegistry = require('./modules/fund_registry');
 
 const { setupGracefulShutdown, registerCleanup, unregisterCleanup } = require('./modules/graceful_shutdown');
 const {
     collectValidationIssues,
     loadSettingsFile,
     normalizeBotEntries,
+    persistMissingIds,
     resolveRawBotEntries,
     saveSettingsFile,
 } = require('./modules/bot_settings');
@@ -418,6 +421,24 @@ async function runBotInstances(botEntries: any[], { forceDryRun = false, sourceN
             process.exit(1);
         }
 
+        // Phase 4: Persist newly-generated bot ids and migrate order files from old index-based keys
+        try {
+            const { config: sourceConfig } = loadSettingsFile(PROFILES_BOTS_FILE, { silent: true });
+            persistMissingIds(sourceConfig, prepared, PROFILES_BOTS_FILE);
+        } catch (_err) {
+            // Best-effort; id persistence is non-critical
+        }
+        // Migrate order files from old index-based keys to new stable keys.
+        // Uses the already-exported migrateBotKeyFile which handles both .json and .dynamicgrid.json.
+        for (const entry of prepared) {
+            if (!entry.active || !entry.id || !entry.name) continue;
+            const oldKey = `${entry.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}-${entry.botIndex}`;
+            const newKey = entry.botKey;
+            if (oldKey !== newKey) {
+                migrateBotKeyFile(PROFILES_DIR, oldKey, newKey);
+            }
+        }
+
         const needMaster = prepared.some((b: any) => b.active && b.preferredAccount);
         let masterPassword = null;
         if (needMaster) {
@@ -469,6 +490,36 @@ async function runBotInstances(botEntries: any[], { forceDryRun = false, sourceN
             }
             console.log();
             console.log('Starting bot runtime...');
+        }
+
+        // Phase 5: Atomic startup — pre-register all bot allocations before any bot starts.
+        // This ensures proportional fund allocation is computed correctly for shared accounts.
+        const activeBots = prepared.filter((e: any) => e.active);
+        const accountGroups: Record<string, any[]> = {};
+        for (const entry of activeBots) {
+            const account = entry.preferredAccount;
+            if (account) {
+                if (!accountGroups[account]) accountGroups[account] = [];
+                accountGroups[account].push(entry);
+            }
+        }
+        const sharedAccounts = Object.keys(accountGroups).filter((a) => accountGroups[a].length > 1);
+        if (sharedAccounts.length > 0) {
+            console.log(`Shared accounts detected: ${sharedAccounts.join(', ')} — pre-registering fund allocations atomically.`);
+            for (const account of sharedAccounts) {
+                for (const entry of accountGroups[account]) {
+                    const botName = entry.name || entry.botKey;
+                    if (botName && entry.botFunds) {
+                        const sides = ['buy', 'sell'] as const;
+                        for (const side of sides) {
+                            const pct = entry.botFunds[side];
+                            if (pct !== undefined && pct !== null) {
+                                await fundRegistry.registerAllocation(account, botName, side, pct);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         const instances = [];

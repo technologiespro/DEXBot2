@@ -59,6 +59,7 @@ const { BitShares, waitForConnected, onReconnect: registerReconnectHook } = requ
 const chainKeys = require('./chain_keys');
 const credentialPolicy = require('./credential_policy');
 const chainOrders = require('./chain_orders');
+const fundRegistry = require('./fund_registry');
 const { BroadcastUncertainError } = require('./dexbot_credential_client');
 const { OrderManager, grid: Grid } = require('./order');
 const {
@@ -5237,6 +5238,16 @@ class DEXBot {
             }
         } catch (err: any) {
             this._warn(`Error during shutdown lock acquisition: ${err.message}`);
+        }
+
+        // Release fund registry allocation
+        if (this.config?.preferredAccount) {
+            const botName = this.config.name || this.config.botKey;
+            if (botName) {
+                fundRegistry.releaseAllocation(this.config.preferredAccount, botName).catch((err: any) => {
+                    this._warn(`Failed to release fund allocation for ${botName}: ${err.message}`);
+                });
+            }
         }
 
         // Log final metrics

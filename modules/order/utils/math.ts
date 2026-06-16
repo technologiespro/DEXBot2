@@ -72,6 +72,7 @@ const Format = require('../format');
 const { isValidNumber, toFiniteNumber, isNumeric } = Format;
 const Logger = require('../../logger');
 const mathLogger = new Logger('Math');
+const fundRegistry = require('../../fund_registry');
 
 const MAX_INT64 = 9223372036854775807;
 const MIN_INT64 = -9223372036854775808;
@@ -158,6 +159,27 @@ function parsePercentageString(v) {
     if (!isPercentageString(v)) return null;
     const num = parseFloat(v.trim().slice(0, -1));
     return Number.isNaN(num) ? null : num / 100.0;
+}
+
+/**
+ * Convert a value (number, percentage string, or numeric string) to its
+ * decimal form. Unlike parsePercentageString which only handles '%' strings,
+ * this also accepts bare numbers and numeric strings.
+ * @param {*} value - Number (100 = 100), "100%" (= 1.0), or "100" (= 100)
+ * @returns {number} Decimal value, 0 if unparseable
+ */
+function toDecimal(value) {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed.endsWith('%')) {
+            const n = parseFloat(trimmed);
+            return Number.isNaN(n) ? 0 : n / 100;
+        }
+        const n = parseFloat(trimmed);
+        return Number.isNaN(n) ? 0 : n;
+    }
+    return 0;
 }
 
 /**
@@ -450,6 +472,25 @@ function resolveConfigValue(value, total) {
         return Number.isNaN(n) ? 0 : n;
     }
     return 0;
+}
+
+/**
+ * Resolve a config value to a numeric amount, accounting for shared-account
+ * fund registry. If the bot has a registry entry, returns the proportional
+ * share of chainTotal. Falls back to standard resolveConfigValue if the
+ * registry has no entry for this bot (single-bot accounts or unregistered).
+ *
+ * @param {*} value - Value to resolve (string, number, or percentage)
+ * @param {number} chainTotal - Total chain balance for this side
+ * @param {string} account - Blockchain account name
+ * @param {string} botName - Bot identifier
+ * @param {'buy'|'sell'} side - Trade side
+ * @returns {number} Resolved numeric value or 0 if uninterpretable
+ */
+function resolveConfigValueWithRegistry(value, chainTotal, account, botName, side) {
+    const effective = fundRegistry.getEffectiveAllocationSync(account, botName, side, chainTotal);
+    if (effective !== null) return effective;
+    return resolveConfigValue(value, chainTotal);
 }
 
 /**
@@ -1107,6 +1148,7 @@ export = {
     isPositiveNumberOrPercent,
     isPositiveInt,
     parsePercentageString,
+    toDecimal,
     resolveRelativePrice,
     isExplicitZeroAllocation,
     getPrecision,
@@ -1115,6 +1157,7 @@ export = {
     getGridBestPrices,
     calculateSpreadFromOrders,
     resolveConfigValue,
+    resolveConfigValueWithRegistry,
     hasValidAccountTotals,
     blockchainToFloat,
     floatToBlockchainInt,
