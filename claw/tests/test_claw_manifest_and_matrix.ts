@@ -151,92 +151,6 @@ function testClawManifest() {
 }
 
 // ---------------------------------------------------------------------------
-// hermes_manifest
-// ---------------------------------------------------------------------------
-
-function testHermesManifest() {
-  const manifest = require('../modules/hermes_manifest');
-
-  const desc = manifest.describeHermesBridge();
-
-  assert.strictEqual(desc.compatibility.name, 'Hermes');
-  assert.ok(desc.compatibility.trustModel.includes('Hermes'));
-  assert.strictEqual(desc.options.runtimeName, 'hermes');
-  assert.strictEqual(desc.compatibility.recommendedTransport, 'mcp-stdio-jsonl');
-  assert.ok(Array.isArray(desc.commandExamples));
-  assert.ok(desc.commandExamples.some((example) => example.includes('scripts/claw_bridge.ts')));
-
-  const withOpts = manifest.describeHermesBridge({ accountName: 'erin' });
-  assert.strictEqual(withOpts.options.accountName, 'erin');
-}
-
-// ---------------------------------------------------------------------------
-// openclaw_manifest
-// ---------------------------------------------------------------------------
-
-function testOpenClawManifest() {
-  const manifest = require('../modules/openclaw_manifest');
-
-  const desc = manifest.describeOpenClawBridge();
-
-  assert.strictEqual(desc.compatibility.name, 'OpenClaw');
-  assert.ok(desc.compatibility.trustModel.includes('OpenClaw'));
-  assert.strictEqual(desc.options.runtimeName, 'openclaw');
-  assert.strictEqual(desc.compatibility.recommendedTransport, 'plugin-or-mcp');
-  assert.ok(Array.isArray(desc.commandExamples));
-  assert.ok(desc.commandExamples.some((example) => example.includes('scripts/claw_bridge.ts')));
-
-  const withOpts = manifest.describeOpenClawBridge({ accountName: 'dave' });
-  assert.strictEqual(withOpts.options.accountName, 'dave');
-}
-
-// ---------------------------------------------------------------------------
-// zeroclaw_manifest
-// ---------------------------------------------------------------------------
-
-function testZeroClawManifest() {
-  const manifest = require('../modules/zeroclaw_manifest');
-
-  const desc = manifest.describeZeroClawBridge();
-
-  // Identity override
-  assert.strictEqual(desc.compatibility.name, 'ZeroClaw');
-  assert.ok(desc.compatibility.trustModel.includes('ZeroClaw'));
-
-  // Still carries the full command surface
-  assert.ok(Array.isArray(desc.commands));
-  assert.ok(desc.commands.length > 0);
-
-  // Runtime is locked to zeroclaw
-  assert.strictEqual(desc.options.runtimeName, 'zeroclaw');
-  assert.strictEqual(desc.compatibility.recommendedTransport, 'local-cli-json');
-
-  // Options forwarded correctly
-  const withOpts = manifest.describeZeroClawBridge({ accountName: 'bob' });
-  assert.strictEqual(withOpts.options.accountName, 'bob');
-}
-
-// ---------------------------------------------------------------------------
-// nullclaw_manifest
-// ---------------------------------------------------------------------------
-
-function testNullClawManifest() {
-  const manifest = require('../modules/nullclaw_manifest');
-
-  const desc = manifest.describeNullClawBridge();
-
-  assert.strictEqual(desc.compatibility.name, 'NullClaw');
-  assert.ok(desc.compatibility.trustModel.includes('NullClaw'));
-  assert.strictEqual(desc.options.runtimeName, 'nullclaw');
-  assert.strictEqual(desc.compatibility.recommendedTransport, 'skill-toml-or-mcp');
-  assert.ok(Array.isArray(desc.commandExamples));
-  assert.ok(desc.commandExamples.some((example) => example.includes('nullclaw_bridge.ts')));
-
-  const withOpts = manifest.describeNullClawBridge({ accountName: 'carol' });
-  assert.strictEqual(withOpts.options.accountName, 'carol');
-}
-
-// ---------------------------------------------------------------------------
 // dexbot_bridge — getDexbot2Root branching only
 // ---------------------------------------------------------------------------
 
@@ -284,10 +198,6 @@ function testDexbotBridgeRootResolution() {
 function main() {
   testRuntimeMatrix();
   testClawManifest();
-  testHermesManifest();
-  testOpenClawManifest();
-  testZeroClawManifest();
-  testNullClawManifest();
   testDexbotBridgeRootResolution();
   console.log('claw manifest and matrix tests passed');
 }

@@ -253,9 +253,4 @@ The executable behavior lives in the `claw/` modules and scripts. This compariso
 - `modules/claw_catalog.ts`
 - `modules/claw_manifest.ts`
 - `modules/claw_skill_md.ts`
-- `modules/openfang_bridge.ts`
-- `modules/nanoclaw_bridge.ts`
-- `scripts/openfang_bridge.ts`
 - `scripts/claw_skill_md.ts`
-- `scripts/nanoclaw_bridge.ts`
-- `scripts/zeroclaw_skill.ts`

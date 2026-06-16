@@ -20,7 +20,7 @@ const {
   openShortOnBts,
   placeTakeProfitBuyOrderOnBts
 } = require('./short_mpa_strategy');
-const { describeClawBridge, createVariantDescribeFn } = require('./claw_manifest');
+const { describeClawBridge } = require('./claw_manifest');
 const {
   launcherRun,
   launcherDrystart,
@@ -35,7 +35,7 @@ const { runMemuCommand } = require('./memu_bridge');
 
 const { clone } = require('./utils');
 
-import type { ClawBridgeOptions, VariantBridgeOptions, Logger } from './types';
+import type { ClawBridgeOptions, Logger } from './types';
 
 function stripPrivateKey(options: ClawBridgeOptions = {}): ClawBridgeOptions {
   const sanitized = { ...options };
@@ -87,49 +87,15 @@ function createClawBridge(options: ClawBridgeOptions = {}): any {
 }
 
 function describeRuntimeManifest(options: ClawBridgeOptions = {}): any {
-  const effectiveRuntimeName = options.runtimeName || options.runtime?.name || options.runtime || null;
-  const normalizedRuntimeName = effectiveRuntimeName
-    ? String(effectiveRuntimeName).trim().toLowerCase()
-    : null;
-
-  switch (normalizedRuntimeName) {
-    case 'hermes':
-      return require('./hermes_manifest').describeHermesBridge(options);
-    case 'openclaw':
-      return require('./openclaw_manifest').describeOpenClawBridge(options);
-    case 'openfang':
-      return require('./openfang_bridge').describeOpenFangBridge(options);
-    case 'nanobot':
-      return require('./claw_manifest').describeClawBridge(options);
-    case 'picoclaw':
-      return require('./claw_manifest').describeClawBridge(options);
-    case 'nanoclaw':
-      return require('./nanoclaw_bridge').describeNanoClawBridge(options);
-    case 'nullclaw':
-      return require('./nullclaw_bridge').describeNullClawBridge(options);
-    case 'zeroclaw':
-      return require('./zeroclaw_manifest').describeZeroClawBridge(options);
-    case 'memu':
-      return require('./memu_bridge').describeMemuBridge(options);
-    default:
-      return describeClawBridge(options);
-  }
+  return describeClawBridge(options);
 }
 
 function describeCommandManifest(options: ClawBridgeOptions = {}): any {
-  const effectiveRuntimeName = options.runtimeName || options.runtime?.name || options.runtime || null;
-  const normalizedRuntimeName = effectiveRuntimeName
-    ? String(effectiveRuntimeName).trim().toLowerCase()
-    : null;
-
-  switch (normalizedRuntimeName) {
-    case 'hermes':
-      return require('./hermes_manifest').describeHermesBridge(options);
-    case 'memu':
-      return require('./memu_bridge').describeMemuBridge(options);
-    default:
-      return describeClawBridge(options);
+  const runtimeName = options.runtimeName || options.runtime?.name || null;
+  if (runtimeName && String(runtimeName).trim().toLowerCase() === 'memu') {
+    return require('./memu_bridge').describeMemuBridge(options);
   }
+  return describeClawBridge(options);
 }
 
 async function runClawCommand(command: string, options: ClawBridgeOptions = {}): Promise<any> {
@@ -449,31 +415,5 @@ export = {
   createClawBridge,
   describeClawBridge,
   describeRuntimeManifest,
-  runClawCommand,
-  createVariantBridgeModule(runtimeName: string, displayName: string, trustModel: string): any {
-    const scriptPath = `tsx scripts/${runtimeName}_bridge.ts`;
-    const describeFn = createVariantDescribeFn(runtimeName, displayName, scriptPath, trustModel);
-
-    return {
-      [`create${displayName}Bridge`]: function (options: VariantBridgeOptions = {}): any {
-        return createClawBridge({
-          ...options,
-          runtime: {
-            ...(options.runtime || {}),
-            name: options.runtime?.name || `${runtimeName}-bridge`
-          }
-        });
-      },
-      [`describe${displayName}Bridge`]: describeFn,
-      [`run${displayName}Command`]: function (command: string, options: VariantBridgeOptions = {}): any {
-        if (command === 'manifest') {
-          return describeFn(options);
-        }
-        return runClawCommand(command, {
-          ...options,
-          runtimeName: options.runtimeName || runtimeName
-        });
-      }
-    };
-  }
+  runClawCommand
 };

@@ -11,7 +11,7 @@ The goal is simple:
 - `Claw` can talk to DEXBot2 and the blockchain directly
 - The infrastructure layer stays reusable and decision-free
 
-The current scaffold lives in [../modules/claw_infra.ts](../modules/claw_infra.ts), [../modules/dexbot_profiles.ts](../modules/dexbot_profiles.ts), [../modules/nanoclaw_bridge.ts](../modules/nanoclaw_bridge.ts), [../modules/openfang_bridge.ts](../modules/openfang_bridge.ts), [../modules/zeroclaw_bridge.ts](../modules/zeroclaw_bridge.ts), and [../modules/nullclaw_bridge.ts](../modules/nullclaw_bridge.ts), and is exported from [../index.ts](../index.ts).
+The current scaffold lives in [../modules/claw_infra.ts](../modules/claw_infra.ts), [../modules/dexbot_profiles.ts](../modules/dexbot_profiles.ts), [../modules/claw_bridge.ts](../modules/claw_bridge.ts), and is exported from [../index.ts](../index.ts).
 
 ## Design Rules
 
@@ -52,8 +52,8 @@ Think of Claw's infrastructure layer as the shared foundation that the workflow 
 
 ZeroClaw should use Claw as a compatibility layer, not as a second signing or credential system.
 
-- ZeroClaw can invoke the JSON/CLI bridge in [../scripts/zeroclaw_bridge.ts](../scripts/zeroclaw_bridge.ts).
-- The manifest lives in [../modules/zeroclaw_manifest.ts](../modules/zeroclaw_manifest.ts) and is safe to query without starting the BitShares runtime.
+- ZeroClaw can invoke the JSON/CLI bridge via `tsx scripts/claw_bridge.ts --runtime zeroclaw`.
+- The manifest lives in [../modules/claw_manifest.ts](../modules/claw_manifest.ts) and is safe to query without starting the BitShares runtime.
 - Claw keeps private-key access inside its existing DEXBot2 credential path.
 - ZeroClaw gets read access to market, profile, HONEST, and order context, plus explicit action entrypoints when it needs to request a trade operation.
 
@@ -88,8 +88,8 @@ npm run zeroclaw:skill -- --profile-root /path/to/DEXBot2 --output ~/.zeroclaw/w
 
 NullClaw uses the same bridge surface, with a native skill path centered on `SKILL.toml` in the workspace.
 
-- NullClaw can invoke the JSON/CLI bridge in [../scripts/nullclaw_bridge.ts](../scripts/nullclaw_bridge.ts).
-- The manifest lives in [../modules/nullclaw_manifest.ts](../modules/nullclaw_manifest.ts) and is safe to query without starting the BitShares runtime.
+- NullClaw can invoke the JSON/CLI bridge via `tsx scripts/claw_bridge.ts --runtime nullclaw`.
+- The manifest lives in [../modules/claw_manifest.ts](../modules/claw_manifest.ts) and is safe to query without starting the BitShares runtime.
 - Claw keeps private-key access inside its existing DEXBot2 credential path.
 - NullClaw gets the same read access to market, profile, HONEST, and order context, plus explicit action entrypoints when it needs to request a trade operation.
 
@@ -103,8 +103,8 @@ npm run nullclaw:skill -- --profile-root /path/to/DEXBot2 --output ~/.nullclaw/w
 
 NanoClaw uses the same bridge surface, with a native `SKILL.md` path in the workspace skill tree.
 
-- NanoClaw can invoke the JSON/CLI bridge in [../scripts/nanoclaw_bridge.ts](../scripts/nanoclaw_bridge.ts).
-- The bridge lives in [../modules/nanoclaw_bridge.ts](../modules/nanoclaw_bridge.ts) and uses the shared Claw command surface.
+- NanoClaw can invoke the JSON/CLI bridge via `tsx scripts/claw_bridge.ts --runtime nanoclaw`.
+- The bridge lives in [../modules/claw_bridge.ts](../modules/claw_bridge.ts) and uses the shared Claw command surface.
 - Keep the generated skill named `bitshares-claw` so it does not collide with NanoClaw's bundled `claw` skill.
 
 To generate the skill file from Claw, run:
@@ -117,8 +117,8 @@ npm run nanoclaw:skill -- --profile-root /path/to/DEXBot2 --output /path/to/nano
 
 OpenFang uses the same bridge surface through a CLI-first wrapper and a workspace skill file.
 
-- OpenFang can invoke the JSON/CLI bridge in [../scripts/openfang_bridge.ts](../scripts/openfang_bridge.ts).
-- The bridge lives in [../modules/openfang_bridge.ts](../modules/openfang_bridge.ts) and uses the shared Claw command surface.
+- OpenFang can invoke the JSON/CLI bridge via `tsx scripts/claw_bridge.ts --runtime openfang`.
+- The bridge lives in [../modules/claw_bridge.ts](../modules/claw_bridge.ts) and uses the shared Claw command surface.
 - Keep the generated skill named `bitshares-claw` so it stays separate from runtime-specific OpenFang skills and remains a thin wrapper around the shared CLI bridge.
 
 To generate the skill file from Claw, run:
@@ -132,7 +132,7 @@ npm run openfang:skill -- --profile-root /path/to/DEXBot2 --output ~/.openfang/s
 Hermes should consume Claw through the shared MCP server, with an optional local `SKILL.md` for workflow guidance.
 
 - Hermes can invoke the MCP server in [../scripts/claw_mcp_server.ts](../scripts/claw_mcp_server.ts).
-- The manifest wrapper lives in [../modules/hermes_manifest.ts](../modules/hermes_manifest.ts) and advertises Hermes as an MCP-first runtime over the shared Claw command surface.
+- The manifest is served by [../modules/claw_manifest.ts](../modules/claw_manifest.ts) and advertises Hermes as an MCP-first runtime over the shared Claw command surface.
 - Keep the generated skill named `bitshares-claw` and focused on workflow guidance rather than copying bridge logic into Hermes.
 - Claw keeps private-key access inside its existing DEXBot2 credential path.
 
@@ -407,15 +407,9 @@ The barrel export in `claw/index.ts` spreads every module into one flat namespac
 |---|---|---|---|
 | `resolveAccountName` | `chain_queries` | Async lookup — returns the account name string for an ID, or passes through the original name |
 | `resolveSigningAccountName` | `chain_broadcast` | Sync extraction — returns the signing account name string from a context object |
-| `describeHermesBridge` | `hermesManifest` | Returns the Hermes manifest descriptor |
-| `describeOpenClawBridge` | `openclawManifest` | Returns the OpenClaw manifest descriptor |
-| `describeOpenFangBridge` | `openfangBridge` | Returns the OpenFang bridge descriptor |
-| `describeNanoClawBridge` | `nanoclawBridge` | Returns the NanoClaw bridge descriptor |
-| `describeNullClawBridge` | `nullclawManifest` | Returns the NullClaw manifest descriptor |
-| `describeZeroClawBridge` | `zeroclawManifest` | Returns the ZeroClaw manifest descriptor (runtime name, command examples) |
 | `describeMemuBridge` | `memuBridge` | Returns the memU bridge descriptor |
 
-When consuming `claw/index.ts` as a library, use the disambiguated names above. The non-prefixed `resolveAccountName` and `describeZeroClawBridge` point to the query/manifest variants by default.
+All runtime manifests are served by the single `describeClawBridge({ runtimeName })` call in [../modules/claw_manifest.ts](../modules/claw_manifest.ts).
 
 ## Suggested Runtime Flow
 

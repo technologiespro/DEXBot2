@@ -24,20 +24,14 @@ npm install
 - Position health: `modules/position_health.ts`, `modules/position_discovery.ts`, `modules/decision_loop.ts`
 - Price sources: `modules/feed_price_source.ts`, `modules/kibana_price_source.ts`
 - DEXBot2 and Claw integration: `modules/dexbot_bridge.ts`, `modules/dexbot_profiles.ts`, `modules/dexbot_credential_client.ts`, `modules/claw_bridge.ts`, `modules/claw_catalog.ts`, `modules/claw_manifest.ts`, `modules/claw_skill_md.ts`, `modules/claw_runtime_matrix.ts`, `scripts/claw_bridge.ts`, `scripts/claw_mcp_server.ts`
-- Hermes support: `modules/hermes_manifest.ts`, `scripts/claw_mcp_server.ts`
-- OpenFang support: `modules/openfang_bridge.ts`, `scripts/openfang_bridge.ts`
-- NanoClaw support: `modules/nanoclaw_bridge.ts`, `scripts/nanoclaw_bridge.ts`
-- ZeroClaw support: `modules/zeroclaw_bridge.ts`, `modules/zeroclaw_catalog.ts`, `modules/zeroclaw_manifest.ts`, `modules/zeroclaw_skill.ts`
-- NullClaw support: `modules/nullclaw_bridge.ts`, `modules/nullclaw_catalog.ts`, `modules/nullclaw_manifest.ts`, `modules/nullclaw_skill.ts`
 - memU support: `modules/memu_bridge.ts`, `scripts/memu_runner.py`, `scripts/memu_mcp_server.ts`
 - Skill packs: `skills/bitshares-guide/SKILL.md`, `skills/margin-trading/SKILL.md`, `skills/trend-detection/SKILL.md`, `skills/launcher-ops/SKILL.md`, `skills/memu-memory/SKILL.md`, shared boundary references under `skills/shared/references/`
 - HONEST support: `modules/honest_ecosystem.ts`, `modules/liquidity_pools.ts`
 - Launcher and paths: `modules/claw_launcher.ts`, `modules/launcher_mode_detector.ts`, `modules/launcher_paths.ts`
 - Shared runtime infrastructure: `modules/claw_infra.ts`, `modules/types.ts`, `modules/utils.ts`
 - MPA utilities: `modules/mpa_utils.ts`
-- OpenClaw support: `modules/openclaw_manifest.ts`
 - Reference docs: `docs/AI_BOT_LIBRARY_API.md`, `docs/DEXBOT2_TUNING_CHEAT_SHEET.md`, `docs/POSITION_HEALTH.md`, `docs/RUNTIME_COMPARISON.md`
-- Example entrypoints: `examples/connection_test.ts`, `examples/short_mpa_bts_strategy.ts`, `examples/position_manager_cli.ts`, `examples/nullclaw_bridge_example.ts`, `examples/zeroclaw_bridge_example.ts`, `examples/memu_integration_example.ts`, `examples/claw_profiles_example.ts`, `examples/claw_consumer_example.ts`, `examples/claw_infra_example.ts`, `examples/honest_ecosystem_example.ts`
+- Example entrypoints: `examples/connection_test.ts`, `examples/short_mpa_bts_strategy.ts`, `examples/position_manager_cli.ts`, `examples/memu_integration_example.ts`, `examples/claw_profiles_example.ts`, `examples/claw_consumer_example.ts`, `examples/claw_infra_example.ts`, `examples/honest_ecosystem_example.ts`
 
 ## Responsibility Boundary
 
@@ -258,15 +252,15 @@ DEXBOT_ROOT="$(cd .. && pwd)"
 npm run openfang:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT" --output ~/.openfang/skills/bitshares-claw/SKILL.md
 ```
 
-OpenFang uses the same shared bridge surface through a local CLI wrapper. Keep the generated skill file focused on invoking `openfang_bridge.ts` rather than vendoring OpenFang internals into DEXBot2.
+OpenFang uses the same shared bridge surface through a local CLI wrapper.
 
 OpenFang compatibility command surface:
 
 ```bash
-tsx scripts/openfang_bridge.ts manifest
-tsx scripts/openfang_bridge.ts profile-context --payload '{"botRef":"default"}'
-tsx scripts/openfang_bridge.ts market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
-tsx scripts/openfang_bridge.ts create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
+tsx scripts/claw_bridge.ts --runtime openfang manifest
+tsx scripts/claw_bridge.ts --runtime openfang profile-context --payload '{"botRef":"default"}'
+tsx scripts/claw_bridge.ts --runtime openfang market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
+tsx scripts/claw_bridge.ts --runtime openfang create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
 ```
 
 ### Hermes
@@ -328,10 +322,10 @@ NanoClaw already ships its own `claw` skill, so keep this bridge skill named `bi
 NanoClaw compatibility command surface:
 
 ```bash
-tsx scripts/nanoclaw_bridge.ts manifest
-tsx scripts/nanoclaw_bridge.ts profile-context --payload '{"botRef":"default"}'
-tsx scripts/nanoclaw_bridge.ts market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
-tsx scripts/nanoclaw_bridge.ts create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
+tsx scripts/claw_bridge.ts --runtime nanoclaw manifest
+tsx scripts/claw_bridge.ts --runtime nanoclaw profile-context --payload '{"botRef":"default"}'
+tsx scripts/claw_bridge.ts --runtime nanoclaw market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
+tsx scripts/claw_bridge.ts --runtime nanoclaw create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
 ```
 
 ### ZeroClaw
@@ -347,13 +341,13 @@ npm run zeroclaw:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT"
 ZeroClaw compatibility command surface:
 
 ```bash
-tsx scripts/zeroclaw_bridge.ts manifest
-tsx scripts/zeroclaw_bridge.ts profile-context --payload '{"botRef":"default"}'
-tsx scripts/zeroclaw_bridge.ts market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
-tsx scripts/zeroclaw_bridge.ts create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
-tsx scripts/zeroclaw_bridge.ts update-limit-order --payload '{"accountName":"your-account","orderId":"1.7.123","newParams":{"amountToSell":10,"minToReceive":2}}'
-tsx scripts/zeroclaw_bridge.ts execute-batch --payload '{"accountName":"your-account","operations":[]}'
-tsx scripts/zeroclaw_bridge.ts borrow-mpa --payload '{"accountName":"your-account","mpaAsset":"HONEST.USD","debtDelta":10,"collateralDelta":25000}'
+tsx scripts/claw_bridge.ts --runtime zeroclaw manifest
+tsx scripts/claw_bridge.ts --runtime zeroclaw profile-context --payload '{"botRef":"default"}'
+tsx scripts/claw_bridge.ts --runtime zeroclaw market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
+tsx scripts/claw_bridge.ts --runtime zeroclaw create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
+tsx scripts/claw_bridge.ts --runtime zeroclaw update-limit-order --payload '{"accountName":"your-account","orderId":"1.7.123","newParams":{"amountToSell":10,"minToReceive":2}}'
+tsx scripts/claw_bridge.ts --runtime zeroclaw execute-batch --payload '{"accountName":"your-account","operations":[]}'
+tsx scripts/claw_bridge.ts --runtime zeroclaw borrow-mpa --payload '{"accountName":"your-account","mpaAsset":"HONEST.USD","debtDelta":10,"collateralDelta":25000}'
 ```
 
 ### NullClaw
@@ -369,13 +363,13 @@ npm run nullclaw:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT"
 NullClaw compatibility command surface:
 
 ```bash
-tsx scripts/nullclaw_bridge.ts manifest
-tsx scripts/nullclaw_bridge.ts profile-context --payload '{"botRef":"default"}'
-tsx scripts/nullclaw_bridge.ts market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
-tsx scripts/nullclaw_bridge.ts create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
-tsx scripts/nullclaw_bridge.ts update-limit-order --payload '{"accountName":"your-account","orderId":"1.7.123","newParams":{"amountToSell":10,"minToReceive":2}}'
-tsx scripts/nullclaw_bridge.ts execute-batch --payload '{"accountName":"your-account","operations":[]}'
-tsx scripts/nullclaw_bridge.ts borrow-mpa --payload '{"accountName":"your-account","mpaAsset":"HONEST.USD","debtDelta":10,"collateralDelta":25000}'
+tsx scripts/claw_bridge.ts --runtime nullclaw manifest
+tsx scripts/claw_bridge.ts --runtime nullclaw profile-context --payload '{"botRef":"default"}'
+tsx scripts/claw_bridge.ts --runtime nullclaw market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
+tsx scripts/claw_bridge.ts --runtime nullclaw create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
+tsx scripts/claw_bridge.ts --runtime nullclaw update-limit-order --payload '{"accountName":"your-account","orderId":"1.7.123","newParams":{"amountToSell":10,"minToReceive":2}}'
+tsx scripts/claw_bridge.ts --runtime nullclaw execute-batch --payload '{"accountName":"your-account","operations":[]}'
+tsx scripts/claw_bridge.ts --runtime nullclaw borrow-mpa --payload '{"accountName":"your-account","mpaAsset":"HONEST.USD","debtDelta":10,"collateralDelta":25000}'
 ```
 
 ### memU

@@ -9,14 +9,7 @@ const clawManifest = require('./modules/claw_manifest');
 const clawRuntimeMatrix = require('./modules/claw_runtime_matrix');
 const clawSkillMd = require('./modules/claw_skill_md');
 const creditRuntimeAdapter = require('./modules/credit_runtime_adapter');
-const hermesManifest = require('./modules/hermes_manifest');
-const openclawManifest = require('./modules/openclaw_manifest');
-const openfangBridge = require('./modules/openfang_bridge');
-const nanoclawBridge = require('./modules/nanoclaw_bridge');
-const nullclawBridge = require('./modules/nullclaw_bridge');
-const nullclawCatalog = require('./modules/nullclaw_catalog');
-const nullclawManifest = require('./modules/nullclaw_manifest');
-const nullclawSkill = require('./modules/nullclaw_skill');
+
 const decisionLoop = require('./modules/decision_loop');
 const dexbotBridge = require('./modules/dexbot_bridge');
 const dexbotCredentialClient = require('./modules/dexbot_credential_client');
@@ -31,11 +24,6 @@ const positionHealth = require('./modules/position_health');
 const positionManager = require('./modules/position_manager');
 const positionManagerWatch = require('./modules/position_manager_watch');
 const shortMpaStrategy = require('./modules/short_mpa_strategy');
-const zeroclawBridge = require('./modules/zeroclaw_bridge');
-const zeroclawCatalog = require('./modules/zeroclaw_catalog');
-const zeroclawManifest = require('./modules/zeroclaw_manifest');
-const zeroclawSkill = require('./modules/zeroclaw_skill');
-
 export = {
   ...bitsharesClient,
   ...chainActions,
@@ -48,14 +36,6 @@ export = {
   ...clawRuntimeMatrix,
   ...clawSkillMd,
   ...creditRuntimeAdapter,
-  ...hermesManifest,
-  ...openclawManifest,
-  ...openfangBridge,
-  ...nanoclawBridge,
-  ...nullclawBridge,
-  ...nullclawCatalog,
-  ...nullclawManifest,
-  ...nullclawSkill,
   ...decisionLoop,
   ...dexbotBridge,
   ...dexbotCredentialClient,
@@ -70,18 +50,8 @@ export = {
   ...positionManager,
   ...positionManagerWatch,
   ...shortMpaStrategy,
-  ...zeroclawBridge,
-  ...zeroclawCatalog,
-  ...zeroclawManifest,
-  ...zeroclawSkill,
 
   // Disambiguate root exports that would otherwise be overwritten by spread order.
-  describeHermesBridge: hermesManifest.describeHermesBridge,
-  describeOpenClawBridge: openclawManifest.describeOpenClawBridge,
-  describeOpenFangBridge: openfangBridge.describeOpenFangBridge,
-  describeNanoClawBridge: nanoclawBridge.describeNanoClawBridge,
-  describeNullClawBridge: nullclawManifest.describeNullClawBridge,
-  describeZeroClawBridge: zeroclawManifest.describeZeroClawBridge,
   describeMemuBridge: memuBridge.describeMemuBridge,
   resolveAccountName: chainQueries.resolveAccountName,
   resolveSigningAccountName: chainBroadcast.resolveAccountName

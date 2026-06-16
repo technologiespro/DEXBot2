@@ -2,7 +2,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const { getClawToolCatalog } = require('./claw_catalog');
 const { getSupportedClawRuntime } = require('./claw_runtime_matrix');
-const { normalizeRepoRoot, normalizeProfileRoot } = require('./skill_utils');
+const { buildBridgeCommand, buildSkillTomlLines, createTool, normalizeRepoRoot, normalizeProfileRoot } = require('./skill_utils');
 
 function normalizeClawRepoRoot(repoRoot: string) {
   return normalizeRepoRoot('claw-skill-md', repoRoot);
@@ -127,7 +127,7 @@ function buildRuntimeSetup(runtime: any, repoRoot: string, profileRoot: string) 
         '.claude/skills/bitshares-claw/SKILL.md',
         '```',
         '',
-        'Use the local JSON bridge in `scripts/nanoclaw_bridge.js` when you want the NanoClaw runtime to talk to DEXBot2.',
+        'Use the local JSON bridge in `scripts/claw_bridge.js --runtime nanoclaw` when you want the NanoClaw runtime to talk to DEXBot2.',
         '',
         `Set \`DEXBOT_PROFILE_ROOT=${profileRoot}\` if you want a default profile root outside tool args.`
       ].join('\n');
@@ -144,7 +144,7 @@ function buildRuntimeSetup(runtime: any, repoRoot: string, profileRoot: string) 
         '~/.openfang/skills/bitshares-claw/SKILL.md',
         '```',
         '',
-        'Use the local JSON bridge in `scripts/openfang_bridge.js` when you want the OpenFang runtime to talk to DEXBot2.',
+        'Use the local JSON bridge in `scripts/claw_bridge.js --runtime openfang` when you want the OpenFang runtime to talk to DEXBot2.',
         '',
         `Set \`DEXBOT_PROFILE_ROOT=${profileRoot}\` if you want a default profile root outside tool args.`
       ].join('\n');
@@ -229,18 +229,39 @@ function buildRuntimeWorkflow(runtime: any) {
   ].join('\n');
 }
 
+function buildRuntimeSkillToml(runtime: any, repoRoot: string, profileRoot: string) {
+  const tools = getClawToolCatalog()
+    .filter((tool: any) => Array.isArray(tool.runtimes) && tool.runtimes.includes(runtime.runtime))
+    .map((tool: any) => createTool(
+      tool.toolName,
+      tool.description,
+      buildBridgeCommand(
+        path.join(repoRoot, 'scripts', 'claw_bridge.js').replace(/\\/g, '/'),
+        profileRoot,
+        tool.command,
+        tool.extraArgs
+      ),
+      tool.args
+    ));
+
+  return buildSkillTomlLines(
+    'bitshares-claw',
+    `${runtime.displayName || runtime.runtime} bridge to the AI-Bot / DEXBot2 BitShares layer`,
+    ['bitshares', 'bridge', 'local', runtime.runtime],
+    tools
+  );
+}
+
 function buildRuntimeSkillMarkdown(runtimeName: string, options: Record<string, any> = {}) {
   const runtime = getSupportedClawRuntime(runtimeName);
   if (!runtime) {
     throw new Error(`Unsupported runtime: ${runtimeName}`);
   }
 
-  if (runtime.runtime === 'zeroclaw') {
-    throw new Error('ZeroClaw uses SKILL.toml via scripts/zeroclaw_skill.js, not claw_skill_md.js');
-  }
-
-  if (runtime.runtime === 'nullclaw') {
-    throw new Error('NullClaw uses SKILL.toml via scripts/nullclaw_skill.js, not claw_skill_md.js');
+  if (runtime.skillFile === 'SKILL.toml') {
+    const repoRoot = normalizeClawRepoRoot(options.repoRoot);
+    const profileRoot = normalizeProfileRoot(options, repoRoot);
+    return buildRuntimeSkillToml(runtime, repoRoot, profileRoot);
   }
 
   const repoRoot = normalizeClawRepoRoot(options.repoRoot);
@@ -249,12 +270,12 @@ function buildRuntimeSkillMarkdown(runtimeName: string, options: Record<string, 
   return [
     '---',
     'name: bitshares-claw',
-    `description: Use native DEXBot2 Claw BitShares tools in ${runtime.runtime} for market snapshots, HONEST context, MPA planning, and explicit order execution.`,
+    `description: Use native DEXBot2 Claw BitShares tools in ${runtime.displayName || runtime.runtime} for market snapshots, HONEST context, MPA planning, and explicit order execution.`,
     '---',
     '',
     '# BitShares Claw',
     '',
-    `Use the native Claw integration for ${runtime.runtime} when the user asks about BitShares automation, DEXBot2 profiles, HONEST assets, MPA borrowing, order management, or BTS-backed short workflows.`,
+    `Use the native Claw integration for ${runtime.displayName || runtime.runtime} when the user asks about BitShares automation, DEXBot2 profiles, HONEST assets, MPA borrowing, order management, or BTS-backed short workflows.`,
     '',
     '## Safety Rules',
     '',
@@ -288,5 +309,6 @@ async function writeRuntimeSkillMarkdown(outputPath: string, runtimeName: string
 
 export = {
   buildRuntimeSkillMarkdown,
+  buildRuntimeSkillToml,
   writeRuntimeSkillMarkdown
 };

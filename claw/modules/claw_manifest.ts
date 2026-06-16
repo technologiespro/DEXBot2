@@ -23,10 +23,10 @@ function describeClawBridge(options: Record<string, any> = {}) {
   return {
     compatibility: {
       credentialBoundary: 'AI-Bot and DEXBot2 own signing and credentials',
-      name: 'Claw',
+      name: focusedRuntime?.displayName || 'Claw',
       recommendedTransport: focusedRuntime ? focusedRuntime.preferredTransport : 'runtime-specific',
       runtimes: listSupportedClawRuntimes(),
-      trustModel: 'Claw runtimes send intents and read context; AI-Bot handles signing through DEXBot2',
+      trustModel: focusedRuntime?.trustModel || 'Claw runtimes send intents and read context; AI-Bot handles signing through DEXBot2',
       version: 2
     },
     commandExamples: buildClawCommandExamples(options.scriptPath),
@@ -53,26 +53,6 @@ function describeClawBridge(options: Record<string, any> = {}) {
   };
 }
 
-function createVariantDescribeFn(runtimeName: string, displayName: string, scriptPath: string, trustModel: string) {
-  return function describeVariantBridge(options: Record<string, any> = {}) {
-    const manifest = describeClawBridge({
-      ...options,
-      runtimeName,
-      scriptPath
-    });
-
-    return {
-      ...manifest,
-      compatibility: {
-        ...manifest.compatibility,
-        name: displayName,
-        trustModel
-      }
-    };
-  };
-}
-
 export = {
-  describeClawBridge,
-  createVariantDescribeFn
+  describeClawBridge
 };

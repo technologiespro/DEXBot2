@@ -4,12 +4,8 @@ const assert = require('assert');
 const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
-const {
-  createNullClawBridge,
-  describeNullClawBridge,
-  runNullClawCommand
-} = require('../modules/nullclaw_bridge');
-const { writeNullClawSkillFile } = require('../modules/nullclaw_skill');
+const { createClawBridge, runClawCommand } = require('../modules/claw_bridge');
+const { buildRuntimeSkillMarkdown, writeRuntimeSkillMarkdown } = require('../modules/claw_skill_md');
 
 async function main() {
   const repoRoot = path.resolve(__dirname, '..');
@@ -21,7 +17,7 @@ async function main() {
 
   await fs.mkdir(dexbotRoot, { recursive: true });
 
-  await writeNullClawSkillFile(outputPath, {
+  await writeRuntimeSkillMarkdown(outputPath, 'nullclaw', {
     profileRoot: dexbotRoot,
     repoRoot
   });
@@ -30,24 +26,23 @@ async function main() {
   assert.ok(skillText.includes('name = "bitshares-claw"'));
   assert.ok(skillText.includes('NullClaw bridge to the AI-Bot / DEXBot2 BitShares layer'));
   assert.ok(skillText.includes('nullclaw'));
-  assert.ok(skillText.includes('nullclaw_bridge.js'));
+  assert.ok(skillText.includes('claw_bridge.js'));
 
-  const bridge = createNullClawBridge({
+  const bridge = createClawBridge({
     runtime: {
       name: 'nullclaw-test'
     }
   });
   assert.strictEqual(bridge.runtime.name, 'nullclaw-test');
 
-  const manifest = describeNullClawBridge({ profileRoot: dexbotRoot });
-  const runtime = await runNullClawCommand('runtime', { profileRoot: dexbotRoot });
+  const manifest = await runClawCommand('manifest', { runtimeName: 'nullclaw', profileRoot: dexbotRoot });
+  const runtime = await runClawCommand('runtime', { runtimeName: 'nullclaw', profileRoot: dexbotRoot });
 
   assert.strictEqual(manifest.options.runtimeName, 'nullclaw');
   assert.strictEqual(manifest.options.profileRoot, dexbotRoot);
   assert.strictEqual(manifest.compatibility.recommendedTransport, 'skill-toml-or-mcp');
-  assert.ok(manifest.commandExamples.some((example) => example.includes('nullclaw_bridge.ts')));
+  assert.ok(manifest.commandExamples.some((example) => example.includes('claw_bridge.ts')));
   assert.ok(Array.isArray(manifest.tools.catalog));
-  assert.strictEqual((await runNullClawCommand('manifest', { profileRoot: dexbotRoot })).options.runtimeName, 'nullclaw');
   assert.strictEqual(runtime.name, 'nullclaw');
   assert.strictEqual(runtime.profileRoot, dexbotRoot);
   assert.strictEqual(runtime.accountName, null);
@@ -59,3 +54,4 @@ main().catch((err) => {
   console.error(err && err.stack ? err.stack : err.message);
   process.exit(1);
 });
+export {};
