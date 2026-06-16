@@ -176,11 +176,80 @@ Market-adapter settings resolve in this order:
 3. Pair-specific overrides in `profiles/market_profiles.json`
 4. Bot-specific overrides in `profiles/market_adapter_settings.json`
 
-`profiles/market_adapter_settings.json` has its own override layers:
+### Global Overrides
 
-- `globals` applies to every market and bot
-- `pairs[].marketAdapterSettings` overrides one market pair
-- `pairs[].botOverrides[<botName>]` overrides one bot inside that pair
+Override any `MARKET_ADAPTER` constant by adding a matching key under `MARKET_ADAPTER` in `profiles/general.settings.json`:
+
+```json
+{
+  "MARKET_ADAPTER": {
+    "AMA_DELTA_THRESHOLD_PERCENT": 2.0,
+    "DYNAMIC_WEIGHT_ENABLED": true
+  }
+}
+```
+
+### Pair-Specific Overrides
+
+Pair-specific AMA profiles live in `profiles/market_profiles.json`:
+
+```json
+{
+  "version": 1,
+  "profiles": [{
+    "key": "XRP-BTS",
+    "assetA": "IOB.XRP",
+    "assetB": "BTS",
+    "intervalSeconds": 3600,
+    "defaultAma": "AMA1",
+    "amas": {
+      "AMA1": { "erPeriod": 200, "fastPeriod": 3, "slowPeriod": 80 },
+      "AMA2": { "erPeriod": 500, "fastPeriod": 5, "slowPeriod": 120 }
+    }
+  }]
+}
+```
+
+`profiles/market_adapter_settings.json` layers:
+
+```json
+{
+  "globals": {
+    "deltaThresholdPercent": 2.0,
+    "regimeSensitivity": 1.0
+  },
+  "pairs": [{
+    "assetASymbol": "IOB.XRP",
+    "assetBSymbol": "BTS",
+    "marketAdapterSettings": {
+      "deltaThresholdPercent": 3.0,
+      "amaSlope": { "maxSlopePct": 1.2 }
+    }
+  }]
+}
+```
+
+- `globals` — applies to every market and bot
+- `pairs[].marketAdapterSettings` — overrides one market pair
+
+### Per-Bot Overrides
+
+`botOverrides` is a general per-bot override within each pair entry. It applies at the highest priority and can hold any supported field:
+
+```json
+{
+  "pairs": [{
+    "assetASymbol": "IOB.XRP",
+    "assetBSymbol": "BTS",
+    "botOverrides": {
+      "XRP-BTS": {
+        "deltaThresholdPercent": 4.0,
+        "defaultAmaKey": "AMA1"
+      }
+    }
+  }]
+}
+```
 
 ## Live Writes and Dry-Run
 

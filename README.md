@@ -166,6 +166,10 @@ Global settings via `node dexbot bot`, stored in `profiles/general.settings.json
 - **Log Level**: `debug`, `info`, `warn`, `error`. Fine-grained category control via `LOGGING_CONFIG` (see [Logging](docs/LOGGING.md))
 - **Updater**: Active (default `ON`), Branch (`auto`/`main`/`dev`/`test`), Interval (default `1 day`), Time (default `00:00`)
 
+### Constants and Overrides
+
+Defaults in [`modules/constants.ts`](modules/constants.ts) are overridable at global, pair, and bot level via `profiles/general.settings.json`, `profiles/market_profiles.json`, and `profiles/market_adapter_settings.json`. See [market_adapter/README.md](market_adapter/README.md#settings-and-overrides) for examples.
+
 ## 🎯 Zero-Dependency Process Management
 
 `node unlock` is the recommended production runtime. It runs the selected bot set as one monolithic bot process, with the credential daemon and market adapter in separate helper processes. Monolithic start/stop/restart controls apply to the whole runtime, not to individual bots.
