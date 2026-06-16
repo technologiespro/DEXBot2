@@ -56,7 +56,7 @@ function testGenerateHtml() {
         'Derivative Trend Analysis'
     );
 
-    assert.ok(html.includes('uplot@1.6.32/dist/uPlot.iife.min.js'));
+    assert.ok(html.includes('uPlot.iife.min.js'));
     assert.ok(html.includes('price-chart'));
     assert.ok(html.includes('deriv-chart'));
     assert.ok(html.includes('interp-chart'));

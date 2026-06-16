@@ -74,8 +74,8 @@ function generateHTML(meta: any, candles: any, amaResults: any) {
     <meta name="darkreader-lock">
     <meta name="color-scheme" content="dark">
     <title>${escapeHtml(poolLabel)} LP Price · ${escapeHtml(intervalLabel)}</title>
-    <link rel="stylesheet" href="https://unpkg.com/uplot@1.6.32/dist/uPlot.min.css">
-    <script src="https://unpkg.com/uplot@1.6.32/dist/uPlot.iife.min.js"></script>
+    <link rel="stylesheet" href="../../lib/uplot/uPlot.min.css">
+    <script src="../../lib/uplot/uPlot.iife.min.js"></script>
     <style>
         :root { color-scheme: dark; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
