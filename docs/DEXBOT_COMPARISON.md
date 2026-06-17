@@ -63,11 +63,11 @@ DEXBot2 is a ground-up rewrite in TypeScript that prioritizes production correct
 | **GUI** | PyQt5 (desktop GUI) | None (CLI only) |
 | **CLI Framework** | Click | Custom native async prompts |
 | **Blockchain Client** | `bitshares` Python library | `modules/bitshares-native/` (native) |
-| **Key Management** | `uptick` (BitShares wallet) | Custom AES-256-GCM encrypted store |
+| **Key Management** | `uptick` (BitShares wallet) | AES-256-GCM encrypted store + credential daemon (RAM-only, Unix-socket signing) |
 | **Database / State** | SQLite via SQLAlchemy ORM | JSON flat files (no DB) |
 | **DB Migrations** | Alembic | N/A |
 | **Process Manager** | Systemd service (Linux) | PM2 |
-| **External APIs** | CoinGecko, CCXT, Waves | No CEX APIs; adapter can consume on-chain/pool/Kibana candle inputs |
+| **External APIs** | CoinGecko, CCXT, Waves | On-chain/pool/Kibana candle inputs; optional CEX synthetic seed generator (`fetch_cex_synthetic_data.ts`) for adapter bootstrap |
 | **Container** | Docker (Ubuntu 18.04) | Docker (multi-stage) |
 | **Dashboard** | PyQt5 GUI | CLI/PM2 logs; Claw/runtime automation surface |
 | **Testing** | pytest + Docker testnet | Native Node assert (209 `test_*.ts` files; auto-discovered via `globSync`) |
@@ -142,8 +142,10 @@ DEXBot brings a full Python desktop GUI and a strategy plugin model. DEXBot2 is 
 - **Copy-on-Write** grid: planning happens on isolated `WorkingGrid`; committed atomically or discarded on failure
 - **Targeted fill subscription** via `set_subscribe_callback` → `get_account_history_operations` filtered for `OP_FILL_ORDER` fill operations; push-triggered fixed-cap fill batching (max 4 fills per batch)
 - **Market Adapter**: AMA-based price tracking, dynamic buy/sell weighting, Kalman confirmation, ATR/regime dampening, asymmetric grid bounds, and configurable delta triggers
+- **`fund_registry.ts`**: shared-account fund registry — tracks per-account, per-bot fund and collateral allocations; pre-registered atomically at startup so all bots sharing an account see a consistent proportional split before any bot starts; cross-bot invariant enforcement
+- **Stable bot keys**: deterministic sha256-derived 8-char bot id eliminates name-collision risk across restarts and config reorders
 - State in **JSON flat files** (no database dependency)
-- Each PM2 process manages **one bot**
+- Each PM2 process manages **one bot**; multiple bots can share an account via fund_registry
 
 **Pattern:** Layered engines, targeted fill subscription + fixed-cap batch processing + periodic reconciliation, immutable/COW state management.
 
@@ -157,7 +159,7 @@ DEXBot brings a full Python desktop GUI and a strategy plugin model. DEXBot2 is 
 | **Concurrency Model** | Python threading (GIL-bound) | TypeScript async + AsyncLock semaphores |
 | **State Storage** | SQLite (relational, queryable) | JSON flat files (simple, no dependency) |
 | **State Safety** | Mutable shared state per worker | Copy-on-Write immutable master grid |
-| **Multi-bot Scaling** | Single thread, multiple workers | One PM2 process per bot |
+| **Multi-bot Scaling** | Single thread, multiple workers | One PM2 process per bot; shared-account fund registry for proportional balance split |
 | **Strategy Coupling** | Loosely coupled via base class | Core grid strategy deeply integrated; Claw/adapter layers extend around it |
 | **Recovery Model** | Restart from SQLite state | Startup reconciliation + blockchain re-sync + fill replay guards |
 | **Error Isolation** | Per-worker exception handling | Per-engine try/catch, up to 5 recovery retries |
@@ -235,9 +237,9 @@ Price Scale (geometric, e.g. 0.4% increments):
 
 | Feature | DEXBot | DEXBot2 |
 |---|---|---|
-| **Number of Strategies** | 3 built-in + plugins | 1 (boundary-crawl grid) |
+| **Number of Strategies** | 3 built-in + plugins | 1 (deeply engineered, highly adaptive boundary-crawl grid with AMA/Kalman/ATR/regime signals) |
 | **Custom Strategies** | Yes (plugin system) | No core strategy plugins |
-| **External Price Feeds** | Yes (CoinGecko, CCXT, Waves) | No centralized exchange feed dependency; adapter uses on-chain/pool/Kibana candle sources |
+| **External Price Feeds** | Yes (CoinGecko, CCXT, Waves) | On-chain/pool/Kibana candle sources; optional CEX synthetic seed generator for market adapter bootstrap |
 | **Strategy Isolation** | Yes (each worker independent) | N/A (one strategy) |
 | **Grid Trading** | Staggered Orders (similar concept) | Yes (core, heavily engineered) |
 | **Market Making** | Relative Orders, KOTH | Yes (spread-based) |
@@ -369,11 +371,11 @@ workers:
 |---|---|---|
 | **Exchange** | BitShares DEX | BitShares DEX |
 | **Client Library** | `bitshares` (Python, v0.5.x) | `modules/bitshares-native/` (native) |
-| **Key Management** | `uptick` library | Custom AES-256-GCM + RAM-only password |
-| **Connection Mode** | WebSocket (event-driven) | WebSocket (polling + subscriptions) |
+| **Key Management** | `uptick` library | AES-256-GCM + credential daemon + authority resolution fallback |
+| **Connection Mode** | WebSocket (event-driven) | WebSocket (event-driven subscriptions + periodic safety-net sync) |
 | **Multi-node Failover** | Yes (latency-sorted) | Yes (health-checked) |
-| **External Price Feeds** | CoinGecko, CCXT, Waves | No CEX feed dependency; market adapter consumes on-chain/pool/Kibana candles |
-| **Account Type** | Single or multi-account | Per-bot account |
+| **External Price Feeds** | CoinGecko, CCXT, Waves | On-chain/pool/Kibana candles; optional CEX seed generator (`market_adapter/inputs/fetch_cex_synthetic_data.ts`) for adapter bootstrap |
+| **Account Type** | Single or multi-account | Per-bot or shared-account (via fund_registry.ts); per-key credential daemon |
 | **Order Operations** | Place, cancel, update via `bitshares` lib | Place, cancel, update via native implementation |
 | **Asset Metadata** | Fetched via `bitshares` | Fetched on startup, cached |
 | **Balance Queries** | Per tick via library | Periodic + event-triggered |
@@ -413,6 +415,9 @@ Where:
 - **Atomic snapshots**: consistent reads across all fund components
 - **Recovery triggers**: invariant violation automatically initiates recovery cycle
 - **Market-fee and BTS-fee regression coverage**: tests cover fee cache fallback, BTS fee deduction, batching, and precision quantization
+- **`fund_registry.ts`**: shared-account fund registry with async-locked per-account, per-bot fund and collateral allocation tracking; pre-registered atomically at startup so all bots see consistent proportional splits before any bot starts; cross-bot invariant enforcement with widened tolerance for shared accounts
+- **Stable bot keys**: deterministic sha256-derived bot id embedded in registry keys; eliminates name-collision risk across config reorders and restarts
+- **Credit/MPA collateral allocation**: fund registry extended with `registerCollateralAllocation` / `getEffectiveCollateralAllocationSync` to proportionally split credit bot collateral across bots sharing one account
 - **Credit/MPA runtime support**: separate runtime modules track collateral/debt position data and planning state for advanced BitShares workflows
 
 ### Accounting Comparison
@@ -423,11 +428,12 @@ Where:
 | **Fund Invariant** | No | Yes (verified each operation) |
 | **Fee Reservation** | No | Yes (BTS buffer maintained) |
 | **Virtual Order Accounting** | SQLite | In-memory with invariant tracking |
-| **Multi-worker Balance Split** | Yes (automatic) | N/A (one bot per process) |
+| **Multi-worker Balance Split** | Yes (automatic) | Yes (automatic via fund_registry.ts for shared accounts) |
 | **Overdraft Protection** | Basic | Yes (invariant enforcement) |
 | **Optimistic Proceeds** | No | Yes |
 | **Accounting Audit Trail** | No | Partial (logging) |
-| **Credit/MPA Awareness** | No | Yes (credit runtime and Claw position modules) |
+| **Credit/MPA Collateral Allocation** | No | Yes (fund_registry.ts proportional split for shared-account credit bots) |
+| **Shared-Account Fund Registry** | Manual per-strategy percentages | Automated via `fund_registry.ts` with pre-registration, cross-bot invariants, and atomic release |
 
 ---
 
@@ -565,6 +571,7 @@ Where:
 - **AES-256-GCM encrypted key storage** (`profiles/keys.json`)
 - **RAM-only master password**: never written to disk (set only in environment, wiped after use)
 - `credential-daemon.ts`: manages key decryption in a separate daemon process
+- **On-chain authority resolution** (`modules/authority_resolver.ts`): when no direct private key is stored for an account, walks BitShares active authority structures (account_auths → key_auths, max depth 2) to find a usable signing key; per-call public key cache; multi-sig hint when no single entry meets threshold
 - Config in plain JSON but no keys stored in config (separate encrypted store)
 - `.gitignore` ensures `keys.json` and sensitive files are never committed
 - **Fund invariant enforcement**: prevents accidental overdraft
@@ -582,6 +589,7 @@ Where:
 | **Overdraft Protection** | No | Fund invariant system |
 | **Audit Logging** | Basic | Structured per-component logging |
 | **Credential Runtime Tests** | No | Yes |
+| **Authority Resolution Fallback** | No | Yes (on-chain authority walk via `authority_resolver.ts`) |
 
 ---
 
@@ -720,7 +728,7 @@ Where:
 | **Dev Packages** | ~5-8 | 3 (TypeScript, tsx, @types/node) |
 | **GUI Framework** | PyQt5 (~80MB) | None |
 | **Database ORM** | SQLAlchemy | None |
-| **External Price APIs** | CoinGecko, CCXT, Waves | None |
+| **External Price APIs** | CoinGecko, CCXT, Waves | None (runtime dep); optional CEX seed generator for adapter bootstrap |
 | **Blockchain Client** | `bitshares` + `python-bitshares` | Hand-rolled native (`bitshares-native/`) |
 | **Install Size (approx)** | Large (100MB+) | Minimal; analysis/data assets can be larger |
 | **Runtime Requirement** | Python 3.6+ | Node.js LTS |
@@ -850,7 +858,7 @@ The 500× figure is not theoretical: it materializes in production when higher o
 
 ### DEXBot2 Limitations
 
-- **Single core strategy only** — no runtime-swappable strategy plugins
+- **Single core strategy** — no runtime-swappable plugin system, but the boundary-crawl grid is deeply engineered with AMA/Kalman/ATR/regime adaptive signals, making it far more capable and configurable than DEXBot's individual strategies
 - No GUI — requires CLI proficiency
 - No DEXBot-style external CEX price-feed strategy support
 - JSON config requires manual editing (no wizard)
@@ -866,12 +874,12 @@ The 500× figure is not theoretical: it materializes in production when higher o
 
 | Category | DEXBot | DEXBot2 | Winner |
 |---|---|---|---|
-| **Strategy Variety** | ★★★★★ (3 + plugins) | ★☆☆☆☆ (1) | DEXBot |
+| **Strategy Variety** | ★★★☆☆ (3 + plugins) | ★★★★☆ (1 deeply engineered, highly adaptive/configurable boundary-crawl grid) | DEXBot2 |
 | **State Safety** | ★★☆☆☆ | ★★★★★ (COW + invariants) | DEXBot2 |
-| **Fund Accounting** | ★★☆☆☆ | ★★★★★ (formal model) | DEXBot2 |
+| **Fund Accounting** | ★★☆☆☆ | ★★★★★ (formal model + fund_registry + cross-bot invariants) | DEXBot2 |
 | **Concurrency Safety** | ★★☆☆☆ | ★★★★★ (AsyncLock + COW) | DEXBot2 |
-| **Security** | ★★★☆☆ | ★★★★★ (AES-256-GCM, RAM-only) | DEXBot2 |
-| **Ease of Setup** | ★★★★★ (GUI wizard) | ★★☆☆☆ (manual JSON) | DEXBot |
+| **Security** | ★★★☆☆ | ★★★★★ (AES-256-GCM, credential daemon, authority resolution) | DEXBot2 |
+| **Ease of Setup** | ★★☆☆☆ (PyQt5/PyInstaller/Systemd dependency hell) | ★★★★★ (zero deps, `dexbot bot`, `dexbot key`, `dexbot test`/`start`) | DEXBot2 |
 | **Accessibility** | ★★★★★ (GUI) | ★★☆☆☆ (CLI only) | DEXBot |
 | **Testing Depth** | ★★★☆☆ | ★★★★★ (209 test files; focused regressions) | DEXBot2 |
 | **Documentation** | ★★★☆☆ | ★★★★★ (architecture/accounting/security/adapter docs) | DEXBot2 |
@@ -884,7 +892,7 @@ The 500× figure is not theoretical: it materializes in production when higher o
 | **Automation/API Surface** | ★★☆☆☆ (strategy hooks) | ★★★★☆ (Claw modules/scripts/skills) | DEXBot2 |
 | **Credit/MPA Tooling** | ★☆☆☆☆ | ★★★★☆ | DEXBot2 |
 | **Community/Ecosystem** | ★★★☆☆ | ★★☆☆☆ | DEXBot |
-| **Multi-Strategy Support** | ★★★★★ | ★☆☆☆☆ | DEXBot |
+| **Multi-Strategy Support** | ★★☆☆☆ | ★★★★☆ (1 deeply engineered, highly adaptive strategy with broad signal integration) | DEXBot2 |
 
 ---
 
