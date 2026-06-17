@@ -872,7 +872,7 @@ async function testStartupDustSchedulesTimer() {
         bot._persistAndRecoverIfNeeded = async () => {};
         bot._baseWeightDistribution = { sell: 0.5, buy: 0.5 };
         bot.config.weightDistribution = { sell: 0.5, buy: 0.5 };
-        bot._runGridMaintenance = async (bot, context, options) => {
+        bot._runGridMaintenance = async (context, options) => {
             maintenanceCalls++;
             bot._dustSinceMap.clear();
             assert.strictEqual(context, 'dust-timer', 'Dust timer should run dust maintenance context');

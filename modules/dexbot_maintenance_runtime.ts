@@ -952,8 +952,11 @@ async function setupTriggerFileDetection(bot) {
  * @returns {Promise<void>}
  */
 async function performPeriodicGridChecks(bot) {
-    const periodicGridMaintFn = bot._runGridMaintenance || runGridMaintenance;
-    await periodicGridMaintFn(bot, 'periodic', { fillLockAlreadyHeld: true });
+    if (typeof bot._runGridMaintenance === 'function') {
+        await bot._runGridMaintenance('periodic', { fillLockAlreadyHeld: true });
+    } else {
+        await runGridMaintenance(bot, 'periodic', { fillLockAlreadyHeld: true });
+    }
 }
 
 /**
@@ -1439,8 +1442,12 @@ async function executeMaintenanceLogic(bot, context) {
                 }
                 if (hasRmsDivergence) {
                     bot._log(`Grid update triggered by structural divergence during ${context}: buy=${Format.formatPrice6(divergence.buy.metric)}, sell=${Format.formatPrice6(divergence.sell.metric)}`);
-                    const gridResyncFn = bot._performGridResync || performGridResync;
-                    const ok = await gridResyncFn(bot, buildGridResyncOptions('rms_structural_grid_resync'));
+                    let ok;
+                    if (typeof bot._performGridResync === 'function') {
+                        ok = await bot._performGridResync(buildGridResyncOptions('rms_structural_grid_resync'));
+                    } else {
+                        ok = await performGridResync(bot, buildGridResyncOptions('rms_structural_grid_resync'));
+                    }
                     if (!ok) {
                         bot._warn(`RMS structural divergence full grid resync failed during ${context}; retaining existing grid state.`);
                     }
@@ -1613,8 +1620,11 @@ async function cancelDustOrders(bot, { buy: buyDust = [], sell: sellDust = [] } 
             if (bot._shuttingDown || !bot.manager?._fillProcessingLock) return;
             bot.manager._fillProcessingLock.acquire(async () => {
                 if (!bot._shuttingDown) {
-                    const dustGridMaintFn = bot._runGridMaintenance || runGridMaintenance;
-                    await dustGridMaintFn(bot, 'dust-timer', { fillLockAlreadyHeld: true });
+                    if (typeof bot._runGridMaintenance === 'function') {
+                        await bot._runGridMaintenance('dust-timer', { fillLockAlreadyHeld: true });
+                    } else {
+                        await runGridMaintenance(bot, 'dust-timer', { fillLockAlreadyHeld: true });
+                    }
                 }
             }).catch(err2 => bot._warn(`Error during dust fallback timer: ${err2.message}`));
         }, delayMs);
@@ -1675,8 +1685,11 @@ function scheduleDustMaintenanceCheck(bot) {
 
         bot.manager._fillProcessingLock.acquire(async () => {
             if (bot._shuttingDown) return;
-            const dustGridMaintFn2 = bot._runGridMaintenance || runGridMaintenance;
-            await dustGridMaintFn2(bot, 'dust-timer', { fillLockAlreadyHeld: true });
+            if (typeof bot._runGridMaintenance === 'function') {
+                await bot._runGridMaintenance('dust-timer', { fillLockAlreadyHeld: true });
+            } else {
+                await runGridMaintenance(bot, 'dust-timer', { fillLockAlreadyHeld: true });
+            }
         }).catch(err => {
             // AssertionError must propagate so test mocks can fail the test
             // instead of silently passing. Other errors stay caught to keep
