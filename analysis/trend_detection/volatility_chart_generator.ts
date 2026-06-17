@@ -60,8 +60,8 @@ function generateHTML(data, title = 'ATR Volatility Research') {
     <meta name="color-scheme" content="dark">
     <meta name="darkreader-lock">
     <title>${escapeHtml(title)}</title>
-    <link rel="stylesheet" href="../../lib/uplot/uPlot.min.css">
-    <script src="../../lib/uplot/uPlot.iife.min.js"></script>
+    <link rel="stylesheet" href="../uplot/uPlot.min.css">
+    <script src="../uplot/uPlot.iife.min.js"></script>
     <style>
         * { box-sizing: border-box; }
         :root { color-scheme: dark; }

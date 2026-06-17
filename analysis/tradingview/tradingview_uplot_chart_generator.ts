@@ -149,8 +149,8 @@ function generateHTML(data, title = 'TradingView Style Research') {
     <meta name="darkreader-lock">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>${escapeHtml(title)}</title>
-    <link rel="stylesheet" href="../../lib/uplot/uPlot.min.css">
-    <script src="../../lib/uplot/uPlot.iife.min.js"></script>
+    <link rel="stylesheet" href="../uplot/uPlot.min.css">
+    <script src="../uplot/uPlot.iife.min.js"></script>
     <style>
         * { box-sizing: border-box; }
         :root { color-scheme: dark; }

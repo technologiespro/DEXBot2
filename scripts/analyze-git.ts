@@ -434,8 +434,8 @@ class RepoAnalyzer {
     <meta name="darkreader-lock">
     <meta name="color-scheme" content="dark">
     <title>DEXBot2 Repository Statistics</title>
-    <link rel="stylesheet" href="../../lib/uplot/uPlot.min.css">
-    <script src="../../lib/uplot/uPlot.iife.min.js"></script>
+    <link rel="stylesheet" href="../uplot/uPlot.min.css">
+    <script src="../uplot/uPlot.iife.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {

@@ -178,7 +178,7 @@ File: <path>
 - `claw/modules/short_mpa_strategy.ts` - Short MPA workflow
 
 ### Vendored Libraries
-- `lib/uplot/` - uPlot v1.6.32 charting library (vendored, no CDN dependency)
+- `analysis/uplot/` - uPlot v1.6.32 charting library (vendored, no CDN dependency)
 
 ### Analysis Tools (`analysis/`)
 Research scripts for parameter tuning — output interactive HTML charts, not used in production.

@@ -75,8 +75,8 @@ function generateRegimeHTML(data, title = 'Regime Analysis') {
 <head>
     <meta charset="UTF-8">
     <title>${escapeHtml(title)}</title>
-    <link rel="stylesheet" href="../../lib/uplot/uPlot.min.css">
-    <script src="../../lib/uplot/uPlot.iife.min.js"></script>
+    <link rel="stylesheet" href="../uplot/uPlot.min.css">
+    <script src="../uplot/uPlot.iife.min.js"></script>
     <style>
         * { box-sizing: border-box; }
         body { background: #0b0e14; color: #e6edf3; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; overflow: hidden; }
