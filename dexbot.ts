@@ -1018,7 +1018,7 @@ async function handleCLICommands() {
                 });
 
                 if (dexbotProcs.length === 0) {
-                    console.log('No DEXBot2 PM2 processes running.');
+                    console.log('No DEXBot2 processes running.');
                     process.exit(0);
                     return true;
                 }
