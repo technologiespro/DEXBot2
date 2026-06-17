@@ -920,7 +920,7 @@ if (isUnlockStartDirectRun) {
             await main();
         } catch (err) {
             console.error(statusError(`unlock failed: ${err.message || err}`));
-            process.exitCode = 1;
+            process.exit(1);
         }
     })();
 }
