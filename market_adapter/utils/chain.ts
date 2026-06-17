@@ -32,12 +32,12 @@ async function findPoolByAssets(assetAId: any, assetBId: any, options: any = {})
     const { BitShares } = client;
     const sortBy = options.sortBy || 'totalBalance'; // 'totalBalance' or 'assetABalance'
 
-    if (typeof BitShares.db?.get_liquidity_pool_by_asset_ids === 'function') {
+    if (typeof BitShares.db?.get_liquidity_pools_by_both_assets === 'function') {
         try {
-            const pool = await BitShares.db.get_liquidity_pool_by_asset_ids(assetAId, assetBId);
-            if (pool?.id) return pool;
+            const pools = await BitShares.db.get_liquidity_pools_by_both_assets(assetAId, assetBId);
+            if (Array.isArray(pools) && pools.length > 0 && pools[0]?.id) return pools[0];
         } catch (_: any) {
-            console.warn(`[chain] get_liquidity_pool_by_asset_ids failed for ${assetAId}/${assetBId}`);
+            console.warn(`[chain] get_liquidity_pools_by_both_assets failed for ${assetAId}/${assetBId}`);
         }
     }
 

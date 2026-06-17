@@ -69,7 +69,7 @@ function installCreditRuntimeStubs() {
                 get_assets: async () => [],
                 get_objects: async () => [],
                 get_liquidity_pools_by_share_asset: async () => [],
-                get_liquidity_pool_by_asset_ids: async () => [],
+                get_liquidity_pools_by_both_assets: async () => [],
                 get_credit_deals_by_borrower: async () => [],
                 get_credit_offers_by_owner: async () => [],
                 get_credit_offers_by_asset: async () => [],

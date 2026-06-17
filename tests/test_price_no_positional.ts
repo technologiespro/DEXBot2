@@ -13,7 +13,7 @@ async function main() {
     mock.db.lookup_asset_symbols = async arr => arr.map(s => ({ id: s.toLowerCase() === assetA.toLowerCase() ? '1.3.100' : '1.3.101', precision: 0 }));
     mock.db.get_assets = async ids => ids.map(id => ({ id: String(id), precision: 0 }));
 
-    mock.db.get_liquidity_pool_by_asset_ids = async (a, b) => null;
+    mock.db.get_liquidity_pools_by_both_assets = async (a, b) => [];
     mock.db.get_liquidity_pools = async () => [{ id: '1.19.501', asset_ids: ['1.3.100', '1.3.101'], total_reserve: 100000 }];
     mock.db.get_objects = async (ids) => {
         if (Array.isArray(ids) && ids[0] === '1.19.501') return [{

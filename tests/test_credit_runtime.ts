@@ -123,10 +123,11 @@ function installStubs(calls, dbCalls, options = {}) {
       const ids = Array.isArray(args?.[0]) ? args[0] : [];
       return ids.map((id) => poolByShareAsset[id] || null);
     }
-    if (method === 'get_liquidity_pool_by_asset_ids') {
+    if (method === 'get_liquidity_pools_by_both_assets') {
       const left = args?.[0];
       const right = args?.[1];
-      return poolByAssetPair[pairKey(left, right)] || null;
+      const pool = poolByAssetPair[pairKey(left, right)];
+      return pool ? [pool] : [];
     }
     if (method === 'get_credit_deals_by_borrower') {
       const response = dealResponses[Math.min(dealResponseIndex, dealResponses.length - 1)];
@@ -156,7 +157,7 @@ function installStubs(calls, dbCalls, options = {}) {
         get_assets: async (ids) => handleDbCall('get_assets', [ids]),
         get_objects: async (ids) => handleDbCall('get_objects', [ids]),
         get_liquidity_pools_by_share_asset: async (ids, subscribe, withStatistics) => handleDbCall('get_liquidity_pools_by_share_asset', [ids, subscribe, withStatistics]),
-        get_liquidity_pool_by_asset_ids: async (left, right) => handleDbCall('get_liquidity_pool_by_asset_ids', [left, right]),
+        get_liquidity_pools_by_both_assets: async (left, right) => handleDbCall('get_liquidity_pools_by_both_assets', [left, right]),
         get_credit_deals_by_borrower: async (accountId) => handleDbCall('get_credit_deals_by_borrower', [accountId]),
         get_credit_offers_by_owner: async (accountId) => handleDbCall('get_credit_offers_by_owner', [accountId]),
         get_credit_offers_by_asset: async (assetId) => handleDbCall('get_credit_offers_by_asset', [assetId]),

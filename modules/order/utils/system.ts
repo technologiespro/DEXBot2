@@ -185,12 +185,15 @@ const derivePoolPrice = async (BitShares: any, symA: string, symB: string): Prom
         const cacheKey = [aMeta.id, bMeta.id].sort().join(':');
         const cachedPoolId = poolIdCache.get(cacheKey);
 
-        if (typeof BitShares.db?.get_liquidity_pool_by_asset_ids === 'function') {
+        if (typeof BitShares.db?.get_liquidity_pools_by_both_assets === 'function') {
             try {
-                chosen = await BitShares.db.get_liquidity_pool_by_asset_ids(aMeta.id, bMeta.id);
-                if (chosen) poolIdCache.set(cacheKey, chosen.id);
+                const pools = await BitShares.db.get_liquidity_pools_by_both_assets(aMeta.id, bMeta.id);
+                if (Array.isArray(pools) && pools.length > 0) {
+                    chosen = pools[0];
+                    if (chosen) poolIdCache.set(cacheKey, chosen.id);
+                }
             } catch (e: any) {
-                systemLogger.debug(`derivePoolPrice: get_liquidity_pool_by_asset_ids failed: ${e.message}`);
+                systemLogger.debug(`derivePoolPrice: get_liquidity_pools_by_both_assets failed: ${e.message}`);
             }
         }
 

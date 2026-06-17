@@ -1870,7 +1870,8 @@ async function acquireBts(bot, deficit) {
     for (const asset of assets) {
         if (!asset.id || asset.free <= 0) continue;
         try {
-            const poolData = await BitShares.db.get_liquidity_pool_by_asset_ids(asset.id, coreAssetId);
+            const pools = await BitShares.db.get_liquidity_pools_by_both_assets(asset.id, coreAssetId);
+            const poolData = Array.isArray(pools) && pools.length > 0 ? pools[0] : null;
             if (!poolData) continue;
 
             const isAssetA = String(poolData.asset_a) === String(asset.id) || String(poolData.asset_ids?.[0]) === String(asset.id);

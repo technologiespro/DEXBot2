@@ -48,7 +48,7 @@ assert.strictEqual(typeof bs.db.get_order_book, 'function', 'db.get_order_book s
 assert.strictEqual(typeof bs.db.get_ticker, 'function', 'db.get_ticker should be a function');
 assert.strictEqual(typeof bs.db.getGlobalProperties, 'function', 'db.getGlobalProperties should be a function');
 assert.strictEqual(typeof bs.db.get_dynamic_global_properties, 'function', 'db.get_dynamic_global_properties should be a function');
-assert.strictEqual(typeof bs.db.get_liquidity_pool_by_asset_ids, 'function', 'db.get_liquidity_pool_by_asset_ids should be a function');
+assert.strictEqual(typeof bs.db.get_liquidity_pools_by_both_assets, 'function', 'db.get_liquidity_pools_by_both_assets should be a function');
 assert.strictEqual(typeof bs.db.get_liquidity_pools_by_share_asset, 'function', 'db.get_liquidity_pools_by_share_asset should be a function');
 assert.strictEqual(typeof bs.db.list_liquidity_pools, 'function', 'db.list_liquidity_pools should be a function');
 assert.strictEqual(typeof bs.db.get_call_orders, 'function', 'db.get_call_orders should be a function');

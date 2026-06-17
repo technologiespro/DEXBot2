@@ -102,7 +102,7 @@ declare module 'bitshares-native' {
             get_objects(ids: string[]): Promise<any[]>;
             getGlobalProperties(): Promise<any>;
             get_dynamic_global_properties(): Promise<any>;
-            get_liquidity_pool_by_asset_ids(a: string, b: string): Promise<any>;
+            get_liquidity_pools_by_both_assets(a: string, b: string, limit?: number, start_id?: string, with_statistics?: boolean): Promise<any[]>;
             get_liquidity_pools_by_share_asset(shares: string[]): Promise<any[]>;
             list_liquidity_pools(...args: any[]): Promise<any[]>;
             get_call_orders(...args: any[]): Promise<any[]>;

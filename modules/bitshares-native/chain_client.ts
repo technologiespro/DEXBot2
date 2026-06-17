@@ -209,7 +209,7 @@ function createChainClient(config: ChainClientConfig = {}) {
         'get_assets', 'getAssets', 'lookup_asset_symbols', 'lookupAssetSymbols',
         'get_full_accounts', 'getFullAccounts', 'get_order_book', 'getOrderBook', 'get_ticker', 'getTicker',
         'get_objects', 'getObjects', 'getGlobalProperties', 'get_global_properties', 'get_dynamic_global_properties',
-        'get_liquidity_pool_by_asset_ids', 'get_liquidity_pools_by_share_asset',
+        'get_liquidity_pools_by_both_assets', 'get_liquidity_pools_by_share_asset',
         'list_liquidity_pools', 'get_call_orders', 'list_assets',
         'get_account_count', 'get_block', 'get_account_balances',
         'get_key_references', 'get_block_header',

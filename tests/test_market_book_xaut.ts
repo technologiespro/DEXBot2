@@ -156,7 +156,7 @@ async function main() {
         console.log(`${C.bold}── LP Pool Check ──${C.reset}`);
         let hasPool = false;
         try {
-            const pools = await BitShares.db.get_liquidity_pool_by_asset_ids(btsAsset.id, xautAsset.id);
+            const pools = await BitShares.db.get_liquidity_pools_by_both_assets(btsAsset.id, xautAsset.id);
             if (pools?.length) {
                 hasPool = true;
                 console.log(`${C.green}  Found ${pools.length} LP pool(s)${C.reset}`);
@@ -167,7 +167,7 @@ async function main() {
                 console.log(`${C.yellow}  No LP pool found for BTS/XBTSX.XAUT${C.reset}`);
             }
         } catch (e) {
-            console.log(`  get_liquidity_pool_by_asset_ids: ${C.red}${e.message}${C.reset}`);
+            console.log(`  get_liquidity_pools_by_both_assets: ${C.red}${e.message}${C.reset}`);
             // fallback: try list_liquidity_pools pagination
             try {
                 const allPools = await BitShares.db.list_liquidity_pools(100);
