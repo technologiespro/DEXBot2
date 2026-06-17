@@ -9,6 +9,7 @@
  * It does not rely on TradingView or Kibana.
  */
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { fillCandleGaps } = require('../candle_utils');
@@ -88,6 +89,16 @@ function sanitizeBotKeyPart(value) {
         .replace(/^-+|-+$/g, '') || 'bot';
 }
 
+function _stableBotId(entry) {
+    const stable = {
+        name: entry.name || '',
+        preferredAccount: entry.preferredAccount || '',
+        assetA: entry.assetA || entry.assetAId || '',
+        assetB: entry.assetB || entry.assetBId || '',
+    };
+    return crypto.createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 8);
+}
+
 function loadBotNameIndex(botsFile) {
     try {
         if (!botsFile || !fs.existsSync(botsFile)) return [];
@@ -96,7 +107,12 @@ function loadBotNameIndex(botsFile) {
         const parsed = parseJsonWithComments(raw);
         const bots = Array.isArray(parsed?.bots) ? parsed.bots : [];
         return bots
-            .map((bot, index) => ({ bot, index }))
+            .map((bot, index) => {
+                if (!bot.id) {
+                    bot = { ...bot, id: _stableBotId(bot) };
+                }
+                return { bot, index };
+            })
             .filter(({ bot }) => bot && typeof bot === 'object' && bot.name);
     } catch (_err) {
         return [];

@@ -36,7 +36,8 @@ function testNormalizeAcceptsAssetIdAliases() {
   ], { logger });
 
   assert.strictEqual(messages.length, 0, 'asset ID-only bots should not produce missing-key warnings');
-  assert.strictEqual(bots[0].botKey, 'id-only-0');
+  assert.ok(bots[0].botKey.startsWith('id-only-'), `botKey should start with id-only-, got: ${bots[0].botKey}`);
+  assert.ok(!bots[0].botKey.endsWith('-0'), `botKey should not use legacy index format, got: ${bots[0].botKey}`);
 }
 
 async function testAtomicWriteFailsFastWhenLockCannotBeAcquired() {
@@ -232,7 +233,6 @@ async function testApplyBotSettingsPatchWritesTriggerAtomically() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dexbot-profiles-apply-'));
   const profilesDir = path.join(dir, 'profiles');
   const botsFile = path.join(profilesDir, 'bots.json');
-  const triggerFile = path.join(profilesDir, 'recalculate.solo-0.trigger');
 
   await fs.mkdir(profilesDir, { recursive: true });
   await fs.writeFile(botsFile, JSON.stringify({
@@ -256,6 +256,9 @@ async function testApplyBotSettingsPatchWritesTriggerAtomically() {
     trigger: true,
     triggerPayload: { reason: 'manual_test', changedKeys: ["incrementPercent"] }
   });
+
+  const canonicalKey = result.updatedBot.botKey;
+  const triggerFile = path.join(profilesDir, `recalculate.${canonicalKey}.trigger`);
 
   const written = JSON.parse(await fs.readFile(botsFile, 'utf8'));
   const trigger = JSON.parse(await fs.readFile(triggerFile, 'utf8'));
@@ -364,11 +367,13 @@ async function testApplyBotSettingsPatchWithoutIdentifierReturnsResolvedBotMetad
     trigger: false
   });
 
-  assert.strictEqual(result.updatedBot.botKey, 'solo-0');
+  assert.ok(result.updatedBot.botKey.startsWith('solo-'), `botKey should start with solo-, got: ${result.updatedBot.botKey}`);
+  assert.ok(!result.updatedBot.botKey.endsWith('-0'), `botKey should not use legacy index format, got: ${result.updatedBot.botKey}`);
   assert.strictEqual(result.updatedBot.botIndex, 0);
-  assert.strictEqual(result.next.files.orderSnapshot, path.join(profilesDir, 'orders', 'solo-0.json'));
-  assert.strictEqual(result.next.files.gridPriceSnapshot, path.join(profilesDir, 'orders', 'solo-0.dynamicgrid.json'));
-  assert.strictEqual(result.next.files.trigger, path.join(profilesDir, 'recalculate.solo-0.trigger'));
+  const canonicalKey = result.updatedBot.botKey;
+  assert.strictEqual(result.next.files.orderSnapshot, path.join(profilesDir, 'orders', `${canonicalKey}.json`));
+  assert.strictEqual(result.next.files.gridPriceSnapshot, path.join(profilesDir, 'orders', `${canonicalKey}.dynamicgrid.json`));
+  assert.strictEqual(result.next.files.trigger, path.join(profilesDir, `recalculate.${canonicalKey}.trigger`));
 }
 
 async function testUpdateBotSettingsValidatesPatchAndPreservesExistingFields() {
@@ -526,7 +531,8 @@ async function testUpdateBotSettingsWithoutIdentifierReturnsResolvedBot() {
   });
 
   assert.ok(updated, 'updateBotSettings(null, patch) should return the resolved bot');
-  assert.strictEqual(updated.botKey, 'solo-0');
+  assert.ok(updated.botKey.startsWith('solo-'), `botKey should start with solo-, got: ${updated.botKey}`);
+  assert.ok(!updated.botKey.endsWith('-0'), `botKey should not use legacy index format, got: ${updated.botKey}`);
   assert.strictEqual(updated.botIndex, 0);
   assert.strictEqual(updated.incrementPercent, 0.4);
 }

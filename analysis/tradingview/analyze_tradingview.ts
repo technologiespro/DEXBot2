@@ -101,7 +101,12 @@ function loadBotMeta(botKey, filePath = DEFAULT_BOTS_FILE) {
     const entries = Array.isArray(settings?.bots) ? settings.bots : [];
     if (!botKey) return null;
     const normalizedKey = String(botKey).toLowerCase();
-    const exact = entries.find((bot, index) => `${sanitizeKey(bot?.name || `bot-${index}`)}-${index}` === normalizedKey);
+    const exact = entries.find((bot, index) => {
+      const botKey = bot.id
+        ? `${sanitizeKey(bot.name || `bot-${index}`)}-${sanitizeKey(String(bot.id))}`
+        : `${sanitizeKey(bot?.name || `bot-${index}`)}-${index}`;
+      return botKey === normalizedKey;
+    });
     if (exact) return exact;
     const loose = entries.find((bot) => sanitizeKey(bot?.name) === normalizedKey.replace(/-\d+$/, ''));
     return loose || null;

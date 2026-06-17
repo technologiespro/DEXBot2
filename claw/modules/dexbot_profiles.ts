@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const fs = require('fs');
 const fsPromises = require('fs/promises');
 const path = require('path');
@@ -643,6 +644,16 @@ function validateBotEntry(entry: any, index: any, logger: any) {
   return warnings;
 }
 
+function _stableBotId(entry: any): string {
+  const stable = {
+    name: entry.name || '',
+    preferredAccount: entry.preferredAccount || '',
+    assetA: entry.assetA || entry.assetAId || '',
+    assetB: entry.assetB || entry.assetBId || '',
+  };
+  return crypto.createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 8);
+}
+
 function normalizeBotEntries(rawEntries: Record<string, any>[], options: Partial<ProfileOptions> = {}) {
   const logger = options.logger || null;
   return rawEntries.map((entry: any, index: number) => {
@@ -650,6 +661,9 @@ function normalizeBotEntries(rawEntries: Record<string, any>[], options: Partial
       validateBotEntry(entry, index, logger);
     }
     const normalized = { active: entry.active === undefined ? true : !!entry.active, ...entry };
+    if (!normalized.id) {
+      normalized.id = _stableBotId(normalized);
+    }
     return { ...normalized, botIndex: index, botKey: createBotKey(normalized, index) };
   }) as any[];
 }
