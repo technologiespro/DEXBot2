@@ -189,8 +189,14 @@ const derivePoolPrice = async (BitShares: any, symA: string, symB: string): Prom
             try {
                 const pools = await BitShares.db.get_liquidity_pools_by_both_assets(aMeta.id, bMeta.id);
                 if (Array.isArray(pools) && pools.length > 0) {
-                    chosen = pools[0];
-                    if (chosen) poolIdCache.set(cacheKey, chosen.id);
+                    const valid = pools.filter(p => p?.id);
+                    if (valid.length) {
+                        chosen = valid.sort((a, b) => {
+                            const getBal = p => toFiniteNumber(String(p.asset_a) === String(aMeta.id) ? p.balance_a : p.balance_b);
+                            return getBal(b) - getBal(a);
+                        })[0];
+                        if (chosen) poolIdCache.set(cacheKey, chosen.id);
+                    }
                 }
             } catch (e: any) {
                 systemLogger.debug(`derivePoolPrice: get_liquidity_pools_by_both_assets failed: ${e.message}`);

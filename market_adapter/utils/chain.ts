@@ -35,7 +35,29 @@ async function findPoolByAssets(assetAId: any, assetBId: any, options: any = {})
     if (typeof BitShares.db?.get_liquidity_pools_by_both_assets === 'function') {
         try {
             const pools = await BitShares.db.get_liquidity_pools_by_both_assets(assetAId, assetBId);
-            if (Array.isArray(pools) && pools.length > 0 && pools[0]?.id) return pools[0];
+            if (Array.isArray(pools) && pools.length > 0) {
+                const valid = pools.filter(p => p?.id);
+                if (valid.length) {
+                    const idAStr = String(assetAId);
+                    if (sortBy === 'assetABalance') {
+                        return valid.sort((a, b) => {
+                            const bal = (p: any) => {
+                                const value = String(p.asset_a ?? p.asset_ids?.[0] ?? '') === idAStr
+                                    ? Number(p.balance_a)
+                                    : String(p.asset_b ?? p.asset_ids?.[1] ?? '') === idAStr
+                                        ? Number(p.balance_b)
+                                        : Number.NEGATIVE_INFINITY;
+                                return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
+                            };
+                            return bal(b) - bal(a);
+                        })[0];
+                    }
+                    return valid.sort((x, y) => {
+                        const bal = (p: any) => Number(p.balance_a ?? 0) + Number(p.balance_b ?? 0);
+                        return bal(y) - bal(x);
+                    })[0];
+                }
+            }
         } catch (_: any) {
             console.warn(`[chain] get_liquidity_pools_by_both_assets failed for ${assetAId}/${assetBId}`);
         }
