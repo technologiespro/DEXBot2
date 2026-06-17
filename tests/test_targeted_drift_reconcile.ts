@@ -98,7 +98,7 @@ async function runTests() {
             _warn: () => {},
         };
 
-        await MaintenanceRuntime.executeMaintenanceLogic.call(ctx, 'targeted-test');
+        await MaintenanceRuntime.executeMaintenanceLogic(ctx, 'targeted-test');
 
         assert.strictEqual(readOpenOrdersCalls, 1, 'shortfall should trigger one open-order fetch');
         assert.strictEqual(synchronized, true, 'shortfall should synchronize from chain truth');

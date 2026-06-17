@@ -234,7 +234,9 @@ function forwardSignal(child, signal) {
     if (!child || child.killed) return;
     try {
         child.kill(signal);
-    } catch (_: any) {}
+    } catch (err: any) {
+        if (err.code !== 'ESRCH') throw err;
+    }
 }
 
 function isPidAlive(pid) {
@@ -289,29 +291,46 @@ function scriptPathForRoot(root, scriptSegments, ext) {
 }
 
 function candidateRuntimeScriptPaths(scriptSegments) {
-    return new Set([
+    const candidates = new Set([
         buildRuntimeScriptPath(CODE_ROOT, scriptSegments),
         scriptPathForRoot(ROOT, scriptSegments, '.ts'),
         scriptPathForRoot(path.join(ROOT, BUILD_DIR), scriptSegments, '.js'),
     ]);
+
+    if (scriptSegments.length === 1) {
+        candidates.add(scriptPathForRoot(ROOT, scriptSegments, '.js'));
+    }
+
+    // Compatibility for wrappers already running from before the unlock-start -> unlock rename.
+    if (scriptSegments.length === 1 && scriptSegments[0] === 'unlock') {
+        candidates.add(scriptPathForRoot(ROOT, ['unlock-start'], '.js'));
+        candidates.add(scriptPathForRoot(ROOT, ['unlock-start'], '.ts'));
+        candidates.add(scriptPathForRoot(path.join(ROOT, BUILD_DIR), ['unlock-start'], '.js'));
+    }
+
+    return candidates;
 }
 
-function isNodeProcessWithExactScript(pid, scriptSegments) {
+function pidMatchesScriptCandidates(pid, expectedPaths) {
+    if (!expectedPaths || expectedPaths.size === 0) return false;
     const args = readProcArgs(pid);
     if (!args.some((arg) => path.basename(String(arg)).includes('node'))) {
         return false;
     }
 
-    const expected = candidateRuntimeScriptPaths(scriptSegments);
     const cwd = readProcCwd(pid);
     for (const arg of args.slice(1)) {
         const scriptPath = normalizeProcScriptArg(arg, cwd);
-        if (scriptPath && expected.has(scriptPath)) {
+        if (scriptPath && expectedPaths.has(scriptPath)) {
             return true;
         }
     }
 
     return false;
+}
+
+function isNodeProcessWithExactScript(pid, scriptSegments) {
+    return pidMatchesScriptCandidates(pid, candidateRuntimeScriptPaths(scriptSegments));
 }
 
 function readMarketAdapterLockPid() {
@@ -362,6 +381,41 @@ function getChildRSS(child) {
         }
     } catch (_: any) {}
     return -1;
+}
+
+function waitForChildSpawn(child) {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const handleSpawn = () => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resolve(undefined);
+        };
+        const handleError = (error) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(error);
+        };
+        const cleanup = () => {
+            child.off('spawn', handleSpawn);
+            child.off('error', handleError);
+        };
+        child.once('spawn', handleSpawn);
+        child.once('error', handleError);
+    });
+}
+
+function formatUptime(ms) {
+    const s = Math.floor(ms / 1000);
+    const m = Math.floor(s / 60);
+    const h = Math.floor(m / 60);
+    const d = Math.floor(h / 24);
+    if (d > 0) return `${d}d ${h % 24}h`;
+    if (h > 0) return `${h}h ${m % 60}m`;
+    if (m > 0) return `${m}m ${s % 60}s`;
+    return `${s}s`;
 }
 
 function createBotSupervisor({
@@ -424,17 +478,6 @@ function createBotSupervisor({
         } else {
             log('Status:\n  ' + lines.join('\n  '));
         }
-    }
-
-    function formatUptime(ms) {
-        const s = Math.floor(ms / 1000);
-        const m = Math.floor(s / 60);
-        const h = Math.floor(m / 60);
-        const d = Math.floor(h / 24);
-        if (d > 0) return `${d}d ${h % 24}h`;
-        if (h > 0) return `${h}h ${m % 60}m`;
-        if (m > 0) return `${m}m ${s % 60}s`;
-        return `${s}s`;
     }
 
     function clearScheduledRun(state) {
@@ -623,30 +666,6 @@ function createBotSupervisor({
         });
 
         return child;
-    }
-
-    function waitForChildSpawn(child) {
-        return new Promise((resolve, reject) => {
-            let settled = false;
-            const handleSpawn = () => {
-                if (settled) return;
-                settled = true;
-                cleanup();
-                resolve(undefined);
-            };
-            const handleError = (error) => {
-                if (settled) return;
-                settled = true;
-                cleanup();
-                reject(error);
-            };
-            const cleanup = () => {
-                child.off('spawn', handleSpawn);
-                child.off('error', handleError);
-            };
-            child.once('spawn', handleSpawn);
-            child.once('error', handleError);
-        });
     }
 
     async function waitForStableStartup({ timeoutMs = 750, pollIntervalMs = 50 } = {}) {
@@ -1085,4 +1104,25 @@ function createBotSupervisor({
     };
 }
 
-export = { createBotSupervisor, SOCKET_PATH, parseCronExpression, getNextCronDate };
+export = {
+    createBotSupervisor,
+    SOCKET_PATH,
+    parseCronExpression,
+    getNextCronDate,
+    forwardSignal,
+    isPidAlive,
+    waitForPidExit,
+    readProcArgs,
+    readProcCwd,
+    normalizeProcScriptArg,
+    scriptPathForRoot,
+    candidateRuntimeScriptPaths,
+    pidMatchesScriptCandidates,
+    isNodeProcessWithExactScript,
+    readMarketAdapterLockPid,
+    stopMarketAdapterFromLock,
+    usesAmaGridPrice,
+    waitForChildSpawn,
+    getChildRSS,
+    formatUptime,
+};

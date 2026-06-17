@@ -1810,8 +1810,7 @@ class CreditRuntime {
 
     async _checkGridMaintenanceAfterCreditUpdate(context = 'credit capital update', options: Record<string, any> = {}) {
         const manager = this.bot?.manager;
-        const runGridMaintenance = this.bot?._runGridMaintenance;
-        if (!manager || typeof runGridMaintenance !== 'function') {
+        if (!this.bot || !manager) {
             return { skipped: true, reason: 'grid maintenance unavailable' };
         }
 
@@ -1821,7 +1820,7 @@ class CreditRuntime {
             if (typeof manager.fetchAccountTotals === 'function' && accountId) {
                 await manager.fetchAccountTotals(accountId);
             }
-            return runGridMaintenance.call(this.bot, context, {
+            return this.bot._runGridMaintenance(context, {
                 ...options,
                 fillLockAlreadyHeld: true,
             });

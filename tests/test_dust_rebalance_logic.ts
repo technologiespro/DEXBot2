@@ -852,9 +852,27 @@ async function testStartupDustSchedulesTimer() {
         bot.manager = {
             _fillProcessingLock: {
                 acquire: async (fn) => fn()
-            }
+            },
+            _divergenceLock: {
+                acquire: async (fn) => fn()
+            },
+            orders: new Map([['order-0', { id: 'order-0' }]]),
+            recalculateFunds: async () => {},
+            clearStalePipelineOperations: () => {},
+            isPipelineEmpty: () => ({ isEmpty: true }),
+            checkGridHealth: async () => ({ buyDustOrders: [], sellDustOrders: [] }),
+            checkSpreadCondition: async () => null,
         };
-        bot._runGridMaintenance = async (context, options) => {
+        bot._cancelDustOrders = async () => ({ cancelledCount: 0, batchResult: null });
+        bot._getPipelineSignals = () => ({});
+        bot._abortFlowIfIllegalState = async () => false;
+        bot.accountOrders = { loadBotGrid: () => [] };
+        bot.updateOrdersOnChainBatch = async () => {};
+        bot.updateOrdersOnChainPlan = async () => {};
+        bot._persistAndRecoverIfNeeded = async () => {};
+        bot._baseWeightDistribution = { sell: 0.5, buy: 0.5 };
+        bot.config.weightDistribution = { sell: 0.5, buy: 0.5 };
+        bot._runGridMaintenance = async (bot, context, options) => {
             maintenanceCalls++;
             bot._dustSinceMap.clear();
             assert.strictEqual(context, 'dust-timer', 'Dust timer should run dust maintenance context');

@@ -7,64 +7,64 @@ const { NATIVE_CLIENT } = require('./constants');
  * Wire processed fill tracking into the manager and processed fill store.
  * Establishes the bidirectional link between the runtime's processed fill store
  * and the OrderManager's processed fill tracker.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  */
-function wireProcessedFillTracking() {
-    if (!this.manager) return;
+function wireProcessedFillTracking(bot) {
+    if (!bot.manager) return;
 
-    this._processedFillStore.configure({
-        accountOrders: this.accountOrders,
-        botKey: this.config?.botKey
+    bot._processedFillStore.configure({
+        accountOrders: bot.accountOrders,
+        botKey: bot.config?.botKey
     });
 
-    this._processedFillStore.mergeTracker(this.manager.processedFillTracker);
+    bot._processedFillStore.mergeTracker(bot.manager.processedFillTracker);
 
-    this.manager.processedFillTracker = this._recentlyProcessedFills;
-    this.manager.processedFillStore = this._processedFillStore;
+    bot.manager.processedFillTracker = bot._recentlyProcessedFills;
+    bot.manager.processedFillStore = bot._processedFillStore;
 }
 
 /**
  * Flush all pending processed fill writes to persistent storage.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @param {string} [reason='manual'] - Reason label for the flush
  * @param {Object} [options] - Flush options forwarded to ProcessedFillStore.flush
  * @returns {Promise<void>}
  */
-async function flushProcessedFillPersistence(reason = 'manual', options = {}) {
-    this._processedFillStore.setShuttingDown(this._shuttingDown);
-    await this._processedFillStore.flush(reason, options);
+async function flushProcessedFillPersistence(bot, reason = 'manual', options = {}) {
+    bot._processedFillStore.setShuttingDown(bot._shuttingDown);
+    await bot._processedFillStore.flush(reason, options);
 }
 
 /**
  * Flush pending processed fill writes for specific fill keys.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @param {string[]|Set<string>} fillKeys - Fill keys to flush
  * @param {string} [reason='manual-selected'] - Reason label for the flush
  * @param {Object} [options] - Flush options forwarded to ProcessedFillStore.flushKeys
  * @returns {Promise<void>}
  */
-async function flushProcessedFillPersistenceForKeys(fillKeys, reason = 'manual-selected', options = {}) {
-    this._processedFillStore.setShuttingDown(this._shuttingDown);
-    await this._processedFillStore.flushKeys(fillKeys, reason, options);
+async function flushProcessedFillPersistenceForKeys(bot, fillKeys, reason = 'manual-selected', options = {}) {
+    bot._processedFillStore.setShuttingDown(bot._shuttingDown);
+    await bot._processedFillStore.flushKeys(fillKeys, reason, options);
 }
 
 /**
  * Discard pending processed fill writes for specific fill keys from the queue.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @param {string[]|Set<string>} fillKeys - Fill keys to discard
  */
-function discardPendingProcessedFillPersistence(fillKeys) {
-    this._processedFillStore.discardKeys(fillKeys);
+function discardPendingProcessedFillPersistence(bot, fillKeys) {
+    bot._processedFillStore.discardKeys(fillKeys);
 }
 
 /**
  * Build a degraded orphan fill replay key when the standard fill history id is missing.
  * The fallback key is derived from order_id, block_num, pays/receives amounts and asset IDs.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @param {import('./types').FillEvent} fill - Raw fill event
  * @returns {string|null} Orphan fallback key or null if insufficient data
  */
-function buildOrphanFillFallbackKey(fill) {
+function buildOrphanFillFallbackKey(bot, fill) {
     const fillOp = fill?.op?.[1];
     const orderId = fillOp?.order_id;
     const blockNum = fill?.block_num;
@@ -88,7 +88,7 @@ function buildOrphanFillFallbackKey(fill) {
 /**
  * Apply fill accounting with replay-safe deduplication.
  * Prevents the same fill from being accounted twice across restarts or re-syncs.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @param {import('./types').FillEvent} fill - Raw fill event
  * @param {import('./types').FillOperationData} fillOp - Extracted fill operation data
  * @param {Object} [options] - Options
@@ -104,12 +104,12 @@ function buildOrphanFillFallbackKey(fill) {
  * @param {boolean} [options.allowOrphanFallbackKey=false] - Allow degraded orphan fallback key
  * @returns {Promise<import('./types').ReplaySafeFillResult>}
  */
-async function applyReplaySafeFillAccounting(fill, fillOp, {
+async function applyReplaySafeFillAccounting(bot, fill, fillOp, {
     missingKeyMessage,
     fallbackKeyMessage,
     replayMessage,
     errorMessage,
-    logger = this.manager?.logger,
+    logger = bot.manager?.logger,
     missingKeyLevel = 'warn',
     fallbackKeyLevel = 'warn',
     replayLevel = 'debug',
@@ -131,7 +131,7 @@ async function applyReplaySafeFillAccounting(fill, fillOp, {
     let usedFallbackKey = false;
 
     if (!fillKey && allowOrphanFallbackKey) {
-        fillKey = buildOrphanFillFallbackKey.call(this, fill);
+        fillKey = buildOrphanFillFallbackKey(bot, fill);
         usedFallbackKey = Boolean(fillKey);
         if (usedFallbackKey && fallbackKeyMessage) {
             logger?.log?.(fallbackKeyMessage(fillOp, fill, fillKey), fallbackKeyLevel);
@@ -146,7 +146,7 @@ async function applyReplaySafeFillAccounting(fill, fillOp, {
     }
 
     try {
-        const applied = await this.manager.accountant.processFillAccounting(fillOp, fillKey, { persistenceMode });
+        const applied = await bot.manager.accountant.processFillAccounting(fillOp, fillKey, { persistenceMode });
         if (!applied) {
             if (replayMessage) {
                 logger?.log?.(replayMessage(fillOp, fill, fillKey), replayLevel);
@@ -167,7 +167,7 @@ async function applyReplaySafeFillAccounting(fill, fillOp, {
 /**
  * Apply replay-safe fill accounting for tracked fills (with fill history id).
  * Wraps applyReplaySafeFillAccounting with context and default message builders.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @param {import('./types').FillEvent} fill - Raw fill event
  * @param {import('./types').FillOperationData} fillOp - Extracted fill operation data
  * @param {Object} [options] - Options
@@ -177,9 +177,9 @@ async function applyReplaySafeFillAccounting(fill, fillOp, {
  * @param {string} [options.persistenceMode='batched'] - Processed fill persistence mode
  * @returns {Promise<import('./types').ReplaySafeFillResult>}
  */
-async function applyReplaySafeTrackedFillAccounting(fill, fillOp, {
+async function applyReplaySafeTrackedFillAccounting(bot, fill, fillOp, {
     context,
-    logger = this.manager?.logger,
+    logger = bot.manager?.logger,
     replayMessage,
     persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.BATCHED
 }: {
@@ -188,7 +188,7 @@ async function applyReplaySafeTrackedFillAccounting(fill, fillOp, {
     replayMessage?: any;
     persistenceMode?: any;
 } = {}) {
-    return applyReplaySafeFillAccounting.call(this, fill, fillOp, {
+    return applyReplaySafeFillAccounting(bot, fill, fillOp, {
         logger,
         missingKeyMessage: (op) => `[${context}] Missing fill history id for ${op.order_id}; deferring to open-orders sync`,
         replayMessage,
@@ -200,7 +200,7 @@ async function applyReplaySafeTrackedFillAccounting(fill, fillOp, {
 /**
  * Apply replay-safe fill accounting for orphan fills (missing fill history id).
  * Uses a degraded orphan fallback key when the standard key is unavailable.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @param {import('./types').FillEvent} fill - Raw fill event
  * @param {import('./types').FillOperationData} fillOp - Extracted fill operation data
  * @param {Object} [options] - Options
@@ -210,9 +210,9 @@ async function applyReplaySafeTrackedFillAccounting(fill, fillOp, {
  * @param {string} [options.persistenceMode='immediate'] - Processed fill persistence mode
  * @returns {Promise<import('./types').ReplaySafeFillResult>}
  */
-async function applyReplaySafeOrphanFillAccounting(fill, fillOp, {
+async function applyReplaySafeOrphanFillAccounting(bot, fill, fillOp, {
     context,
-    logger = this.manager?.logger,
+    logger = bot.manager?.logger,
     replayMessage,
     persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE
 }: {
@@ -221,7 +221,7 @@ async function applyReplaySafeOrphanFillAccounting(fill, fillOp, {
     replayMessage?: any;
     persistenceMode?: any;
 } = {}) {
-    return applyReplaySafeFillAccounting.call(this, fill, fillOp, {
+    return applyReplaySafeFillAccounting(bot, fill, fillOp, {
         logger,
         missingKeyMessage: (op) => `[${context}] Missing fill history id and orphan fallback key for ${op.order_id}; deferring to open-orders sync`,
         fallbackKeyMessage: (op) => `[${context}] Missing fill history id for orphan fill ${op.order_id}; using degraded orphan replay key for proceeds-only accounting`,
@@ -235,27 +235,27 @@ async function applyReplaySafeOrphanFillAccounting(fill, fillOp, {
 /**
  * Create a fill callback handler for blockchain subscription events.
  * Queues incoming fills and triggers fill queue consumption.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @param {Object} chainOrders - Chain orders module
  * @returns {Function} Async callback function accepting an array of fill events
  */
-function createFillCallback(chainOrders) {
+function createFillCallback(bot, chainOrders) {
     return async (fills) => {
-        if (this._shuttingDown) {
+        if (bot._shuttingDown) {
             return;
         }
 
-        if (this.manager && !this.config.dryRun && Array.isArray(fills) && fills.length > 0) {
+        if (bot.manager && !bot.config.dryRun && Array.isArray(fills) && fills.length > 0) {
             const maxQueueDepth = NATIVE_CLIENT.SUBSCRIPTIONS.MAX_INCOMING_FILL_QUEUE;
-            if (this._incomingFillQueue.length + fills.length > maxQueueDepth) {
-                const message = `Incoming fill queue back-pressure: ${this._incomingFillQueue.length} queued + ${fills.length} incoming exceeds limit ${maxQueueDepth}`;
-                this._warn(message);
+            if (bot._incomingFillQueue.length + fills.length > maxQueueDepth) {
+                const message = `Incoming fill queue back-pressure: ${bot._incomingFillQueue.length} queued + ${fills.length} incoming exceeds limit ${maxQueueDepth}`;
+                bot._warn(message);
                 throw new Error(message);
             }
-            this._markGridActivity?.('fill queued');
-            this._incomingFillQueue.push(...fills);
-            this._consumeFillQueue(chainOrders).catch(err => {
-                this._warn(`Fill queue consume failed: ${err.message}`);
+            bot._markGridActivity?.('fill queued');
+            bot._incomingFillQueue.push(...fills);
+            bot._consumeFillQueue(chainOrders).catch(err => {
+                bot._warn(`Fill queue consume failed: ${err.message}`);
             });
         }
     };

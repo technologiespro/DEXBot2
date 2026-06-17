@@ -779,7 +779,7 @@ class DEXBot {
      * @returns {void}
      */
     _wireProcessedFillTracking() {
-        return DexbotFillRuntime.wireProcessedFillTracking.call(this);
+        return DexbotFillRuntime.wireProcessedFillTracking(this);
     }
 
     /**
@@ -789,7 +789,7 @@ class DEXBot {
      * @returns {Promise<void>}
      */
     async _flushProcessedFillPersistence(reason = 'manual', options = {}) {
-        return DexbotFillRuntime.flushProcessedFillPersistence.call(this, reason, options);
+        return DexbotFillRuntime.flushProcessedFillPersistence(this, reason, options);
     }
 
     /**
@@ -800,7 +800,7 @@ class DEXBot {
      * @returns {Promise<void>}
      */
     async _flushProcessedFillPersistenceForKeys(fillKeys, reason = 'manual-selected', options = {}) {
-        return DexbotFillRuntime.flushProcessedFillPersistenceForKeys.call(this, fillKeys, reason, options);
+        return DexbotFillRuntime.flushProcessedFillPersistenceForKeys(this, fillKeys, reason, options);
     }
 
     /**
@@ -809,7 +809,7 @@ class DEXBot {
      * @returns {void}
      */
     _discardPendingProcessedFillPersistence(fillKeys) {
-        return DexbotFillRuntime.discardPendingProcessedFillPersistence.call(this, fillKeys);
+        return DexbotFillRuntime.discardPendingProcessedFillPersistence(this, fillKeys);
     }
 
     /**
@@ -818,7 +818,7 @@ class DEXBot {
      * @returns {string|null} Fallback key or null
      */
     _buildOrphanFillFallbackKey(fill) {
-        return DexbotFillRuntime.buildOrphanFillFallbackKey.call(this, fill);
+        return DexbotFillRuntime.buildOrphanFillFallbackKey(this, fill);
     }
 
     /**
@@ -861,7 +861,7 @@ class DEXBot {
         persistenceMode?: any;
         allowOrphanFallbackKey?: boolean;
     } = {}) {
-        return DexbotFillRuntime.applyReplaySafeFillAccounting.call(this, fill, fillOp, {
+        return DexbotFillRuntime.applyReplaySafeFillAccounting(this, fill, fillOp, {
             missingKeyMessage,
             fallbackKeyMessage,
             replayMessage,
@@ -897,7 +897,7 @@ class DEXBot {
         replayMessage?: any;
         persistenceMode?: any;
     } = {}) {
-        return DexbotFillRuntime.applyReplaySafeTrackedFillAccounting.call(this, fill, fillOp, {
+        return DexbotFillRuntime.applyReplaySafeTrackedFillAccounting(this, fill, fillOp, {
             context,
             logger,
             replayMessage,
@@ -927,7 +927,7 @@ class DEXBot {
         replayMessage?: any;
         persistenceMode?: any;
     } = {}) {
-        return DexbotFillRuntime.applyReplaySafeOrphanFillAccounting.call(this, fill, fillOp, {
+        return DexbotFillRuntime.applyReplaySafeOrphanFillAccounting(this, fill, fillOp, {
             context,
             logger,
             replayMessage,
@@ -941,7 +941,7 @@ class DEXBot {
      * @returns {import('./types').DynamicWeightRefreshResult|null}
      */
     _refreshDynamicWeightDistribution(context = 'runtime') {
-        return DexbotMaintenanceRuntime.refreshDynamicWeightDistribution.call(this, context);
+        return DexbotMaintenanceRuntime.refreshDynamicWeightDistribution(this, context);
     }
 
     /**
@@ -1337,7 +1337,7 @@ class DEXBot {
      * @private
      */
     _createFillCallback(chainOrders) {
-        return DexbotFillRuntime.createFillCallback.call(this, chainOrders);
+        return DexbotFillRuntime.createFillCallback(this, chainOrders);
     }
 
     /**
@@ -4613,7 +4613,7 @@ class DEXBot {
      * @private
      */
     async _performGridResync(options = {}) {
-        return DexbotMaintenanceRuntime.performGridResync.call(this, options);
+        return DexbotMaintenanceRuntime.performGridResync(this, options);
     }
 
     /**
@@ -4623,7 +4623,7 @@ class DEXBot {
      * @private
      */
     async _handlePendingTriggerReset() {
-        return DexbotMaintenanceRuntime.handlePendingTriggerReset.call(this);
+        return DexbotMaintenanceRuntime.handlePendingTriggerReset(this);
     }
 
     /**
@@ -4632,7 +4632,7 @@ class DEXBot {
      * @private
      */
     async _setupTriggerFileDetection() {
-        return DexbotMaintenanceRuntime.setupTriggerFileDetection.call(this);
+        return DexbotMaintenanceRuntime.setupTriggerFileDetection(this);
     }
 
     /**
@@ -4696,11 +4696,11 @@ class DEXBot {
      * @private
      */
     async _performPeriodicGridChecks() {
-        return DexbotMaintenanceRuntime.performPeriodicGridChecks.call(this);
+        return DexbotMaintenanceRuntime.performPeriodicGridChecks(this);
     }
 
     _isOpenOrdersSyncLoopEnabled() {
-        return DexbotMaintenanceRuntime.isOpenOrdersSyncLoopEnabled.call(this);
+        return DexbotMaintenanceRuntime.isOpenOrdersSyncLoopEnabled(this);
     }
 
     /**
@@ -4709,7 +4709,7 @@ class DEXBot {
      * @private
      */
     _startOpenOrdersSyncLoop() {
-        return DexbotMaintenanceRuntime.startOpenOrdersSyncLoop.call(this);
+        return DexbotMaintenanceRuntime.startOpenOrdersSyncLoop(this);
     }
 
     /**
@@ -4717,7 +4717,7 @@ class DEXBot {
      * @private
      */
     async _stopOpenOrdersSyncLoop() {
-        return DexbotMaintenanceRuntime.stopOpenOrdersSyncLoop.call(this);
+        return DexbotMaintenanceRuntime.stopOpenOrdersSyncLoop(this);
     }
 
     /**
@@ -4726,7 +4726,7 @@ class DEXBot {
      * @private
      */
     _setupBlockchainFetchInterval() {
-        return DexbotMaintenanceRuntime.setupBlockchainFetchInterval.call(this);
+        return DexbotMaintenanceRuntime.setupBlockchainFetchInterval(this);
     }
 
     /**
@@ -4734,11 +4734,11 @@ class DEXBot {
      * @private
      */
     _stopBlockchainFetchInterval() {
-        return DexbotMaintenanceRuntime.stopBlockchainFetchInterval.call(this);
+        return DexbotMaintenanceRuntime.stopBlockchainFetchInterval(this);
     }
 
     async _releaseMarketAdapterRuntime(context = 'shutdown') {
-        return DexbotMaintenanceRuntime.releaseMarketAdapterRuntime.call(this, this.config?.botKey || this.config?.name, context);
+        return DexbotMaintenanceRuntime.releaseMarketAdapterRuntime(this, this.config?.botKey || this.config?.name, context);
     }
 
     /**
@@ -4957,7 +4957,7 @@ class DEXBot {
      * @private
      */
     async _executeMaintenanceLogic(context) {
-        return DexbotMaintenanceRuntime.executeMaintenanceLogic.call(this, context);
+        return DexbotMaintenanceRuntime.executeMaintenanceLogic(this, context);
     }
 
     /**
@@ -4980,7 +4980,7 @@ class DEXBot {
      * @private
      */
     async _cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {}) {
-        return DexbotMaintenanceRuntime.cancelDustOrders.call(this, { buy: buyDust, sell: sellDust });
+        return DexbotMaintenanceRuntime.cancelDustOrders(this, { buy: buyDust, sell: sellDust });
     }
 
     /**
@@ -4988,7 +4988,7 @@ class DEXBot {
      * @returns {void}
      */
     _clearDustMaintenanceTimer() {
-        return DexbotMaintenanceRuntime.clearDustMaintenanceTimer.call(this);
+        return DexbotMaintenanceRuntime.clearDustMaintenanceTimer(this);
     }
 
     /**
@@ -4996,7 +4996,7 @@ class DEXBot {
      * @returns {void}
      */
     _scheduleDustMaintenanceCheck() {
-        return DexbotMaintenanceRuntime.scheduleDustMaintenanceCheck.call(this);
+        return DexbotMaintenanceRuntime.scheduleDustMaintenanceCheck(this);
     }
 
     /**
@@ -5008,7 +5008,7 @@ class DEXBot {
      * @private
      */
     async _seedDustTimersFromPartialUpdates(updatedOrders = [], detectedAt = Date.now()) {
-        return DexbotMaintenanceRuntime.seedDustTimersFromPartialUpdates.call(this, updatedOrders, detectedAt);
+        return DexbotMaintenanceRuntime.seedDustTimersFromPartialUpdates(this, updatedOrders, detectedAt);
     }
 
     /**
@@ -5037,7 +5037,7 @@ class DEXBot {
      * @private
      */
     async _runGridMaintenance(context = 'periodic', options = {}) {
-        return DexbotMaintenanceRuntime.runGridMaintenance.call(this, context, options);
+        return DexbotMaintenanceRuntime.runGridMaintenance(this, context, options);
     }
 
     /**

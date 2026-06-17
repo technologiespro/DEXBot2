@@ -195,7 +195,7 @@ async function testPerformGridResyncAppliesVolatilityOnlyDynamicWeights() {
     };
 
     try {
-        const ok = await performGridResync.call(self);
+        const ok = await performGridResync(self);
 
         assert.strictEqual(ok, true, 'performGridResync should succeed');
         assert.strictEqual(startCalled, true, 'bootstrap should start');
@@ -233,13 +233,13 @@ function testRefreshDynamicWeightDistributionAppliesAndFallsBack() {
         _log: () => {},
     };
 
-    const applied = refreshDynamicWeightDistribution.call(self, 'unit-test-live');
+    const applied = refreshDynamicWeightDistribution(self, 'unit-test-live');
     assert.strictEqual(applied.applied, true, 'ready dynamic weights should be applied');
     assert.deepStrictEqual(self.config.weightDistribution, { sell: 0.42, buy: 0.22 });
     assert.deepStrictEqual(self.manager.config.weightDistribution, { sell: 0.42, buy: 0.22 });
 
     dynamicWeightSnapshotMode = 'stale';
-    const reverted = refreshDynamicWeightDistribution.call(self, 'unit-test-stale');
+    const reverted = refreshDynamicWeightDistribution(self, 'unit-test-stale');
     assert.strictEqual(reverted.applied, false, 'stale dynamic weights should not be applied');
     assert.deepStrictEqual(self.config.weightDistribution, { sell: 0.6, buy: 0.4 });
     assert.deepStrictEqual(self.manager.config.weightDistribution, { sell: 0.6, buy: 0.4 });
@@ -282,13 +282,13 @@ function testRefreshDynamicWeightDistributionReloadsWhitelistFlags() {
         _log: () => {},
     };
 
-    const applied = refreshDynamicWeightDistribution.call(self, 'unit-test-live-whitelist');
+    const applied = refreshDynamicWeightDistribution(self, 'unit-test-live-whitelist');
     assert.strictEqual(applied.applied, true, 'whitelisted bot should apply live weights');
     assert.deepStrictEqual(self.config.weightDistribution, { sell: 0.42, buy: 0.22 });
     assert.deepStrictEqual(self.manager.config.weightDistribution, { sell: 0.42, buy: 0.22 });
 
     whitelistEnabled = false;
-    const reverted = refreshDynamicWeightDistribution.call(self, 'unit-test-whitelist-removed');
+    const reverted = refreshDynamicWeightDistribution(self, 'unit-test-whitelist-removed');
     assert.strictEqual(reverted.applied, false, 'refresh should pick up whitelist removal without restart');
     assert.deepStrictEqual(self.config.weightDistribution, { sell: 0.6, buy: 0.4 });
     assert.deepStrictEqual(self.manager.config.weightDistribution, { sell: 0.6, buy: 0.4 });
@@ -371,11 +371,11 @@ async function testManualTriggerResetRefreshesCenterPrice() {
         triggerFile,
         _log: (msg) => logs.push(msg),
         _warn: (msg) => logs.push(`WARN:${msg}`),
-        _performGridResync: async (options) => require(runtimePath).performGridResync.call(self, options),
+        _performGridResync: async (options) => require(runtimePath).performGridResync(self, options),
     };
 
     try {
-        const ok = await handlePendingTriggerReset.call(self);
+        const ok = await handlePendingTriggerReset(self);
         assert.strictEqual(ok, true, 'manual trigger reset should succeed');
 
         const updated = readJSON(snapshotFile);
@@ -471,11 +471,11 @@ async function testManualTriggerResetKeepsOffsetWhenCenterAlreadyCurrent() {
         triggerFile,
         _log: () => {},
         _warn: () => {},
-        _performGridResync: async (options) => require(runtimePath).performGridResync.call(self, options),
+        _performGridResync: async (options) => require(runtimePath).performGridResync(self, options),
     };
 
     try {
-        const ok = await handlePendingTriggerReset.call(self);
+        const ok = await handlePendingTriggerReset(self);
         assert.strictEqual(ok, true, 'manual trigger reset should succeed when center already equals AMA');
 
         const updated = readJSON(snapshotFile);
@@ -572,11 +572,11 @@ async function testMarketAdapterTriggerResetRefreshesAmaCenterPrice() {
         triggerFile,
         _log: (msg) => logs.push(msg),
         _warn: (msg) => logs.push(`WARN:${msg}`),
-        _performGridResync: async (options) => require(runtimePath).performGridResync.call(self, options),
+        _performGridResync: async (options) => require(runtimePath).performGridResync(self, options),
     };
 
     try {
-        const ok = await handlePendingTriggerReset.call(self);
+        const ok = await handlePendingTriggerReset(self);
         assert.strictEqual(ok, true, 'market-adapter trigger reset should succeed');
 
         const updated = readJSON(snapshotFile);
@@ -677,11 +677,11 @@ async function testMarketAdapterBootstrapTriggerResetRecordsBootstrapSource() {
         triggerFile,
         _log: (msg) => logs.push(msg),
         _warn: (msg) => logs.push(`WARN:${msg}`),
-        _performGridResync: async (options) => require(runtimePath).performGridResync.call(self, options),
+        _performGridResync: async (options) => require(runtimePath).performGridResync(self, options),
     };
 
     try {
-        const ok = await handlePendingTriggerReset.call(self);
+        const ok = await handlePendingTriggerReset(self);
         assert.strictEqual(ok, true, 'market-adapter bootstrap trigger reset should succeed');
 
         const updated = readJSON(snapshotFile);
@@ -782,11 +782,11 @@ async function testMarketAdapterSlopeTriggerResetRecordsSlopeSource() {
         triggerFile,
         _log: (msg) => logs.push(msg),
         _warn: (msg) => logs.push(`WARN:${msg}`),
-        _performGridResync: async (options) => require(runtimePath).performGridResync.call(self, options),
+        _performGridResync: async (options) => require(runtimePath).performGridResync(self, options),
     };
 
     try {
-        const ok = await handlePendingTriggerReset.call(self);
+        const ok = await handlePendingTriggerReset(self);
         assert.strictEqual(ok, true, 'market-adapter slope trigger reset should succeed');
 
         const updated = readJSON(snapshotFile);
@@ -923,7 +923,7 @@ function testRefreshDynamicWeightDistributionRejectsStaleBaseWeights() {
         _log: (msg) => logs.push(msg),
     };
 
-    const result = refreshDynamicWeightDistribution.call(self, 'unit-test-base-mismatch');
+    const result = refreshDynamicWeightDistribution(self, 'unit-test-base-mismatch');
     assert.strictEqual(result.applied, false, 'stale base weights should cause fallback to static');
     assert.deepStrictEqual(self.config.weightDistribution, { sell: 0.6, buy: 0.4 });
     assert.deepStrictEqual(self.manager.config.weightDistribution, { sell: 0.6, buy: 0.4 });
@@ -1024,7 +1024,7 @@ async function testRmsDivergenceRunsFullGridResync() {
         _getPipelineSignals: () => ({}),
         _cancelDustOrders: async () => ({ cancelledCount: 0, batchResult: null }),
         _abortFlowIfIllegalState: async () => false,
-        _performGridResync: async (options) => {
+        _performGridResync: async (bot, options) => {
             resyncOptions = options;
             return true;
         },
@@ -1037,7 +1037,7 @@ async function testRmsDivergenceRunsFullGridResync() {
         _warn: (msg) => logs.push(`WARN:${msg}`),
     };
 
-    await executeMaintenanceLogic.call(self, 'unit-test-rms');
+    await executeMaintenanceLogic(self, 'unit-test-rms');
 
     assert.deepStrictEqual(resyncOptions, {
         refreshCenterPrice: true,
@@ -1059,8 +1059,8 @@ async function testDexbotClassPerformGridResyncForwardsOptions() {
     let forwardedThis = null;
     let forwardedOptions = null;
     setCachedModule(runtimePath, {
-        performGridResync(options = {}) {
-            forwardedThis = this;
+        performGridResync(bot, options = {}) {
+            forwardedThis = bot;
             forwardedOptions = options;
             return Promise.resolve('forwarded');
         },

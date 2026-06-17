@@ -120,7 +120,7 @@ async function testWatchdogStartsAdapterWhenMissing() {
         _warn: (msg) => logs.push(`WARN:${msg}`),
     };
 
-    const result = await syncMarketAdapterOnPeriodicConfigCheck.call(self, 'unit-test');
+    const result = await syncMarketAdapterOnPeriodicConfigCheck(self, 'unit-test');
 
     assert.strictEqual(queried, true, 'watchdog should query PM2 when AMA pricing is active');
     assert.strictEqual(started, true, 'watchdog should start the adapter when it is missing');
@@ -162,7 +162,7 @@ async function testWatchdogSkipsLaunchWhenAdapterNotNeeded() {
         _warn: () => {},
     };
 
-    const result = await syncMarketAdapterOnPeriodicConfigCheck.call(self, 'unit-test');
+    const result = await syncMarketAdapterOnPeriodicConfigCheck(self, 'unit-test');
 
     assert.strictEqual(result.changed, true, 'config fingerprint changes should still be detected');
     assert.strictEqual(result.required, false, 'non-AMA config should not require the adapter');
@@ -193,7 +193,7 @@ async function testWatchdogLeavesAdapterStoppedWhenAlreadyAbsent() {
         _warn: () => {},
     };
 
-    const result = await syncMarketAdapterOnPeriodicConfigCheck.call(self, 'unit-test');
+    const result = await syncMarketAdapterOnPeriodicConfigCheck(self, 'unit-test');
 
     assert.strictEqual(result.required, false, 'non-AMA config should not require the adapter');
     assert.strictEqual(result.stopped, false, 'watchdog should not stop an adapter that is already absent');
@@ -242,7 +242,7 @@ async function testWatchdogUsesDirectRuntimeWithoutPm2() {
         _warn: (msg) => logs.push(`WARN:${msg}`),
     };
 
-    const result = await syncMarketAdapterOnPeriodicConfigCheck.call(self, 'unit-test');
+    const result = await syncMarketAdapterOnPeriodicConfigCheck(self, 'unit-test');
 
     assert.deepStrictEqual(syncCalls, [
         { botId: 'xrp-bts-0', shouldRun: true },
@@ -294,7 +294,7 @@ async function testWatchdogDoesNotRegisterNonAmaBotInDirectRuntime() {
         _warn: () => {},
     };
 
-    const result = await syncMarketAdapterOnPeriodicConfigCheck.call(self, 'unit-test');
+    const result = await syncMarketAdapterOnPeriodicConfigCheck(self, 'unit-test');
 
     assert.deepStrictEqual(syncCalls, [
         { botId: 'book-bot-0', shouldRun: false },
@@ -339,7 +339,7 @@ async function testWatchdogUsesSnapshotEntryWhenRuntimeConfigIsStale() {
         _warn: () => {},
     };
 
-    const result = await syncMarketAdapterOnPeriodicConfigCheck.call(self, 'unit-test');
+    const result = await syncMarketAdapterOnPeriodicConfigCheck(self, 'unit-test');
 
     assert.deepStrictEqual(syncCalls, [
         { botId: 'xrp-bts-0', shouldRun: false },
@@ -387,7 +387,7 @@ async function testWatchdogReleasesDirectRuntimeWithoutPm2() {
         _warn: (msg) => logs.push(`WARN:${msg}`),
     };
 
-    const result = await syncMarketAdapterOnPeriodicConfigCheck.call(self, 'unit-test');
+    const result = await syncMarketAdapterOnPeriodicConfigCheck(self, 'unit-test');
 
     assert.deepStrictEqual(syncCalls, [
         { botId: 'xrp-bts-0', shouldRun: false },
@@ -430,7 +430,7 @@ async function testSetupBlockchainFetchIntervalRunsWatchdogBeforeDisabledReturn(
         _warn: (msg) => logs.push(`WARN:${msg}`),
     };
 
-    setupBlockchainFetchInterval.call(self);
+    setupBlockchainFetchInterval(self);
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.strictEqual(snapshotChecks, 1, 'startup path should run the market adapter watchdog immediately');

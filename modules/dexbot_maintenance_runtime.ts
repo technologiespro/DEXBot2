@@ -171,56 +171,56 @@ function getTargetedSyncReason(bot) {
     return null;
 }
 
-async function maybeRunTargetedDriftReconciliation(context) {
-    const trigger = getTargetedSyncReason(this);
+async function maybeRunTargetedDriftReconciliation(bot, context) {
+    const trigger = getTargetedSyncReason(bot);
     if (!trigger) return false;
 
     const now = Date.now();
-    const cooldownMs = Number.isFinite(Number(this._targetedDriftSyncCooldownMs))
-        ? Number(this._targetedDriftSyncCooldownMs)
+    const cooldownMs = Number.isFinite(Number(bot._targetedDriftSyncCooldownMs))
+        ? Number(bot._targetedDriftSyncCooldownMs)
         : 60_000;
-    const lastSyncAt = Number(this._lastTargetedDriftSyncAt || 0);
+    const lastSyncAt = Number(bot._lastTargetedDriftSyncAt || 0);
     if (lastSyncAt > 0 && now - lastSyncAt < cooldownMs) {
-        this._log(
+        bot._log(
             `[TARGETED-SYNC] Deferring ${context} reconciliation for ${Math.ceil((cooldownMs - (now - lastSyncAt)) / TIMING.MILLISECONDS_PER_SECOND)}s: ${trigger.reason}`,
             'debug'
         );
         return false;
     }
 
-    if (!this.accountId || typeof chainOrders.readOpenOrders !== 'function') {
-        this._warn(`[TARGETED-SYNC] Cannot reconcile ${context}: missing account id or readOpenOrders`);
+    if (!bot.accountId || typeof chainOrders.readOpenOrders !== 'function') {
+        bot._warn(`[TARGETED-SYNC] Cannot reconcile ${context}: missing account id or readOpenOrders`);
         return false;
     }
 
-    this._log(`[TARGETED-SYNC] Fetching open orders during ${context}: ${trigger.reason}`, 'warn');
+    bot._log(`[TARGETED-SYNC] Fetching open orders during ${context}: ${trigger.reason}`, 'warn');
 
     try {
-        await this.manager.fetchAccountTotals?.(this.accountId);
-        const { syncResult, openOrders, aborted } = await this._syncOpenOrdersAndProcessFills(`targeted ${context} reconciliation`);
+        await bot.manager.fetchAccountTotals?.(bot.accountId);
+        const { syncResult, openOrders, aborted } = await bot._syncOpenOrdersAndProcessFills(`targeted ${context} reconciliation`);
         if (aborted) {
-            this._warn(`[TARGETED-SYNC] Chain sync failed during ${context}, skipping reconciliation`);
+            bot._warn(`[TARGETED-SYNC] Chain sync failed during ${context}, skipping reconciliation`);
             return false;
         }
 
-        const remaining = getTargetedSyncReason(this);
+        const remaining = getTargetedSyncReason(bot);
         const unmatchedCount = Number(syncResult?.unmatchedChainOrders?.length || 0);
         if (remaining || unmatchedCount > 0) {
-            this._log(
+            bot._log(
                 `[TARGETED-SYNC] Running startup-style reconcile during ${context}: ` +
                 `${remaining ? remaining.reason : `${unmatchedCount} unmatched chain order(s)`}`,
                 'warn'
             );
             const reconcileResult = await reconcileGridOrders({
-                manager: this.manager,
-                config: this.config,
-                account: this.account,
-                privateKey: this.privateKey,
+                manager: bot.manager,
+                config: bot.config,
+                account: bot.account,
+                privateKey: bot.privateKey,
                 chainOrders,
                 chainOpenOrders: openOrders,
                 fillLockAlreadyHeld: true,
             });
-            await this._executeBatchIfNeeded(reconcileResult, `targeted ${context} reconcile`);
+            await bot._executeBatchIfNeeded(reconcileResult, `targeted ${context} reconcile`);
         }
 
         // Advance cooldown only after the sync (and optional reconcile) succeeds.
@@ -228,11 +228,11 @@ async function maybeRunTargetedDriftReconciliation(context) {
         // would lock out the next drift for the full cooldown even though no
         // useful work happened. With post-sync stamping, transient failures
         // retry on the next maintenance tick.
-        this._lastTargetedDriftSyncAt = Date.now();
-        await this.manager.persistGrid?.();
+        bot._lastTargetedDriftSyncAt = Date.now();
+        await bot.manager.persistGrid?.();
         return true;
     } catch (err) {
-        this._warn(`[TARGETED-SYNC] Failed during ${context}: ${err.message}`);
+        bot._warn(`[TARGETED-SYNC] Failed during ${context}: ${err.message}`);
         return false;
     }
 }
@@ -387,39 +387,39 @@ async function stopMarketAdapterPm2() {
 /**
  * Synchronize market adapter state based on periodic config checks.
  * Starts or stops the market adapter based on whether any active bot uses AMA grid pricing.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @param {string} [context='periodic'] - Context label for logging
  * @returns {Promise<import('./types').MarketAdapterSyncResult>}
  */
-async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
-    if (this._marketAdapterWatchdogInFlight) {
+async function syncMarketAdapterOnPeriodicConfigCheck(bot, context = 'periodic') {
+    if (bot._marketAdapterWatchdogInFlight) {
         return { skipped: true, reason: 'in-flight' };
     }
 
-    this._marketAdapterWatchdogInFlight = true;
+    bot._marketAdapterWatchdogInFlight = true;
 
     try {
-        const snapshot = typeof this._loadBotsConfigSnapshot === 'function'
-            ? await this._loadBotsConfigSnapshot()
+        const snapshot = typeof bot._loadBotsConfigSnapshot === 'function'
+            ? await bot._loadBotsConfigSnapshot()
             : loadBotsConfigSnapshot();
-        const previousFingerprint = this._marketAdapterWatchdogFingerprint || null;
+        const previousFingerprint = bot._marketAdapterWatchdogFingerprint || null;
         const changed = snapshot.fingerprint !== previousFingerprint;
-        this._marketAdapterWatchdogFingerprint = snapshot.fingerprint;
+        bot._marketAdapterWatchdogFingerprint = snapshot.fingerprint;
 
         if (changed) {
-            this._log(`Detected bots.json changes during ${context}; re-evaluating market adapter requirements.`);
+            bot._log(`Detected bots.json changes during ${context}; re-evaluating market adapter requirements.`);
         }
 
         if (!isPm2Runtime()) {
             const runtime = getSharedMarketAdapterRuntime({ root: ROOT });
-            const botId = String(this.config?.botKey || this.config?.name || this.config?.preferredAccount || this.config?.assetA || 'dexbot');
-            const botNeedsMarketAdapter = !!snapshot.exists && runtimeConfigNeedsMarketAdapter(snapshot, this.config);
+            const botId = String(bot.config?.botKey || bot.config?.name || bot.config?.preferredAccount || bot.config?.assetA || 'dexbot');
+            const botNeedsMarketAdapter = !!snapshot.exists && runtimeConfigNeedsMarketAdapter(snapshot, bot.config);
             const required = !!snapshot.needsMarketAdapter || botNeedsMarketAdapter;
             const result = await runtime.syncBot(botId, botNeedsMarketAdapter);
 
             if (!snapshot.exists || !required) {
                 if (result?.stopped) {
-                    this._log(`Stopped ${MARKET_ADAPTER_APP_NAME} because no AMA grid bots are active.`, 'info');
+                    bot._log(`Stopped ${MARKET_ADAPTER_APP_NAME} because no AMA grid bots are active.`, 'info');
                 }
                 return {
                     changed,
@@ -432,7 +432,7 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
             }
 
             if (result?.started) {
-                this._log(`Started ${MARKET_ADAPTER_APP_NAME} because AMA grid pricing is active.`, 'info');
+                bot._log(`Started ${MARKET_ADAPTER_APP_NAME} because AMA grid pricing is active.`, 'info');
             }
 
             return {
@@ -445,14 +445,14 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
             };
         }
 
-        const getPm2ProcessNamesFn = typeof this._getPm2ProcessNames === 'function'
-            ? this._getPm2ProcessNames.bind(this)
+        const getPm2ProcessNamesFn = typeof bot._getPm2ProcessNames === 'function'
+            ? bot._getPm2ProcessNames.bind(bot)
             : getPm2ProcessNames;
-        const startMarketAdapterFn = typeof this._startMarketAdapterPm2 === 'function'
-            ? this._startMarketAdapterPm2.bind(this)
+        const startMarketAdapterFn = typeof bot._startMarketAdapterPm2 === 'function'
+            ? bot._startMarketAdapterPm2.bind(bot)
             : startMarketAdapterPm2;
-        const stopMarketAdapterFn = typeof this._stopMarketAdapterPm2 === 'function'
-            ? this._stopMarketAdapterPm2.bind(this)
+        const stopMarketAdapterFn = typeof bot._stopMarketAdapterPm2 === 'function'
+            ? bot._stopMarketAdapterPm2.bind(bot)
             : stopMarketAdapterPm2;
 
         let processNames = [];
@@ -461,7 +461,7 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
             processNames = await getPm2ProcessNamesFn();
         } catch (err: any) {
             pm2QueryFailed = true;
-            this._warn(`Could not query PM2 for ${MARKET_ADAPTER_APP_NAME}: ${err.message}. Using a direct PM2 action.`);
+            bot._warn(`Could not query PM2 for ${MARKET_ADAPTER_APP_NAME}: ${err.message}. Using a direct PM2 action.`);
         }
 
         // Cross-reference config-active bots against actually running PM2 processes
@@ -485,7 +485,7 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
             }
 
             await stopMarketAdapterFn();
-            this._log(`Stopped ${MARKET_ADAPTER_APP_NAME} because no AMA grid bots are running.`, 'info');
+            bot._log(`Stopped ${MARKET_ADAPTER_APP_NAME} because no AMA grid bots are running.`, 'info');
             return {
                 changed,
                 required: false,
@@ -508,7 +508,7 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
         }
 
         await startMarketAdapterFn();
-        this._log(`Started ${MARKET_ADAPTER_APP_NAME} because AMA grid pricing is active.`, 'info');
+        bot._log(`Started ${MARKET_ADAPTER_APP_NAME} because AMA grid pricing is active.`, 'info');
 
         return {
             changed,
@@ -519,7 +519,7 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
             mode: 'pm2',
         };
     } catch (err: any) {
-        this._warn(`Market adapter watchdog failed during ${context}: ${err.message}`);
+        bot._warn(`Market adapter watchdog failed during ${context}: ${err.message}`);
         return {
             changed: false,
             required: false,
@@ -529,24 +529,24 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
             error: err.message,
         };
     } finally {
-        this._marketAdapterWatchdogInFlight = false;
+        bot._marketAdapterWatchdogInFlight = false;
     }
 }
 
 /**
  * Refresh the dynamic weight distribution from the AMA center snapshot.
  * Applies live dynamic weights if the bot is whitelisted and weights are ready.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @param {string} [context='runtime'] - Context label for logging
  * @returns {import('./types').DynamicWeightRefreshResult}
  */
-function refreshDynamicWeightDistribution(context = 'runtime') {
+function refreshDynamicWeightDistribution(bot, context = 'runtime') {
     const baseWeights = cloneWeightDistribution(
-        this._baseWeightDistribution,
-        this.config?.weightDistribution || this.manager?.config?.weightDistribution
+        bot._baseWeightDistribution,
+        bot.config?.weightDistribution || bot.manager?.config?.weightDistribution
     );
 
-    if (!this.config || !this.manager || !this.config.botKey || !baseWeights) {
+    if (!bot.config || !bot.manager || !bot.config.botKey || !baseWeights) {
         return {
             applied: false,
             source: 'static',
@@ -554,7 +554,7 @@ function refreshDynamicWeightDistribution(context = 'runtime') {
         };
     }
 
-    const botKey = this.config.botKey;
+    const botKey = bot.config.botKey;
     let nextWeights = baseWeights;
     let source = 'static';
     let snapshot = null;
@@ -572,7 +572,7 @@ function refreshDynamicWeightDistribution(context = 'runtime') {
                 || snapshotBase.sell !== baseWeights.sell
                 || snapshotBase.buy !== baseWeights.buy;
             if (baseChanged) {
-                this._log(
+                bot._log(
                     `Skipping stale dynamic weights (${context}): ` +
                     `snapshot base (sell=${snapshotBase?.sell}, buy=${snapshotBase?.buy}) ` +
                     `!= config (sell=${baseWeights.sell}, buy=${baseWeights.buy})`,
@@ -585,13 +585,13 @@ function refreshDynamicWeightDistribution(context = 'runtime') {
         }
     }
 
-    this.config.weightDistribution = { ...nextWeights };
-    if (this.manager?.config) {
-        this.manager.config.weightDistribution = { ...nextWeights };
+    bot.config.weightDistribution = { ...nextWeights };
+    if (bot.manager?.config) {
+        bot.manager.config.weightDistribution = { ...nextWeights };
     }
 
     if (source === 'dynamic') {
-        this._log(
+        bot._log(
             `Applied live dynamic weights (${context}): sell=${nextWeights.sell} buy=${nextWeights.buy}`,
             'info'
         );
@@ -763,17 +763,17 @@ function updateBotGridResetMetadata(botKey, options: { resetAt?: string; resetSo
 /**
  * Perform a full grid resync: reload config, optionally refresh center price,
  * recalculate the grid, persist, and record reset metadata.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @param {import('./types').GridResyncOptions} [options] - Grid resync options
  * @returns {Promise<boolean>} True if resync succeeded
  */
-function performGridResync(options: {
+function performGridResync(bot, options: {
     refreshCenterPrice?: boolean;
     centerRefreshContext?: string;
     centerRefreshLabel?: string;
     resetSource?: string;
 } = {}) {
-    const self = this;
+    const self = bot;
     let success = false;
     const refreshCenterPrice = !!options.refreshCenterPrice;
     const centerRefreshContext = options.centerRefreshContext || (refreshCenterPrice ? 'grid reset recenter' : 'grid resync');
@@ -792,7 +792,7 @@ function performGridResync(options: {
             ` (next check in ${Math.ceil(Math.max(dustDelayMs || 0, idleDelayMs) / TIMING.MILLISECONDS_PER_SECOND)}s)`,
             'info'
         );
-        self._scheduleDustMaintenanceCheck?.();
+        scheduleDustMaintenanceCheck(self);
         scheduleDeferredGridResync(self, options);
         return Promise.resolve(false);
     }
@@ -817,7 +817,7 @@ function performGridResync(options: {
                         updatedBot.weightDistribution,
                         self._baseWeightDistribution
                     );
-                    refreshDynamicWeightDistribution.call(self, 'grid resync');
+                    refreshDynamicWeightDistribution(self, 'grid resync');
                 }
             } catch (e: any) {
                 self._warn(`Failed to reload config during resync (using current settings): ${e.message}`);
@@ -826,7 +826,7 @@ function performGridResync(options: {
             if (refreshCenterPrice) {
                 if (promoteAmaCenterSnapshotForGridReset(self.config?.botKey)) {
                     self._log(`Refreshed AMA center snapshot for ${centerRefreshLabel}.`, 'info');
-                    refreshDynamicWeightDistribution.call(self, centerRefreshContext);
+                    refreshDynamicWeightDistribution(self, centerRefreshContext);
                 } else {
                     self._warn(`${centerRefreshLabel} requested but AMA center snapshot could not be refreshed.`);
                 }
@@ -866,24 +866,24 @@ function performGridResync(options: {
 /**
  * Handle a pending trigger file detected at startup or during runtime.
  * Processes the trigger and performs a grid resync if the trigger file exists.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @returns {Promise<boolean>} True if reset was handled successfully
  */
-async function handlePendingTriggerReset() {
-    if (!fs.existsSync(this.triggerFile)) {
+async function handlePendingTriggerReset(bot) {
+    if (!fs.existsSync(bot.triggerFile)) {
         return false;
     }
 
-    this._log('Pending trigger file detected. Processing reset before startup...');
-    const triggerInfo = readTriggerMetadata(this.triggerFile);
+    bot._log('Pending trigger file detected. Processing reset before startup...');
+    const triggerInfo = readTriggerMetadata(bot.triggerFile);
 
     let resetSucceeded = false;
-    await this.manager._fillProcessingLock.acquire(async () => {
-        resetSucceeded = await this._performGridResync(buildGridResyncOptions(triggerInfo));
+    await bot.manager._fillProcessingLock.acquire(async () => {
+        resetSucceeded = await performGridResync(bot, buildGridResyncOptions(triggerInfo));
     });
 
     if (!resetSucceeded) {
-        this._warn('Pending trigger reset failed. Continuing with normal startup path.');
+        bot._warn('Pending trigger reset failed. Continuing with normal startup path.');
     }
 
     return resetSucceeded;
@@ -892,84 +892,86 @@ async function handlePendingTriggerReset() {
 /**
  * Set up a file watcher on the profiles directory to detect trigger file creation.
  * When a trigger file appears, debounces and processes the grid resync.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @returns {Promise<void>}
  */
-async function setupTriggerFileDetection() {
-    if (this._triggerWatcher && typeof this._triggerWatcher.close === 'function') {
-        this._triggerWatcher.close();
-        this._triggerWatcher = null;
+async function setupTriggerFileDetection(bot) {
+    if (bot._triggerWatcher && typeof bot._triggerWatcher.close === 'function') {
+        bot._triggerWatcher.close();
+        bot._triggerWatcher = null;
     }
 
-    if (this._triggerDebounceTimer) {
-        clearTimeout(this._triggerDebounceTimer);
-        this._triggerDebounceTimer = null;
+    if (bot._triggerDebounceTimer) {
+        clearTimeout(bot._triggerDebounceTimer);
+        bot._triggerDebounceTimer = null;
     }
 
     try {
-        this._triggerWatcher = fs.watch(PROFILES_DIR, (eventType, filename) => {
+        bot._triggerWatcher = fs.watch(PROFILES_DIR, (eventType, filename) => {
             try {
-                if (this._shuttingDown) return;
+                if (bot._shuttingDown) return;
 
-                if (filename === path.basename(this.triggerFile)) {
-                    if ((eventType === 'rename' || eventType === 'change') && fs.existsSync(this.triggerFile)) {
-                        if (this._triggerDebounceTimer) clearTimeout(this._triggerDebounceTimer);
-                        this._triggerDebounceTimer = setTimeout(() => {
-                            this._triggerDebounceTimer = null;
+                if (filename === path.basename(bot.triggerFile)) {
+                    if ((eventType === 'rename' || eventType === 'change') && fs.existsSync(bot.triggerFile)) {
+                        if (bot._triggerDebounceTimer) clearTimeout(bot._triggerDebounceTimer);
+                        bot._triggerDebounceTimer = setTimeout(() => {
+                            bot._triggerDebounceTimer = null;
                             // Re-check shutdown: the fs.watch callback checked
                             // _shuttingDown at debounce-schedule time, but the
                             // 200ms delay can outlive the start of shutdown.
                             // Acquiring the fill lock with a torn-down manager
                             // would be a no-op-or-error at best and a use-after-
                             // free at worst.
-                            if (this._shuttingDown || !this.manager?._fillProcessingLock) return;
-                            const triggerInfo = readTriggerMetadata(this.triggerFile);
-                            this.manager._fillProcessingLock.acquire(async () => {
-                                if (this._shuttingDown) return;
-                                const ok = await this._performGridResync(buildGridResyncOptions(triggerInfo));
+                            if (bot._shuttingDown || !bot.manager?._fillProcessingLock) return;
+                            const triggerInfo = readTriggerMetadata(bot.triggerFile);
+                            bot.manager._fillProcessingLock.acquire(async () => {
+                                if (bot._shuttingDown) return;
+                                const ok = await performGridResync(bot, buildGridResyncOptions(triggerInfo));
                                 if (!ok) {
-                                    this._warn('Runtime trigger reset failed; retaining existing grid state.');
+                                    bot._warn('Runtime trigger reset failed; retaining existing grid state.');
                                 }
                             }).catch(err => {
-                                this._warn(`Trigger reset lock error: ${err.message}`);
+                                bot._warn(`Trigger reset lock error: ${err.message}`);
                             });
                         }, 200);
                     }
                 }
             } catch (err: any) {
-                this._warn(`fs.watch handler error: ${err && err.message ? err.message : err}`);
+                bot._warn(`fs.watch handler error: ${err && err.message ? err.message : err}`);
             }
         });
     } catch (err: any) {
-        this._warn(`Failed to setup file watcher: ${err.message}`);
+        bot._warn(`Failed to setup file watcher: ${err.message}`);
     }
 }
 
 /**
  * Perform periodic grid health checks (divergence, spread condition, dust detection).
  * Called as part of the periodic blockchain fetch interval.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @returns {Promise<void>}
  */
-async function performPeriodicGridChecks() {
-    await this._runGridMaintenance('periodic', { fillLockAlreadyHeld: true });
+async function performPeriodicGridChecks(bot) {
+    const periodicGridMaintFn = bot._runGridMaintenance || runGridMaintenance;
+    await periodicGridMaintFn(bot, 'periodic', { fillLockAlreadyHeld: true });
 }
 
 /**
  * Check if the continuous open-orders sync loop is enabled.
+ * @param {import('./dexbot_class').DEXBot} bot
  * @returns {boolean} True if the sync loop is enabled in TIMING config
  */
-function isOpenOrdersSyncLoopEnabled() {
+function isOpenOrdersSyncLoopEnabled(bot) {
     return !!TIMING.OPEN_ORDERS_SYNC_LOOP_ENABLED;
 }
 
 /**
  * Start the continuous open-orders sync loop.
  * Periodically reads on-chain orders and synchronizes with the grid manager.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  */
-function startOpenOrdersSyncLoop() {
-    if (this._mainLoopPromise) return;
+function startOpenOrdersSyncLoop(bot) {
+    if (bot._mainLoopPromise) return;
 
     const hasPreferredEnvLoopDelay = Object.prototype.hasOwnProperty.call(process.env, 'OPEN_ORDERS_SYNC_LOOP_MS');
     const loopDelayRaw = hasPreferredEnvLoopDelay ? process.env.OPEN_ORDERS_SYNC_LOOP_MS : undefined;
@@ -980,151 +982,151 @@ function startOpenOrdersSyncLoop() {
         : Number(TIMING.RUN_LOOP_DEFAULT_MS);
 
     if (hasEnvLoopDelay && loopDelayMs !== configuredLoopDelayMs) {
-        this._warn(`Invalid OPEN_ORDERS_SYNC_LOOP_MS='${loopDelayRaw}'. Falling back to default ${TIMING.RUN_LOOP_DEFAULT_MS}ms.`);
+        bot._warn(`Invalid OPEN_ORDERS_SYNC_LOOP_MS='${loopDelayRaw}'. Falling back to default ${TIMING.RUN_LOOP_DEFAULT_MS}ms.`);
     }
 
-    this._mainLoopActive = true;
-    this._log(`Open-orders sync loop started (every ${loopDelayMs}ms, dryRun=${!!this.config.dryRun})`);
+    bot._mainLoopActive = true;
+    bot._log(`Open-orders sync loop started (every ${loopDelayMs}ms, dryRun=${!!bot.config.dryRun})`);
     const readOpenOrdersFn = chainOrders.readOpenOrders;
 
-    this._mainLoopPromise = (async () => {
-        while (this._mainLoopActive && !this._shuttingDown) {
+    bot._mainLoopPromise = (async () => {
+        while (bot._mainLoopActive && !bot._shuttingDown) {
             try {
-                if (this.manager && this.accountId && !this.config.dryRun) {
-                    if (!this.manager._fillProcessingLock.isLocked() &&
-                        this.manager._fillProcessingLock.getQueueLength() === 0) {
-                        await this.manager._fillProcessingLock.acquire(async () => {
-                            const chainOpenOrders = await readOpenOrdersFn.call(chainOrders, this.accountId);
-                            const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
+                if (bot.manager && bot.accountId && !bot.config.dryRun) {
+                    if (!bot.manager._fillProcessingLock.isLocked() &&
+                        bot.manager._fillProcessingLock.getQueueLength() === 0) {
+                        await bot.manager._fillProcessingLock.acquire(async () => {
+                            const chainOpenOrders = await readOpenOrdersFn.call(chainOrders, bot.accountId);
+                            const syncResult = await bot.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
 
                             if (syncResult?.filledOrders && syncResult.filledOrders.length > 0) {
-                                this._log(`Open-orders sync loop: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
-                                this._markGridActivity?.('open-orders sync fill');
-                                const batchResult = await this._processFillsWithBatching(
+                                bot._log(`Open-orders sync loop: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
+                                bot._markGridActivity?.('open-orders sync fill');
+                                const batchResult = await bot._processFillsWithBatching(
                                     syncResult.filledOrders, new Set(), 'open-orders sync fill rebalance'
                                 );
                                 if (!batchResult?.aborted) {
-                                    await this.manager.persistGrid();
+                                    await bot.manager.persistGrid();
                                 }
                             }
                         });
                     }
                 }
             } catch (err: any) {
-                this._warn(`Order manager loop error: ${err.message}`);
+                bot._warn(`Order manager loop error: ${err.message}`);
             }
 
             await new Promise(resolve => setTimeout(resolve, loopDelayMs));
         }
     })().catch(err => {
-        this._warn(`Open-orders sync loop failed: ${err && err.message ? err.message : err}`);
+        bot._warn(`Open-orders sync loop failed: ${err && err.message ? err.message : err}`);
     }).finally(() => {
-        this._mainLoopPromise = null;
+        bot._mainLoopPromise = null;
     });
 }
 
 /**
  * Stop the continuous open-orders sync loop.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @returns {Promise<void>}
  */
-async function stopOpenOrdersSyncLoop() {
-    this._mainLoopActive = false;
-    if (this._mainLoopPromise) {
-        await this._mainLoopPromise;
+async function stopOpenOrdersSyncLoop(bot) {
+    bot._mainLoopActive = false;
+    if (bot._mainLoopPromise) {
+        await bot._mainLoopPromise;
     }
 }
 
 /**
  * Set up the periodic blockchain fetch interval.
  * Periodically fetches account totals and syncs open orders from the blockchain.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  */
-function setupBlockchainFetchInterval() {
+function setupBlockchainFetchInterval(bot) {
     let intervalMin = TIMING.BLOCKCHAIN_FETCH_INTERVAL_MIN;
 
     // Use the per-instance override if set (e.g., from fund registry shared-account detection)
-    if (typeof this._blockchainFetchIntervalMin === 'number' && Number.isFinite(this._blockchainFetchIntervalMin) && this._blockchainFetchIntervalMin > 0) {
-        intervalMin = this._blockchainFetchIntervalMin;
-    } else if (this.config?.preferredAccount) {
+    if (typeof bot._blockchainFetchIntervalMin === 'number' && Number.isFinite(bot._blockchainFetchIntervalMin) && bot._blockchainFetchIntervalMin > 0) {
+        intervalMin = bot._blockchainFetchIntervalMin;
+    } else if (bot.config?.preferredAccount) {
         // Fallback: check fund registry for shared accounts
         try {
-            if (fundRegistry.isSharedAccount(this.config.preferredAccount)) {
+            if (fundRegistry.isSharedAccount(bot.config.preferredAccount)) {
                 intervalMin = TIMING.SHARED_ACCOUNT_FETCH_INTERVAL_MIN;
-                this._blockchainFetchIntervalMin = intervalMin;
+                bot._blockchainFetchIntervalMin = intervalMin;
             }
         } catch (_err: any) {
-            this?._warn?.(`Registry unavailable for shared-account interval check: ${_err.message}`);
+            bot?._warn?.(`Registry unavailable for shared-account interval check: ${_err.message}`);
         }
     }
 
-    syncMarketAdapterOnPeriodicConfigCheck.call(this, 'startup blockchain fetch setup')
+    syncMarketAdapterOnPeriodicConfigCheck(bot, 'startup blockchain fetch setup')
         .catch((err) => {
-            this._warn(`Market adapter watchdog failed during startup blockchain fetch setup: ${err.message}`);
+            bot._warn(`Market adapter watchdog failed during startup blockchain fetch setup: ${err.message}`);
         });
 
-    if (this._blockchainFetchInterval !== null && this._blockchainFetchInterval !== undefined) {
-        this._stopBlockchainFetchInterval();
+    if (bot._blockchainFetchInterval !== null && bot._blockchainFetchInterval !== undefined) {
+        stopBlockchainFetchInterval(bot);
     }
 
     if (!Number.isFinite(intervalMin) || intervalMin <= 0) {
-        this._log(`Blockchain fetch interval disabled (value: ${intervalMin}). Periodic blockchain updates will not run.`);
+        bot._log(`Blockchain fetch interval disabled (value: ${intervalMin}). Periodic blockchain updates will not run.`);
         return;
     }
 
-    if (!this.manager || typeof this.manager.fetchAccountTotals !== 'function') {
-        this._warn('Cannot start blockchain fetch interval: manager or fetchAccountTotals method missing');
+    if (!bot.manager || typeof bot.manager.fetchAccountTotals !== 'function') {
+        bot._warn('Cannot start blockchain fetch interval: manager or fetchAccountTotals method missing');
         return;
     }
 
-    if (!this.accountId) {
-        this._warn('Cannot start blockchain fetch interval: account ID not available');
+    if (!bot.accountId) {
+        bot._warn('Cannot start blockchain fetch interval: account ID not available');
         return;
     }
 
     const intervalMs = intervalMin * 60 * TIMING.MILLISECONDS_PER_SECOND;
-    this._blockchainFetchInterval = setInterval(async () => {
+    bot._blockchainFetchInterval = setInterval(async () => {
         // Skip if shutdown has begun between the previous tick and now:
         // there is no point acquiring _fillProcessingLock or making
         // chain / daemon calls once we are tearing down. The lock would
         // serialize correctly, but we would still do wasted work
         // (syncMarketAdapter, fetchAccountTotals, readOpenOrders)
         // during shutdown.
-        if (this._shuttingDown) return;
+        if (bot._shuttingDown) return;
         // Guard against overlapping ticks: if the previous tick is still in
         // flight (slow chain / stall), skip rather than queue a second
         // periodic fetch. The fill lock below would still serialize the
         // work, but the second tick would waste a syncMarketAdapter call
         // and a fetchAccountTotals call while waiting.
-        if (this._blockchainFetchInFlight) return;
-        this._blockchainFetchInFlight = true;
+        if (bot._blockchainFetchInFlight) return;
+        bot._blockchainFetchInFlight = true;
         try {
             try {
-                await syncMarketAdapterOnPeriodicConfigCheck.call(this, 'periodic blockchain fetch');
+                await syncMarketAdapterOnPeriodicConfigCheck(bot, 'periodic blockchain fetch');
 
-                await this.manager._fillProcessingLock.acquire(async () => {
-                    if (this.manager.accountant && typeof this.manager.accountant.resetRecoveryState === 'function') {
-                        this.manager.accountant.resetRecoveryState();
+                await bot.manager._fillProcessingLock.acquire(async () => {
+                    if (bot.manager.accountant && typeof bot.manager.accountant.resetRecoveryState === 'function') {
+                        bot.manager.accountant.resetRecoveryState();
                     } else {
-                        this.manager._recoveryAttempted = false;
+                        bot.manager._recoveryAttempted = false;
                     }
-                    this._log(`Fetching blockchain account values (interval: every ${intervalMin}min)`);
-                    await this.manager.fetchAccountTotals(this.accountId);
+                    bot._log(`Fetching blockchain account values (interval: every ${intervalMin}min)`);
+                    await bot.manager.fetchAccountTotals(bot.accountId);
 
                     let chainOpenOrders = [];
-                    if (!this.config.dryRun) {
+                    if (!bot.config.dryRun) {
                         try {
-                            chainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
-                            const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'periodicBlockchainFetch', { fillLockAlreadyHeld: true });
+                            chainOpenOrders = await chainOrders.readOpenOrders(bot.accountId);
+                            const syncResult = await bot.manager.synchronizeWithChain(chainOpenOrders, 'periodicBlockchainFetch', { fillLockAlreadyHeld: true });
 
                             if (syncResult.filledOrders && syncResult.filledOrders.length > 0) {
-                                this._log(`Periodic sync: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
-                                this._markGridActivity?.('periodic sync fill rebalance');
-                                const batchResult = await this._processFillsWithBatching(
+                                bot._log(`Periodic sync: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
+                                bot._markGridActivity?.('periodic sync fill rebalance');
+                                const batchResult = await bot._processFillsWithBatching(
                                     syncResult.filledOrders, new Set(), 'periodic sync fill rebalance'
                                 );
                                 if (!batchResult?.aborted) {
-                                    await this.manager.persistGrid();
+                                    await bot.manager.persistGrid();
                                 }
                             }
 
@@ -1133,53 +1135,54 @@ function setupBlockchainFetchInterval() {
                                     .slice(0, 3)
                                     .map(formatUnmatchedChainOrder)
                                     .join(' | ');
-                                this._log(
+                                bot._log(
                                     `Periodic sync: ${syncResult.unmatchedChainOrders.length} chain order(s) not in grid ` +
                                     `(surplus/divergence)${sample ? `: ${sample}` : ''}`,
                                     'warn'
                                 );
                             }
                         } catch (err: any) {
-                            this._warn(`Error reading open orders during periodic fetch: ${err.message}`);
+                            bot._warn(`Error reading open orders during periodic fetch: ${err.message}`);
                         }
                     }
 
-                    await this._performPeriodicGridChecks();
+                    await performPeriodicGridChecks(bot);
                 });
             } catch (err: any) {
-                this._warn(`Error during periodic blockchain fetch: ${err && err.message ? err.message : err}`);
+                bot._warn(`Error during periodic blockchain fetch: ${err && err.message ? err.message : err}`);
             }
         } finally {
-            this._blockchainFetchInFlight = false;
+            bot._blockchainFetchInFlight = false;
         }
     }, intervalMs);
-    if (typeof this._blockchainFetchInterval.unref === 'function') {
-        this._blockchainFetchInterval.unref();
+    if (typeof bot._blockchainFetchInterval.unref === 'function') {
+        bot._blockchainFetchInterval.unref();
     }
 
-    this._log(`Started periodic blockchain fetch interval: every ${intervalMin} minute(s)`);
+    bot._log(`Started periodic blockchain fetch interval: every ${intervalMin} minute(s)`);
 }
 
 /**
  * Stop the periodic blockchain fetch interval.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  */
-function stopBlockchainFetchInterval() {
-    if (this._blockchainFetchInterval !== null && this._blockchainFetchInterval !== undefined) {
-        clearInterval(this._blockchainFetchInterval);
-        this._blockchainFetchInterval = null;
-        this._log('Stopped periodic blockchain fetch interval');
+function stopBlockchainFetchInterval(bot) {
+    if (bot._blockchainFetchInterval !== null && bot._blockchainFetchInterval !== undefined) {
+        clearInterval(bot._blockchainFetchInterval);
+        bot._blockchainFetchInterval = null;
+        bot._log('Stopped periodic blockchain fetch interval');
     }
 }
 
 /**
  * Release the market adapter runtime for a bot.
  * In PM2 mode this is a no-op; in direct mode it calls the shared runtime's releaseBot.
+ * @param {import('./dexbot_class').DEXBot} bot
  * @param {string} botId - Bot identifier
  * @param {string} [context='shutdown'] - Context label for logging
  * @returns {Promise<import('./types').MarketAdapterReleaseResult>}
  */
-async function releaseMarketAdapterRuntime(botId, context = 'shutdown') {
+async function releaseMarketAdapterRuntime(bot, botId, context = 'shutdown') {
     if (isPm2Runtime()) {
         return { released: false, mode: 'pm2' };
     }
@@ -1351,14 +1354,14 @@ function scheduleDeferredGridResync(ctx, options = {}) {
  * Execute the core maintenance logic: recalculate funds, check pipeline,
  * refresh dynamic weights, check grid health, cancel dust orders,
  * apply divergence corrections, and fix spread conditions.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @param {string} context - Context label for logging (e.g. 'periodic', 'dust-timer')
  * @returns {Promise<void>}
  */
-async function executeMaintenanceLogic(context) {
-    await this.manager.recalculateFunds();
-    await checkBtsBalanceAndAcquire.call(this);
-    this.manager.clearStalePipelineOperations();
+async function executeMaintenanceLogic(bot, context) {
+    await bot.manager.recalculateFunds();
+    await checkBtsBalanceAndAcquire(bot);
+    bot.manager.clearStalePipelineOperations();
 
     // Clear stale divergence flags before the pipeline check to break a self-blocking loop:
     // checkAndUpdateGridIfNeeded / compareGrids may have set _gridSidesUpdated earlier in this
@@ -1367,109 +1370,110 @@ async function executeMaintenanceLogic(context) {
     // correction path, the flag persists and the next isPipelineEmpty sees it as a blockage,
     // preventing the divergence section from running. Stale flags must be cleared here, BEFORE
     // the pipeline check, so the divergence section can be entered.
-    const staleFlags = this.manager._gridSidesUpdated?.size || 0;
+    const staleFlags = bot.manager._gridSidesUpdated?.size || 0;
     if (staleFlags > 0) {
-        this.manager._gridSidesUpdated.clear();
-        this._log(
+        bot.manager._gridSidesUpdated.clear();
+        bot._log(
             `[PIPELINE-CLEAR] Cleared ${staleFlags} stale _gridSidesUpdated flag(s) before ${context} pipeline check`,
             'info'
         );
     }
 
-    if (this._maintenanceCooldownCycles > 0) {
-        this._maintenanceCooldownCycles--;
-        this._log(
-            `[MAINT-COOLDOWN] Skipping ${context} maintenance after hard-abort recovery sync (remaining=${this._maintenanceCooldownCycles})`,
+    if (bot._maintenanceCooldownCycles > 0) {
+        bot._maintenanceCooldownCycles--;
+        bot._log(
+            `[MAINT-COOLDOWN] Skipping ${context} maintenance after hard-abort recovery sync (remaining=${bot._maintenanceCooldownCycles})`,
             'warn'
         );
         return;
     }
 
-    const pipelineStatus = this.manager.isPipelineEmpty(this._getPipelineSignals());
+    const pipelineStatus = bot.manager.isPipelineEmpty(bot._getPipelineSignals());
     if (pipelineStatus.isEmpty) {
-        const repairedFromChain = await maybeRunTargetedDriftReconciliation.call(this, context);
+        const repairedFromChain = await maybeRunTargetedDriftReconciliation(bot, context);
         if (repairedFromChain) return;
 
         // Refresh live dynamic weights before any structural checks that may create or
         // resize orders (dust detection, divergence correction, spread correction).
-        refreshDynamicWeightDistribution.call(this, context);
+        refreshDynamicWeightDistribution(bot, context);
 
-        const healthResult = await this.manager.checkGridHealth(this.updateOrdersOnChainPlan.bind(this));
-        if (await this._abortFlowIfIllegalState(`${context} health check`)) return;
-        const dustCancelResult = await this._cancelDustOrders({
+        const healthResult = await bot.manager.checkGridHealth(bot.updateOrdersOnChainPlan.bind(bot));
+        if (await bot._abortFlowIfIllegalState(`${context} health check`)) return;
+        const dustCancelResult = await cancelDustOrders(bot, {
             buy: healthResult.buyDustOrders,
             sell: healthResult.sellDustOrders,
         });
         if (dustCancelResult?.batchResult?.abortedForIllegalState || dustCancelResult?.batchResult?.abortedForAccountingFailure) {
             return;
         }
-        if (this._dustSinceMap?.size > 0) {
-            const delayMs = getPendingDustDelayMs(this);
+        if (bot._dustSinceMap?.size > 0) {
+            const delayMs = getPendingDustDelayMs(bot);
             if (delayMs !== null) {
-                this._log(
+                bot._log(
                     `[DUST-CANCEL] Deferring ${context} structural maintenance until dust timer completes` +
                     ` (next check in ${Math.ceil(delayMs / TIMING.MILLISECONDS_PER_SECOND)}s)`,
                     'info'
                 );
-                scheduleDeferredGridResync(this);
+                scheduleDeferredGridResync(bot);
                 return;
             }
             // All dust timers have expired — stale entries remain in the map but
             // there is nothing left to wait for. Proceed with structural maintenance.
-            this._log(
+            bot._log(
                 `[DUST-CANCEL] Dust timer expired; stale map entries cleared before ${context} structural maintenance`,
                 'info'
             );
-            this._dustSinceMap.clear();
+            bot._dustSinceMap.clear();
         }
 
         try {
-            const persistedGridData = this.accountOrders.loadBotGrid(this.config.botKey, true) || [];
-            const calculatedGrid = Array.from(this.manager.orders.values());
+            const persistedGridData = bot.accountOrders.loadBotGrid(bot.config.botKey, true) || [];
+            const calculatedGrid = Array.from(bot.manager.orders.values());
 
-            const divergence = await Grid.monitorDivergence(this.manager, calculatedGrid, persistedGridData);
+            const divergence = await Grid.monitorDivergence(bot.manager, calculatedGrid, persistedGridData);
 
             if (divergence.needsUpdate) {
                 const hasRmsDivergence = !!(divergence.buy.rms || divergence.sell.rms);
                 if (divergence.buy.ratio || divergence.sell.ratio) {
-                    this._log(`Grid update triggered by funds during ${context} (buy: ${divergence.buy.ratio}, sell: ${divergence.sell.ratio})`);
+                    bot._log(`Grid update triggered by funds during ${context} (buy: ${divergence.buy.ratio}, sell: ${divergence.sell.ratio})`);
                 }
                 if (hasRmsDivergence) {
-                    this._log(`Grid update triggered by structural divergence during ${context}: buy=${Format.formatPrice6(divergence.buy.metric)}, sell=${Format.formatPrice6(divergence.sell.metric)}`);
-                    const ok = await this._performGridResync(buildGridResyncOptions('rms_structural_grid_resync'));
+                    bot._log(`Grid update triggered by structural divergence during ${context}: buy=${Format.formatPrice6(divergence.buy.metric)}, sell=${Format.formatPrice6(divergence.sell.metric)}`);
+                    const gridResyncFn = bot._performGridResync || performGridResync;
+                    const ok = await gridResyncFn(bot, buildGridResyncOptions('rms_structural_grid_resync'));
                     if (!ok) {
-                        this._warn(`RMS structural divergence full grid resync failed during ${context}; retaining existing grid state.`);
+                        bot._warn(`RMS structural divergence full grid resync failed during ${context}; retaining existing grid state.`);
                     }
                     // Clear any ratio flags set by checkAndUpdateGridIfNeeded earlier in this tick,
                     // since the resync already rebuilt the full grid.
-                    if (this.manager._gridSidesUpdated?.size > 0) {
-                        this.manager._gridSidesUpdated.clear();
+                    if (bot.manager._gridSidesUpdated?.size > 0) {
+                        bot.manager._gridSidesUpdated.clear();
                     }
                     return;
                 }
 
                 try {
                     await applyGridDivergenceCorrections(
-                        this.manager,
-                        this.accountOrders,
-                        this.config.botKey,
-                        this.updateOrdersOnChainBatch.bind(this)
+                        bot.manager,
+                        bot.accountOrders,
+                        bot.config.botKey,
+                        bot.updateOrdersOnChainBatch.bind(bot)
                     );
-                    if (await this._abortFlowIfIllegalState(`${context} divergence correction`)) return;
-                    this._log(`Grid divergence corrections applied during ${context}`);
+                    if (await bot._abortFlowIfIllegalState(`${context} divergence correction`)) return;
+                    bot._log(`Grid divergence corrections applied during ${context}`);
                 } catch (err: any) {
-                    this._warn(`Error applying divergence corrections during ${context}: ${err.message}`);
+                    bot._warn(`Error applying divergence corrections during ${context}: ${err.message}`);
                 }
             }
         } catch (err: any) {
-            this._warn(`Error running divergence check during ${context}: ${err.message}`);
+            bot._warn(`Error running divergence check during ${context}: ${err.message}`);
         }
 
-        const spreadResult = await this.manager.checkSpreadCondition(BitShares, this.updateOrdersOnChainPlan.bind(this));
-        if (await this._abortFlowIfIllegalState(`${context} spread check`)) return;
+        const spreadResult = await bot.manager.checkSpreadCondition(BitShares, bot.updateOrdersOnChainPlan.bind(bot));
+        if (await bot._abortFlowIfIllegalState(`${context} spread check`)) return;
         if (spreadResult && spreadResult.ordersPlaced > 0) {
-            this._log(`✓ Spread correction during ${context}: ${spreadResult.ordersPlaced} order(s) placed`);
-            await this._persistAndRecoverIfNeeded();
+            bot._log(`✓ Spread correction during ${context}: ${spreadResult.ordersPlaced} order(s) placed`);
+            await bot._persistAndRecoverIfNeeded();
         }
     }
 }
@@ -1477,16 +1481,16 @@ async function executeMaintenanceLogic(context) {
 /**
  * Cancel dust orders that have exceeded their cancellation delay.
  * Tracks first-detected timestamps per order and only cancels after DUST_CANCEL_DELAY_SEC.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @param {Object} [options] - Dust cancellation options
  * @param {import('./types').Order[]} [options.buy=[]] - Buy-side dust orders
  * @param {import('./types').Order[]} [options.sell=[]] - Sell-side dust orders
  * @returns {Promise<import('./types').DustCancelResult>}
  */
-async function cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {}) {
+async function cancelDustOrders(bot, { buy: buyDust = [], sell: sellDust = [] } = {}) {
     const delaySec = GRID_LIMITS.DUST_CANCEL_DELAY_SEC;
     if (!Number.isFinite(delaySec) || delaySec < 0) {
-        this._clearDustMaintenanceTimer();
+        clearDustMaintenanceTimer(bot);
         return { cancelledCount: 0, batchResult: null };
     }
 
@@ -1495,13 +1499,13 @@ async function cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {})
     const allDust = [...buyDust, ...sellDust];
     const dustIds = new Set(allDust.map(o => o.orderId).filter(Boolean));
 
-    for (const orderId of this._dustSinceMap.keys()) {
-        if (!dustIds.has(orderId)) this._dustSinceMap.delete(orderId);
+    for (const orderId of bot._dustSinceMap.keys()) {
+        if (!dustIds.has(orderId)) bot._dustSinceMap.delete(orderId);
     }
 
     for (const order of allDust) {
-        if (order.orderId && !this._dustSinceMap.has(order.orderId)) {
-            this._dustSinceMap.set(order.orderId, now);
+        if (order.orderId && !bot._dustSinceMap.has(order.orderId)) {
+            bot._dustSinceMap.set(order.orderId, now);
         }
     }
 
@@ -1512,12 +1516,12 @@ async function cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {})
         // window starts at firstSeen (when the order first appeared in the dust
         // set), not at this maintenance tick, so an order can only be cancelled
         // after the delay has elapsed since its initial detection.
-        const firstSeen = this._dustSinceMap.get(o.orderId);
+        const firstSeen = bot._dustSinceMap.get(o.orderId);
         return (now - firstSeen) >= delayMs;
     });
 
     if (toCancel.length === 0) {
-        this._scheduleDustMaintenanceCheck();
+        scheduleDustMaintenanceCheck(bot);
         return { cancelledCount: 0, batchResult: null };
     }
 
@@ -1525,13 +1529,13 @@ async function cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {})
     const syntheticFills = [];
     for (const order of toCancel) {
         try {
-            const cancelResult = await chainOrders.cancelOrder(this.account, this.privateKey, order.orderId);
+            const cancelResult = await chainOrders.cancelOrder(bot.account, bot.privateKey, order.orderId);
             if (cancelResult?.verifiedAfterFailure) {
-                const accountRef = this.accountId || this.account;
+                const accountRef = bot.accountId || bot.account;
                 const chainOpenOrders = await chainOrders.readOpenOrders(accountRef);
-                await this.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
+                await bot.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
             } else {
-                await this.manager.synchronizeWithChain({ orderId: order.orderId, clearSize: true }, 'cancelOrder');
+                await bot.manager.synchronizeWithChain({ orderId: order.orderId, clearSize: true }, 'cancelOrder');
             }
 
             syntheticFills.push({
@@ -1540,9 +1544,9 @@ async function cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {})
                 isDelayedRotationTrigger: true,
                 dustCancelTriggeredAt: now
             });
-            this._dustSinceMap.delete(order.orderId);
+            bot._dustSinceMap.delete(order.orderId);
             cancelledCount++;
-            this._log(
+            bot._log(
                 `[DUST-CANCEL] Cancelled dust order ${order.id} (${order.orderId}) ` +
                 `as fully filled (delay=${delaySec}s, size=${order.size})`,
                 'info'
@@ -1550,7 +1554,7 @@ async function cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {})
         } catch (err: any) {
             const errMsg = err?.message || '';
             if (isOrderDoesNotExistError(errMsg, order.orderId)) {
-                this._dustSinceMap.delete(order.orderId);
+                bot._dustSinceMap.delete(order.orderId);
                 syntheticFills.push({
                     ...order,
                     isPartial: true,
@@ -1559,19 +1563,19 @@ async function cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {})
                     dustRecoveredFromChain: true,
                 });
                 cancelledCount++;
-                this._log(
+                bot._log(
                     `[DUST-CANCEL] Treated dust order ${order.id} (${order.orderId}) as gone from chain (${errMsg.slice(0, 80)})`,
                     'info'
                 );
             } else {
-                this._warn(`[DUST-CANCEL] Failed to cancel dust order ${order.id}: ${errMsg}`);
+                bot._warn(`[DUST-CANCEL] Failed to cancel dust order ${order.id}: ${errMsg}`);
             }
         }
     }
 
     let batchResult = null;
     if (syntheticFills.length > 0) {
-        const result = await this._processFillsWithBatching(
+        const result = await bot._processFillsWithBatching(
             syntheticFills, new Set(), `dust cancel [${syntheticFills.map(o => o.id).join(', ')}]`
         );
         batchResult = {
@@ -1579,39 +1583,40 @@ async function cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {})
             abortedForAccountingFailure: result.aborted,
         };
         if (!result.aborted) {
-            await this.manager.persistGrid();
+            await bot.manager.persistGrid();
         }
     } else if (cancelledCount > 0) {
-        await this.manager.recalculateFunds();
-        await this.manager.persistGrid();
+        await bot.manager.recalculateFunds();
+        await bot.manager.persistGrid();
     }
 
     if (cancelledCount > 0) {
         try {
-            const freshHealth = await this.manager.checkGridHealth(null);
+            const freshHealth = await bot.manager.checkGridHealth(null);
             const seenAt = Date.now();
             for (const order of [...freshHealth.buyDustOrders, ...freshHealth.sellDustOrders]) {
-                if (order.orderId && !this._dustSinceMap.has(order.orderId)) {
-                    this._dustSinceMap.set(order.orderId, seenAt);
+                if (order.orderId && !bot._dustSinceMap.has(order.orderId)) {
+                    bot._dustSinceMap.set(order.orderId, seenAt);
                 }
             }
         } catch (err: any) {
-            this._warn(`[DUST-CANCEL] Failed to reseed dust timers after cancel: ${err.message}`);
+            bot._warn(`[DUST-CANCEL] Failed to reseed dust timers after cancel: ${err.message}`);
         }
     }
 
-    this._scheduleDustMaintenanceCheck();
+    scheduleDustMaintenanceCheck(bot);
 
-    if (cancelledCount > 0 && this._dustSinceMap.size === 0 && !this._shuttingDown && !this._dustMaintenanceTimer) {
+    if (cancelledCount > 0 && bot._dustSinceMap.size === 0 && !bot._shuttingDown && !bot._dustMaintenanceTimer) {
         const delayMs = GRID_LIMITS.DUST_CANCEL_DELAY_SEC * 1_000;
-        this._dustMaintenanceTimer = setTimeout(() => {
-            this._dustMaintenanceTimer = null;
-            if (this._shuttingDown || !this.manager?._fillProcessingLock) return;
-            this.manager._fillProcessingLock.acquire(async () => {
-                if (!this._shuttingDown) {
-                    await this._runGridMaintenance('dust-timer', { fillLockAlreadyHeld: true });
+        bot._dustMaintenanceTimer = setTimeout(() => {
+            bot._dustMaintenanceTimer = null;
+            if (bot._shuttingDown || !bot.manager?._fillProcessingLock) return;
+            bot.manager._fillProcessingLock.acquire(async () => {
+                if (!bot._shuttingDown) {
+                    const dustGridMaintFn = bot._runGridMaintenance || runGridMaintenance;
+                    await dustGridMaintFn(bot, 'dust-timer', { fillLockAlreadyHeld: true });
                 }
-            }).catch(err2 => this._warn(`Error during dust fallback timer: ${err2.message}`));
+            }).catch(err2 => bot._warn(`Error during dust fallback timer: ${err2.message}`));
         }, delayMs);
     }
     return { cancelledCount, batchResult };
@@ -1619,33 +1624,33 @@ async function cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {})
 
 /**
  * Clear the dust maintenance timer if it is running.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  */
-function clearDustMaintenanceTimer() {
-    if (this._dustMaintenanceTimer) {
-        clearTimeout(this._dustMaintenanceTimer);
-        this._dustMaintenanceTimer = null;
+function clearDustMaintenanceTimer(bot) {
+    if (bot._dustMaintenanceTimer) {
+        clearTimeout(bot._dustMaintenanceTimer);
+        bot._dustMaintenanceTimer = null;
     }
 }
 
 /**
  * Schedule the next dust maintenance check based on the earliest pending dust expiry.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  */
-function scheduleDustMaintenanceCheck() {
-    this._clearDustMaintenanceTimer();
+function scheduleDustMaintenanceCheck(bot) {
+    clearDustMaintenanceTimer(bot);
 
     const delaySec = GRID_LIMITS.DUST_CANCEL_DELAY_SEC;
     if (
-        this._shuttingDown ||
-        !this.manager ||
+        bot._shuttingDown ||
+        !bot.manager ||
         !Number.isFinite(delaySec) ||
         delaySec < 0 ||
-        this._dustSinceMap.size === 0
+        bot._dustSinceMap.size === 0
     ) {
         return;
     }
-    // Note: do NOT gate on !this.manager._fillProcessingLock here. The timer
+    // Note: do NOT gate on !bot.manager._fillProcessingLock here. The timer
     // body re-validates and returns silently if the lock is missing, and the
     // .finally reschedules — so a transient lock outage self-heals on the
     // next tick once manager is reattached. Tightening the guard would skip
@@ -1655,7 +1660,7 @@ function scheduleDustMaintenanceCheck() {
     const now = Date.now();
     let nextRunAt = Number.POSITIVE_INFINITY;
 
-    for (const firstSeen of this._dustSinceMap.values()) {
+    for (const firstSeen of bot._dustSinceMap.values()) {
         if (!Number.isFinite(firstSeen)) continue;
         nextRunAt = Math.min(nextRunAt, firstSeen + delayMs);
     }
@@ -1664,13 +1669,14 @@ function scheduleDustMaintenanceCheck() {
         ? Math.max(0, nextRunAt - now)
         : delayMs;
 
-    this._dustMaintenanceTimer = setTimeout(() => {
-        this._dustMaintenanceTimer = null;
-        if (this._shuttingDown || !this.manager?._fillProcessingLock) return;
+    bot._dustMaintenanceTimer = setTimeout(() => {
+        bot._dustMaintenanceTimer = null;
+        if (bot._shuttingDown || !bot.manager?._fillProcessingLock) return;
 
-        this.manager._fillProcessingLock.acquire(async () => {
-            if (this._shuttingDown) return;
-            await this._runGridMaintenance('dust-timer', { fillLockAlreadyHeld: true });
+        bot.manager._fillProcessingLock.acquire(async () => {
+            if (bot._shuttingDown) return;
+            const dustGridMaintFn2 = bot._runGridMaintenance || runGridMaintenance;
+            await dustGridMaintFn2(bot, 'dust-timer', { fillLockAlreadyHeld: true });
         }).catch(err => {
             // AssertionError must propagate so test mocks can fail the test
             // instead of silently passing. Other errors stay caught to keep
@@ -1678,10 +1684,10 @@ function scheduleDustMaintenanceCheck() {
             if (err && (err.code === 'ERR_ASSERTION' || err.name === 'AssertionError')) {
                 throw err;
             }
-            this._warn(`Error during dust maintenance timer: ${err?.message || err}`);
+            bot._warn(`Error during dust maintenance timer: ${err?.message || err}`);
         }).finally(() => {
-            if (!this._shuttingDown) {
-                this._scheduleDustMaintenanceCheck();
+            if (!bot._shuttingDown) {
+                scheduleDustMaintenanceCheck(bot);
             }
         });
     }, nextDelayMs);
@@ -1690,38 +1696,38 @@ function scheduleDustMaintenanceCheck() {
 /**
  * Seed dust timers from partial order updates detected during sync.
  * Marks partial orders as potentially dusty if they fall below the dust threshold.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @param {import('./types').Order[]} [updatedOrders=[]] - Orders that were updated during sync
  * @param {number} [detectedAt=Date.now()] - Timestamp when dust was detected
  * @returns {Promise<void>}
  */
-async function seedDustTimersFromPartialUpdates(updatedOrders = [], detectedAt = Date.now()) {
-    if (!this.manager || !Array.isArray(updatedOrders) || updatedOrders.length === 0) return;
+async function seedDustTimersFromPartialUpdates(bot, updatedOrders = [], detectedAt = Date.now()) {
+    if (!bot.manager || !Array.isArray(updatedOrders) || updatedOrders.length === 0) return;
 
     const partialOrders = updatedOrders.filter(order => order && order.state === ORDER_STATES.PARTIAL && order.orderId);
     if (partialOrders.length === 0) return;
 
-    const { buyDustOrders, sellDustOrders } = await Grid.checkWindowDust(this.manager);
+    const { buyDustOrders, sellDustOrders } = await Grid.checkWindowDust(bot.manager);
     const dustOrderIds = new Set([...buyDustOrders, ...sellDustOrders].map(order => order.orderId).filter(Boolean));
 
     for (const order of partialOrders) {
         if (!order?.orderId) continue;
         if (dustOrderIds.has(order.orderId)) {
-            if (!this._dustSinceMap.has(order.orderId)) {
-                this._dustSinceMap.set(order.orderId, detectedAt);
+            if (!bot._dustSinceMap.has(order.orderId)) {
+                bot._dustSinceMap.set(order.orderId, detectedAt);
             }
         } else {
-            this._dustSinceMap.delete(order.orderId);
+            bot._dustSinceMap.delete(order.orderId);
         }
     }
 
-    this._scheduleDustMaintenanceCheck();
+    scheduleDustMaintenanceCheck(bot);
 }
 
 /**
  * Run grid maintenance with idle detection and lock acquisition.
  * Checks if the bot is idle before proceeding, and acquires the fill processing lock.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @param {string} [context='periodic'] - Context label for logging
  * @param {Object} [options] - Maintenance options
  * @param {boolean} [options.fillLockAlreadyHeld=false] - Skip fill lock acquisition if already held
@@ -1729,6 +1735,7 @@ async function seedDustTimersFromPartialUpdates(updatedOrders = [], detectedAt =
  * @returns {Promise<void>}
  */
 async function runGridMaintenance(
+    bot,
     context = 'periodic',
     options: { fillLockAlreadyHeld?: boolean; skipIdle?: boolean } = {}
 ) {
@@ -1738,20 +1745,20 @@ async function runGridMaintenance(
     const fillLockAlreadyHeld = options.fillLockAlreadyHeld === true;
     const skipIdle = options.skipIdle === true;
     if (!skipIdle) {
-        const idleDelayMs = getMaintenanceIdleDelayMs(this);
+        const idleDelayMs = getMaintenanceIdleDelayMs(bot);
         if (idleDelayMs > 0) {
-            this._log(
+            bot._log(
                 `[MAINT-IDLE] Deferring ${context} grid maintenance until ` +
                 `${Math.ceil(idleDelayMs / TIMING.MILLISECONDS_PER_SECOND)}s of inactivity has passed`,
                 'debug'
             );
-            scheduleMaintenanceAfterIdle(this, context, options);
+            scheduleMaintenanceAfterIdle(bot, context, options);
             return;
         }
     }
 
     try {
-        if (!this.manager) return;
+        if (!bot.manager) return;
 
         // Lock-ordering contract:
         //   - When fillLockAlreadyHeld=false this function acquires
@@ -1765,19 +1772,19 @@ async function runGridMaintenance(
             // race with concurrent order mutations. The previous placement
             // (before any lock acquisition) could observe a stale empty
             // grid and silently skip maintenance while fills were in flight.
-            if (!this.manager.orders || this.manager.orders.size === 0) return;
-            await this._executeMaintenanceLogic(context);
+            if (!bot.manager.orders || bot.manager.orders.size === 0) return;
+            await executeMaintenanceLogic(bot, context);
         };
 
         if (fillLockAlreadyHeld) {
-            await this.manager._divergenceLock.acquire(runWithDivergenceLock);
+            await bot.manager._divergenceLock.acquire(runWithDivergenceLock);
         } else {
-            await this.manager._fillProcessingLock.acquire(async () => {
-                await this.manager._divergenceLock.acquire(runWithDivergenceLock);
+            await bot.manager._fillProcessingLock.acquire(async () => {
+                await bot.manager._divergenceLock.acquire(runWithDivergenceLock);
             });
         }
     } catch (err: any) {
-        this._warn(`Error during ${context} grid maintenance: ${err.message}`);
+        bot._warn(`Error during ${context} grid maintenance: ${err.message}`);
         throw err;
     }
 }
@@ -1788,12 +1795,12 @@ const _lastBtsAcquisitionTimestamps = new Map();
  * Check if the bot's BTS balance is below the minimum threshold and trigger acquisition.
  * Only applies to non-BTS pairs. Uses hysteresis: triggers at 1× min_BTS_value,
  * fills to BTS_ACQUIRE_TARGET_MULTIPLIER × min_BTS_value.
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @returns {Promise<void>}
  */
-async function checkBtsBalanceAndAcquire() {
-    if (this.config.dryRun) return;
-    if (this.config.assetA === 'BTS' || this.config.assetB === 'BTS') return;
+async function checkBtsBalanceAndAcquire(bot) {
+    if (bot.config.dryRun) return;
+    if (bot.config.assetA === 'BTS' || bot.config.assetB === 'BTS') return;
 
     const cooldownMs = TIMING.BTS_ACQUIRE_COOLDOWN_MIN * 60 * 1000;
     const now = Date.now();
@@ -1809,54 +1816,54 @@ async function checkBtsBalanceAndAcquire() {
         }
     }
 
-    const botKey = this.config.botKey || this.config.name;
+    const botKey = bot.config.botKey || bot.config.name;
     const lastAcq = _lastBtsAcquisitionTimestamps.get(botKey);
     if (lastAcq && (now - lastAcq) < cooldownMs) return;
 
-    if (!this.manager || !this.manager.btsBalance) return;
+    if (!bot.manager || !bot.manager.btsBalance) return;
 
-    const targetBuy = Math.max(0, this.config.activeOrders?.buy ?? 1);
-    const targetSell = Math.max(0, this.config.activeOrders?.sell ?? 1);
+    const targetBuy = Math.max(0, bot.config.activeOrders?.buy ?? 1);
+    const targetSell = Math.max(0, bot.config.activeOrders?.sell ?? 1);
     const totalTarget = targetBuy + targetSell;
 
     const minBtsVal = calculateOrderCreationFees(
-        this.config.assetA, this.config.assetB, totalTarget,
+        bot.config.assetA, bot.config.assetB, totalTarget,
         FEE_PARAMETERS.BTS_RESERVATION_MULTIPLIER
     );
     if (minBtsVal <= 0) return;
 
-    const effectiveMin = (this.config.min_BTS_value > 0) ? this.config.min_BTS_value : minBtsVal;
-    const btsFree = this.manager.btsBalance.free || 0;
+    const effectiveMin = (bot.config.min_BTS_value > 0) ? bot.config.min_BTS_value : minBtsVal;
+    const btsFree = bot.manager.btsBalance.free || 0;
     const triggerAt = effectiveMin * FEE_PARAMETERS.BTS_ACQUIRE_THRESHOLD;
     if (btsFree >= triggerAt) return;
 
     const target = effectiveMin * FEE_PARAMETERS.BTS_ACQUIRE_TARGET_MULTIPLIER;
     const deficit = Math.max(0, target - btsFree);
-    this._log(
+    bot._log(
         `[BTS-ACQ] BTS balance ${Format.formatAmount8(btsFree)} below threshold ${Format.formatAmount8(triggerAt)}. ` +
         `Acquiring ${Format.formatAmount8(deficit)} BTS (target: ${Format.formatAmount8(target)})`,
         'info'
     );
     _lastBtsAcquisitionTimestamps.set(botKey, Date.now());
-    await acquireBts.call(this, deficit);
+    await acquireBts(bot, deficit);
 }
 
 /**
  * Acquire BTS by swapping one of the trading pair assets through an AMM pool.
  * Tries both assets for a BTS pool, picks the best (lowest price impact).
- * @this {import('./dexbot_class').DEXBot}
+ * @param {import('./dexbot_class').DEXBot} bot
  * @param {number} deficit - Amount of BTS needed (float)
  * @returns {Promise<void>}
  */
-async function acquireBts(deficit) {
+async function acquireBts(bot, deficit) {
     if (deficit <= 0) return;
     const { BitShares } = require('./bitshares_client');
     if (!BitShares || !BitShares.db) return;
 
     const coreAssetId = NATIVE_CLIENT.CHAIN.CORE_ASSET_ID;
     const assets = [
-        { id: this.assets?.assetA?.id, free: this.manager.accountTotals?.sellFree || 0, precision: this.assets?.assetA?.precision, symbol: this.config.assetA },
-        { id: this.assets?.assetB?.id, free: this.manager.accountTotals?.buyFree || 0, precision: this.assets?.assetB?.precision, symbol: this.config.assetB }
+        { id: bot.assets?.assetA?.id, free: bot.manager.accountTotals?.sellFree || 0, precision: bot.assets?.assetA?.precision, symbol: bot.config.assetA },
+        { id: bot.assets?.assetB?.id, free: bot.manager.accountTotals?.buyFree || 0, precision: bot.assets?.assetB?.precision, symbol: bot.config.assetB }
     ];
 
     const candidates = [];
@@ -1879,12 +1886,12 @@ async function acquireBts(deficit) {
 
             candidates.push({ asset, poolId: poolData.id, sellAmount, expectedReceive, priceImpact: sellAmount / assetReserve });
         } catch (e: any) {
-            this._log(`[BTS-ACQ] Pool lookup failed for ${asset?.symbol}: ${e.message}`, 'debug');
+            bot._log(`[BTS-ACQ] Pool lookup failed for ${asset?.symbol}: ${e.message}`, 'debug');
         }
     }
 
     if (candidates.length === 0) {
-        this._log(`[BTS-ACQ] CRITICAL: No BTS pool with sufficient liquidity for ${this.config.assetA} or ${this.config.assetB}`, 'error');
+        bot._log(`[BTS-ACQ] CRITICAL: No BTS pool with sufficient liquidity for ${bot.config.assetA} or ${bot.config.assetB}`, 'error');
         return;
     }
 
@@ -1894,23 +1901,23 @@ async function acquireBts(deficit) {
     const minReceive = best.expectedReceive * (1 - FEE_PARAMETERS.POOL_SLIPPAGE_TOLERANCE);
     const sellInt = floatToBlockchainInt(best.sellAmount, best.asset.precision);
     const minReceiveInt = floatToBlockchainInt(minReceive, BTS_PRECISION);
-    const op = chainOrders.buildLiquidityPoolExchangeOp(this.accountId, best.poolId, sellInt, best.asset.id, minReceiveInt, coreAssetId);
+    const op = chainOrders.buildLiquidityPoolExchangeOp(bot.accountId, best.poolId, sellInt, best.asset.id, minReceiveInt, coreAssetId);
 
     try {
-        if (this.privateKey) {
-            await chainOrders.executeBatch(this.account, this.privateKey, [op]);
+        if (bot.privateKey) {
+            await chainOrders.executeBatch(bot.account, bot.privateKey, [op]);
         } else {
-            this._log('[BTS-ACQ] CRITICAL: No signing method available', 'error');
+            bot._log('[BTS-ACQ] CRITICAL: No signing method available', 'error');
             return;
         }
     } catch (err) {
-        this._log(`[BTS-ACQ] Swap broadcast failed: ${err.message}`, 'error');
+        bot._log(`[BTS-ACQ] Swap broadcast failed: ${err.message}`, 'error');
         return;
     }
 
-    const orderType = (best.asset.id === this.assets?.assetA?.id) ? 'sell' : 'buy';
-    if (this.manager.accountant) {
-        this.manager.accountant.adjustTotalBalance(orderType, -best.sellAmount, 'bts-acquisition-swap-sell');
+    const orderType = (best.asset.id === bot.assets?.assetA?.id) ? 'sell' : 'buy';
+    if (bot.manager.accountant) {
+        bot.manager.accountant.adjustTotalBalance(orderType, -best.sellAmount, 'bts-acquisition-swap-sell');
     }
     // Do NOT optimistically bump btsBalance.free/total here. expectedReceive is
     // a pre-swap estimate and may diverge from the actual fill (slippage, fees,
@@ -1919,7 +1926,7 @@ async function acquireBts(deficit) {
     // cooldown in checkBtsBalanceAndAcquire prevents immediate re-trigger even
     // if the chain balance is still below the trigger threshold.
 
-    this._log(`[BTS-ACQ] Acquired ~${Format.formatAmount8(best.expectedReceive)} BTS: sold ${Format.formatAmount8(best.sellAmount)} ${best.asset.symbol} via pool ${best.poolId}`, 'info');
+    bot._log(`[BTS-ACQ] Acquired ~${Format.formatAmount8(best.expectedReceive)} BTS: sold ${Format.formatAmount8(best.sellAmount)} ${best.asset.symbol} via pool ${best.poolId}`, 'info');
 }
 
 export = {
