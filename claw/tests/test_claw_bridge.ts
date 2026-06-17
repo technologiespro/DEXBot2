@@ -288,7 +288,7 @@ async function testRunClawCommandDispatchMatrix() {
     const manifest = await bridge.runClawCommand('manifest', {
       runtimeName: 'openclaw'
     });
-    assert.strictEqual(manifest.compatibility.name, 'Claw');
+    assert.strictEqual(manifest.compatibility.name, 'OpenClaw');
     assert.ok(Array.isArray(manifest.commands));
 
     const runtime = await bridge.runClawCommand('runtime', {});
