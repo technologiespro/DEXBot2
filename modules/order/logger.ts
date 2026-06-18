@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const { path } = require('../path_api');
+const { runtime } = require('../runtime');
 const Format = require('./format');
 const LoggerState = require('./logger_state');
 const { LOGGING_CONFIG, ORDER_STATES } = require('../constants');
@@ -80,7 +81,7 @@ class Logger {
 
         this.levels = { debug: 0, info: 1, warn: 2, error: 3, critical: 4 };
 
-        let useColors = process.stdout.isTTY;
+        let useColors = runtime.stdout.isTTY;
         if (this.config.display?.colors?.enabled === false) {
             useColors = false;
         } else if (this.config.display?.colors?.enabled === true) {
@@ -257,7 +258,7 @@ class Logger {
      */
     raw(text: string) {
         if (!this.quiet) {
-            process.stdout.write(text);
+            runtime.stdout.write(text);
         }
         this._enqueueWrite(text);
     }

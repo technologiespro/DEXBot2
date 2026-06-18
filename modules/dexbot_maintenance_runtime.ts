@@ -1,5 +1,5 @@
 /** Maintenance runtime - periodic sync loops, grid health checks, rebalance */
-const crypto = require('crypto');
+const { createHash } = require('./crypto/sync');
 const fs = require('fs');
 const { path } = require('./path_api');
 const { spawn } = require('child_process');
@@ -264,7 +264,7 @@ function loadBotsConfigSnapshot() {
         };
     }
 
-    const fingerprint = crypto.createHash('sha1').update(raw).digest('hex');
+    const fingerprint = createHash('sha1').update(raw).digest('hex');
     const parsed = parseJsonWithComments(raw);
     const bots = Array.isArray(parsed?.bots) ? parsed.bots.filter(Boolean) : [];
     const activeBots = bots.filter((bot) => bot.active !== false);

@@ -8,7 +8,7 @@
  */
 
 const { path } = require('./path_api');
-const crypto = require('crypto');
+const { randomBytes, createHmac, timingSafeEqual } = require('./crypto/sync');
 const { spawn } = require('child_process');
 const { BitShares } = require('./bitshares_client');
 const { isPositiveInt } = require('./order/utils/math');
@@ -1423,7 +1423,7 @@ function loadBotHmacSecret(accountName: string, policyConfigPath: string, option
     let secret = config.accounts[accountName].botHmacSecret;
 
     if (!secret) {
-        const newSecret = crypto.randomBytes(32).toString('hex');
+        const newSecret = randomBytes(32).toString('hex');
         config.accounts[accountName].botHmacSecret = newSecret;
 
         // Atomic write via unified StorageAdapter.
@@ -1508,13 +1508,12 @@ function verifySourceHmac(request: any, policyConfig: any): { valid: boolean; re
         operations: request.operations,
     });
 
-    const expected = crypto
-        .createHmac('sha256', Buffer.from(secretHex, 'hex'))
+    const expected = createHmac('sha256', Buffer.from(secretHex, 'hex'))
         .update(signingPayload)
         .digest('hex');
 
     try {
-        const valid = crypto.timingSafeEqual(
+        const valid = timingSafeEqual(
             Buffer.from(expected, 'hex'),
             Buffer.from(providedHmac, 'hex'),
         );

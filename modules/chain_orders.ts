@@ -100,7 +100,6 @@ const Format = require('./order/format');
 const { toFiniteNumber } = Format;
 const AsyncLock = require('./order/async_lock');
 const { readInput } = require('./order/utils/system');
-const crypto = require('crypto');
 const chainKeys = require('./chain_keys');
 const { getKeyStore } = require('./key_store');
 const { BroadcastUncertainError } = require('./dexbot_credential_client');

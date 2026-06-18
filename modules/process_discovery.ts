@@ -2,6 +2,7 @@
 
 const { getStorage } = require('./storage');
 const storage = getStorage();
+const { runtime } = require('./runtime');
 
 export interface ProcessStat {
     utime: number;
@@ -30,7 +31,7 @@ export class LinuxProcessDiscovery implements ProcessDiscovery {
     isAlive(pid: number): boolean {
         if (!Number.isInteger(pid) || pid <= 0) return false;
         try {
-            process.kill(pid, 0);
+            runtime.kill(pid, 0);
             return true;
         } catch (_: any) {
             return false;
@@ -247,7 +248,7 @@ export function resetProcessDiscovery(): void {
 
 export function getProcessDiscovery(): ProcessDiscovery {
     if (!_instance) {
-        _instance = typeof process !== 'undefined' && process.platform === 'linux'
+        _instance = typeof process !== 'undefined' && runtime.platform === 'linux'
             ? new LinuxProcessDiscovery()
             : new NullProcessDiscovery();
     }

@@ -2,6 +2,7 @@
 
 const { getProcessDiscovery } = require('../process_discovery');
 const { Config } = require('../config');
+const { runtime } = require('../runtime');
 
 const STATUS_COLORS = {
     reset: '\x1b[0m',
@@ -12,7 +13,7 @@ const STATUS_COLORS = {
     muted: '\x1b[97m',
 };
 
-function colorStatus(text: string, color: string, stream: any = process.stdout): string {
+function colorStatus(text: string, color: string, stream: any = runtime.stdout): string {
     return stream.isTTY && !Config.NO_COLOR ? `${color}${text}${STATUS_COLORS.reset}` : text;
 }
 
@@ -37,7 +38,7 @@ function statusSuccess(text) {
 }
 
 function statusError(text) {
-    return colorStatus(text, STATUS_COLORS.warn, process.stderr);
+    return colorStatus(text, STATUS_COLORS.warn, runtime.stderr);
 }
 
 function readProcStat(pid) {

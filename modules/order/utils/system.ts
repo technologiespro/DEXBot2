@@ -55,6 +55,7 @@ const { toFiniteNumber, isValidNumber } = Format;
 const MathUtils = require('./math');
 const OrderUtils = require('./order');
 const Logger = require('../../logger');
+const { runtime } = require('../../runtime');
 const { ensureDir, readJSON } = require('../../utils/fs_utils');
 const systemLogger = new Logger('System');
 
@@ -1108,7 +1109,7 @@ function readInput(prompt: string, options: { hideEchoBack?: boolean; mask?: str
 
         function handleChar(ch) {
             if (ch === '\r' || ch === '\n' || ch === '\u0004') { cleanup(); stdout.write('\n'); return resolve(input.trim()); }
-            if (ch === '\u0003') { cleanup(); stdout.write('\r\x1b[K\n'); process.exit(); }
+            if (ch === '\u0003') { cleanup(); stdout.write('\r\x1b[K\n'); runtime.exit(0); }
 
             // Backspace
             if (ch === '\u007f' || ch === '\u0008') {

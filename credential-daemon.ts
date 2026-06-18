@@ -68,7 +68,7 @@ const net = require('net');
 const fs = require('fs');
 const { path } = require('./modules/path_api');
 const os = require('os');
-const crypto = require('crypto');
+const { randomBytes } = require('./modules/crypto/sync');
 const chainKeys = require('./modules/chain_keys');
 const { TIMING, NODE_MANAGEMENT, DAEMON_ERRORS } = require('./modules/constants');
 const { readGeneralSettings } = require('./modules/general_settings');
@@ -185,7 +185,7 @@ function registerProcessDiagnostics() {
  */
 
 function generateSessionId() {
-    return crypto.randomBytes(16).toString('hex');
+    return randomBytes(16).toString('hex');
 }
 
 function purgeExpiredSessions() {

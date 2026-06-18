@@ -13,6 +13,7 @@ const { Config } = require('../../modules/config');
 const { DAEMON_ERRORS } = require('../../modules/constants');
 const { getCredentialReadyFilePath } = require('../../modules/credential_runtime');
 const { readJSON } = require('../../modules/utils/fs_utils');
+const { runtime } = require('../../modules/runtime');
 
 // Lazy-load DEXBot2 modules
 let chainKeys: any = null;
@@ -35,7 +36,7 @@ function _sendSighupToDaemon() {
     if (storage.exists(readyFile)) {
       const daemonInfo = readJSON(readyFile);
       if (daemonInfo && typeof daemonInfo.pid === 'number') {
-        process.kill(daemonInfo.pid, 'SIGHUP');
+        runtime.kill(daemonInfo.pid, 'SIGHUP');
         console.log(`[CLAW][credential-daemon] Sent SIGHUP (pid ${daemonInfo.pid}) to reload policy config`);
       }
     }

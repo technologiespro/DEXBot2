@@ -9,7 +9,7 @@
  * It does not rely on TradingView or Kibana.
  */
 
-const crypto = require('crypto');
+const { createHash } = require('../../modules/crypto/sync');
 const { path } = require('../../modules/path_api');
 const { getStorage } = require('../../modules/storage');
 const storage = getStorage();
@@ -98,7 +98,7 @@ function _stableBotId(entry) {
         assetA: entry.assetA || entry.assetAId || '',
         assetB: entry.assetB || entry.assetBId || '',
     };
-    return crypto.createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 8);
+    return createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 8);
 }
 
 function loadBotNameIndex(botsFile) {

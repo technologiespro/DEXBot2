@@ -12,6 +12,7 @@ const { path } = require('./path_api');
 const { PATHS } = require('./paths');
 const { getStorage } = require('./storage');
 const storage = getStorage();
+const { runtime } = require('./runtime');
 
 export interface SigningResult {
     success: boolean;
@@ -133,7 +134,7 @@ export class DaemonKeyStore implements KeyStore {
                             if (storage.exists(readyFile)) {
                                 const daemonInfo = storage.readJSON(readyFile);
                                 if (daemonInfo && typeof daemonInfo.pid === 'number') {
-                                    process.kill(daemonInfo.pid, 'SIGHUP');
+                                    runtime.kill(daemonInfo.pid, 'SIGHUP');
                                 }
                             }
                         } catch {}

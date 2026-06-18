@@ -14,6 +14,7 @@ const { UPDATER, BUILD_DIR, LAUNCHER } = require('../constants');
 const { ensureDir, readJSON, safeUnlink } = require('../utils/fs_utils');
 const { Config } = require('../config');
 const { getProcessDiscovery } = require('../process_discovery');
+const { runtime } = require('../runtime');
 
 const CODE_ROOT = path.resolve(__dirname, '..', '..');
 const BOT_SCRIPT = buildRuntimeScriptPath(CODE_ROOT, ['bot']);
@@ -572,9 +573,9 @@ function createBotSupervisor({
         });
 
         child.stdout.pipe(outStream);
-        child.stdout.pipe(process.stdout);
+        child.stdout.pipe(runtime.stdout);
         child.stderr.pipe(errStream);
-        child.stderr.pipe(process.stderr);
+        child.stderr.pipe(runtime.stderr);
 
         child.stdout.on('error', () => {});
         child.stderr.on('error', () => {});

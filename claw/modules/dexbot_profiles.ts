@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+const { createHash } = require('../../modules/crypto/sync');
 const fsPromises = require('fs/promises');
 const { path } = require('../../modules/path_api');
 const { getStorage } = require('../../modules/storage');
@@ -654,7 +654,7 @@ function _stableBotId(entry: any): string {
     assetA: entry.assetA || entry.assetAId || '',
     assetB: entry.assetB || entry.assetBId || '',
   };
-  return crypto.createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 8);
+  return createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 8);
 }
 
 function normalizeBotEntries(rawEntries: Record<string, any>[], options: Partial<ProfileOptions> = {}) {

@@ -82,7 +82,15 @@
  * ===============================================================================
  */
 
-const crypto = require('crypto');
+const {
+    randomBytes,
+    hkdfSync,
+    scryptSync,
+    createHmac,
+    timingSafeEqual,
+    createCipheriv,
+    createDecipheriv,
+} = require('./crypto/sync');
 const net = require('net');
 const { path } = require('./path_api');
 const { readInput, readPassword } = require('./order/utils/system');
@@ -179,7 +187,7 @@ function createVaultSecret(vaultKey: any, extra: Record<string, any> = {}) {
     };
 }
 
-function createSessionSecret(vaultKey, sessionSalt = crypto.randomBytes(VAULT_SALT_BYTES)) {
+function createSessionSecret(vaultKey, sessionSalt = randomBytes(VAULT_SALT_BYTES)) {
     const keyBuffer = resolveVaultKey(vaultKey);
     const saltBuffer = toBuffer(sessionSalt);
     if (!keyBuffer || !saltBuffer) {
@@ -187,7 +195,7 @@ function createSessionSecret(vaultKey, sessionSalt = crypto.randomBytes(VAULT_SA
     }
 
     const sessionKey = Buffer.from(
-        crypto.hkdfSync('sha256', keyBuffer, saltBuffer, VAULT_SESSION_INFO, VAULT_KEY_BYTES)
+        hkdfSync('sha256', keyBuffer, saltBuffer, VAULT_SESSION_INFO, VAULT_KEY_BYTES)
     );
 
     return {
@@ -217,8 +225,8 @@ function isDaemonSigningToken(value) {
 }
 
 function deriveVaultKey(password, vaultSalt) {
-    const saltBuffer = toBuffer(vaultSalt) || crypto.randomBytes(VAULT_SALT_BYTES);
-    return crypto.scryptSync(password, saltBuffer, VAULT_KEY_BYTES, VAULT_SCRYPT_PARAMS);
+    const saltBuffer = toBuffer(vaultSalt) || randomBytes(VAULT_SALT_BYTES);
+    return scryptSync(password, saltBuffer, VAULT_KEY_BYTES, VAULT_SCRYPT_PARAMS);
 }
 
 function deriveRecordKey(vaultKey, recordSalt) {
@@ -227,7 +235,7 @@ function deriveRecordKey(vaultKey, recordSalt) {
     if (!keyBuffer || !saltBuffer) {
         throw new Error('Vault key and record salt are required');
     }
-    return Buffer.from(crypto.hkdfSync('sha256', keyBuffer, saltBuffer, VAULT_RECORD_INFO, VAULT_KEY_BYTES));
+    return Buffer.from(hkdfSync('sha256', keyBuffer, saltBuffer, VAULT_RECORD_INFO, VAULT_KEY_BYTES));
 }
 
 function createVaultVerifier(vaultKey) {
@@ -235,7 +243,7 @@ function createVaultVerifier(vaultKey) {
     if (!keyBuffer) {
         throw new Error('Vault key is required');
     }
-    return crypto.createHmac('sha256', keyBuffer).update(VAULT_VERIFIER_LABEL).digest('hex');
+    return createHmac('sha256', keyBuffer).update(VAULT_VERIFIER_LABEL).digest('hex');
 }
 
 function timingSafeEqualHex(leftHex, rightHex) {
@@ -247,7 +255,7 @@ function timingSafeEqualHex(leftHex, rightHex) {
     if (left.length !== right.length) {
         return false;
     }
-    return crypto.timingSafeEqual(left, right);
+    return timingSafeEqual(left, right);
 }
 
 function normalizeAccountsData(data: Record<string, any> = {}) {
@@ -308,10 +316,10 @@ function encrypt(text, secret) {
         throw new Error('A derived vault secret is required to encrypt v2 key data');
     }
 
-    const salt = crypto.randomBytes(VAULT_RECORD_SALT_BYTES);
+    const salt = randomBytes(VAULT_RECORD_SALT_BYTES);
     const key = deriveRecordKey(vaultKey, salt);
-    const iv = crypto.randomBytes(VAULT_IV_BYTES);
-    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const iv = randomBytes(VAULT_IV_BYTES);
+    const cipher = createCipheriv('aes-256-gcm', key, iv);
     let encrypted = cipher.update(text, 'utf8', 'hex');
     encrypted += cipher.final('hex');
     const authTag = cipher.getAuthTag();
@@ -359,7 +367,7 @@ function decrypt(encrypted, secret) {
     }
     const key = deriveRecordKey(vaultKey, salt);
 
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    const decipher = createDecipheriv('aes-256-gcm', key, iv);
     decipher.setAuthTag(authTag);
     let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
@@ -443,7 +451,7 @@ function loadAccounts() {
 }
 
 function setupModernVault(accountsData, password) {
-    const vaultSalt = crypto.randomBytes(VAULT_SALT_BYTES);
+    const vaultSalt = randomBytes(VAULT_SALT_BYTES);
     const vaultKey = deriveVaultKey(password, vaultSalt);
     accountsData.vaultVersion = VAULT_VERSION;
     accountsData.vaultSalt = vaultSalt.toString('hex');

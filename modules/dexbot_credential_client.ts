@@ -2,7 +2,7 @@
 const net = require('net');
 const { getStorage } = require('./storage');
 const storage = getStorage();
-const crypto = require('crypto');
+const { createHmac } = require('./crypto/sync');
 const { TIMING } = require('./constants');
 const {
     getCredentialReadyFilePath,
@@ -222,8 +222,7 @@ function executeOperationsViaCredentialDaemon(accountName: string, operations: a
 
     const botHmacSecret = options.botHmacSecret || null;
     if (botHmacSecret && sessionId) {
-        payload.hmac = crypto
-            .createHmac('sha256', Buffer.from(botHmacSecret, 'hex'))
+        payload.hmac = createHmac('sha256', Buffer.from(botHmacSecret, 'hex'))
             .update(JSON.stringify({ sessionId, operations }))
             .digest('hex');
     }

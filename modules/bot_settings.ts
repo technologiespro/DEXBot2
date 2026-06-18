@@ -2,7 +2,7 @@ const { getStorage } = require('./storage');
 const storage = getStorage();
 const { readBotsFileSync } = require('./bots_file_lock');
 const { parseJsonWithComments } = require('./order/utils/system');
-const crypto = require('crypto');
+const { createHash } = require('./crypto/sync');
 const { createBotKey } = require('./account_orders');
 const { isPositiveNumber, isPositiveNumberOrPercent, toDecimal } = require('./order/utils/math');
 const { resolveMinCollateralIncreaseThreshold } = require('./cr_planner');
@@ -53,7 +53,7 @@ function _stableBotId(entry: any): string {
         assetA: entry.assetA || entry.assetAId || '',
         assetB: entry.assetB || entry.assetBId || '',
     };
-    return crypto.createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 8);
+    return createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 8);
 }
 
 function normalizeBotEntry(entry: any, index: number = 0): any {

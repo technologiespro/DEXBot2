@@ -1,12 +1,12 @@
-const crypto = require('crypto');
+const { createHash, timingSafeEqual } = require('../crypto/sync');
 
 const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const ALPHABET_MAP = new Map([...ALPHABET].map((ch, index) => [ch, index]));
 
 // ── Sync (Node crypto) — used by chain_keys, ecc.ts ────────────────
 function checksum(payload: Buffer | string | Uint8Array): Buffer {
-    const first = crypto.createHash('sha256').update(payload).digest();
-    return crypto.createHash('sha256').update(first).digest().subarray(0, 4);
+    const first = createHash('sha256').update(payload).digest();
+    return createHash('sha256').update(first).digest().subarray(0, 4);
 }
 
 function base58Encode(buffer: Buffer | Uint8Array | number[] | string): string {
@@ -70,7 +70,7 @@ function decode(value: string): Buffer {
     const payload = decoded.subarray(0, -4);
     const expected = decoded.subarray(-4);
     const actual = checksum(payload);
-    if (!crypto.timingSafeEqual(expected, actual)) {
+    if (!timingSafeEqual(expected, actual)) {
         throw new Error('Invalid Base58Check checksum');
     }
 

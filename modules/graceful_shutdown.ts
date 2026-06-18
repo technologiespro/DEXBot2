@@ -62,6 +62,7 @@ let cleanupHandlers: any[] = [];
 let shutdownInProgress = false;
 const Logger = require('./logger');
 const shutdownLogger = new Logger('Shutdown');
+const { runtime } = require('./runtime');
 
 /**
  * Register a cleanup function to be called on graceful shutdown
@@ -141,25 +142,25 @@ function setupGracefulShutdown() {
     const signals = ['SIGTERM', 'SIGINT'];
     
     signals.forEach(signal => {
-        process.on(signal, async () => {
+        runtime.onSignal(signal, async () => {
             shutdownLogger.info(`Received ${signal}, initiating graceful shutdown...`);
             await executeCleanup();
-            process.exit(0);
+            runtime.exit(0);
         });
     });
 
     // Also handle uncaught exceptions
-    process.on('uncaughtException', async (err) => {
+    runtime.onSignal('uncaughtException', async (err: any) => {
         shutdownLogger.error(`Uncaught exception: ${err?.stack || err}`);
         await executeCleanup();
-        process.exit(1);
+        runtime.exit(1);
     });
 
     // Handle unhandled rejections
-    process.on('unhandledRejection', async (reason, promise) => {
+    runtime.onSignal('unhandledRejection', async (reason, promise) => {
         shutdownLogger.error(`Unhandled rejection at: ${promise} reason: ${(reason as any)?.stack || reason}`);
         await executeCleanup();
-        process.exit(1);
+        runtime.exit(1);
     });
 }
 
