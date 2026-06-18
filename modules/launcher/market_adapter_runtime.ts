@@ -5,6 +5,7 @@ const { getStorage } = require('../storage');
 const storage = getStorage();
 const { spawn } = require('child_process');
 const { buildScopedChildEnv } = require('./child_env');
+const { Config } = require('../config');
 const { MARKET_ADAPTER } = require('../constants');
 const { buildRuntimeScriptPath } = require('./runtime_entry');
 const { PATHS } = require('../paths');
@@ -120,7 +121,7 @@ function createMarketAdapterRuntime({
         }
 
         const nodeArgs = script.endsWith('.ts') ? ['--import', 'tsx', script] : [script];
-        const spawnedChild = spawnFn(process.execPath, nodeArgs, {
+        const spawnedChild = spawnFn(Config.EXEC_PATH, nodeArgs, {
             cwd: root,
             env: buildEnv(),
             stdio: 'inherit',

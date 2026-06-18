@@ -5,6 +5,7 @@ import { BrowserCryptoProvider } from './browser_provider';
 export { NodeCryptoProvider } from './node_provider';
 export { BrowserCryptoProvider } from './browser_provider';
 export { ripemd160 as pureRipemd160 } from './pure_ripemd160';
+export { scrypt as pureScrypt } from './pure_scrypt';
 export {
     secp256k1,
     privateKeyToPublicKey as pureSecp256k1Pubkey,

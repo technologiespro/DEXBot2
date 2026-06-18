@@ -95,6 +95,11 @@ function createBrowserStorageAdapter() {
     },
 
     writeJSON(path, data, options) {
+      if (options?.flag === 'wx' && store.has(path)) {
+        const err: any = new Error(`EEXIST: ${path}`);
+        err.code = 'EEXIST';
+        throw err;
+      }
       const content = JSON.stringify(data, null, 2) + '\n';
       store.set(path, {
         content,

@@ -1,5 +1,7 @@
 'use strict';
 
+import { isBrowser } from './env';
+
 declare var window: any;
 
 export interface Runtime {
@@ -23,7 +25,17 @@ class NodeRuntime implements Runtime {
   exit(code?: number): void { process.exit(code); }
   get exitCode(): number | undefined { return process.exitCode as number | undefined; }
   set exitCode(code: number | undefined) { (process as any).exitCode = code; }
-  kill(pid: number, signal?: string): boolean { try { process.kill(pid, signal as any); return true; } catch { return false; } }
+  kill(pid: number, signal?: string): boolean {
+    try {
+      process.kill(pid, signal as any);
+      return true;
+    } catch (e: any) {
+      if (e && e.code === 'ESRCH') {
+        return false;
+      }
+      throw e;
+    }
+  }
   onSignal(signal: string, handler: (...args: any[]) => void): void { process.on(signal as any, handler); }
   offSignal(signal: string, handler: (...args: any[]) => void): void { process.off(signal as any, handler); }
   get pid(): number { return process.pid; }
@@ -47,14 +59,14 @@ class BrowserRuntime implements Runtime {
   kill(_pid: number, _signal?: string): boolean { return false; }
   onSignal(signal: string, handler: (...args: any[]) => void): void {
     if (signal === 'SIGINT' || signal === 'SIGTERM') {
-      if (typeof window !== 'undefined' && window.addEventListener) {
+      if (isBrowser() && window.addEventListener) {
         window.addEventListener('beforeunload', handler);
       }
     }
   }
   offSignal(signal: string, handler: (...args: any[]) => void): void {
     if (signal === 'SIGINT' || signal === 'SIGTERM') {
-      if (typeof window !== 'undefined' && window.removeEventListener) {
+      if (isBrowser() && window.removeEventListener) {
         window.removeEventListener('beforeunload', handler);
       }
     }

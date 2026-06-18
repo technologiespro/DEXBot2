@@ -271,7 +271,7 @@ class AccountOrders {
    */
   _persist() {
     ensureDirExists(this.profilesPath);
-    storage.writeJSON(this.profilesPath, this.data);
+    storage.writeJSON(this.profilesPath, this.data, { fsync: true });
   }
 
   /**

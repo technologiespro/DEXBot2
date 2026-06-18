@@ -49,6 +49,20 @@
   "author": "",
   "license": "MIT",
   "type": "commonjs",
+  "browser": {
+    "./dist/credential-daemon.js": false,
+    "./dist/bot.js": false,
+    "./dist/dexbot.js": false,
+    "./dist/unlock.js": false,
+    "./dist/pm2.js": false,
+    "./dist/modules/launcher/credential_daemon.js": false,
+    "./dist/modules/launcher/bot_supervisor.js": false,
+    "./dist/modules/launcher/monolithic_runtime.js": false,
+    "./dist/modules/launcher/market_adapter_runtime.js": false,
+    "./dist/modules/launcher/market_adapter_watchdog.js": false,
+    "./dist/modules/launcher/foreign_cred_daemon.js": false,
+    "./dist/modules/launcher/credential_bootstrap.js": false
+  },
   "bugs": {
     "url": "https://github.com/froooze/DEXBot2/issues"
   },
@@ -61,7 +75,5 @@
     "tsx": "^4.22.3",
     "typescript": "^6.0.3"
   },
-  "dependencies": {
-    "ripemd160": "^2.0.3"
-  }
+  "dependencies": {}
 }

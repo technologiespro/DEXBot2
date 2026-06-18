@@ -3,6 +3,7 @@ const { getStorage } = require('../storage');
 const storage = getStorage();
 const { safeUnlink } = require('../utils/fs_utils');
 const { getProcessDiscovery } = require('../process_discovery');
+const { runtime } = require('../runtime');
 
 /**
  * Foreign credential daemon detection.
@@ -25,8 +26,7 @@ const { getProcessDiscovery } = require('../process_discovery');
 function isPidAlive(pid) {
     if (!Number.isInteger(pid) || pid <= 0) return false;
     try {
-        process.kill(pid, 0);
-        return true;
+        return runtime.kill(pid, 0);
     } catch (_) {
         return false;
     }
@@ -63,10 +63,9 @@ function readOwnedCredentialDaemonPid(pidFile, isLikelyProcess) {
 async function stopPid(pid, timeoutMs = 5000) {
     if (!isPidAlive(pid)) return true;
     try {
-        process.kill(pid, 'SIGTERM');
-    } catch (err) {
-        if (err && err.code === 'ESRCH') return true;
-        throw err;
+        runtime.kill(pid, 'SIGTERM');
+    } catch (e: any) {
+        if (e.code !== 'ESRCH') throw e;
     }
 
     const startedAt = Date.now();
@@ -76,9 +75,9 @@ async function stopPid(pid, timeoutMs = 5000) {
     }
 
     try {
-        process.kill(pid, 'SIGKILL');
-    } catch (err) {
-        if (!err || err.code !== 'ESRCH') throw err;
+        runtime.kill(pid, 'SIGKILL');
+    } catch (e: any) {
+        if (e.code !== 'ESRCH') throw e;
     }
     return !isPidAlive(pid);
 }

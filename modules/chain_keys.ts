@@ -445,7 +445,9 @@ function loadAccounts() {
     try {
         return normalizeAccountsData(storage.readJSON(PROFILES_KEYS_FILE));
     } catch (error: any) {
-        console.error('Error loading accounts file, resetting to default:', error.message);
+        if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) {
+            console.error('Error loading accounts file, resetting to default:', error.message);
+        }
         return normalizeAccountsData();
     }
 }

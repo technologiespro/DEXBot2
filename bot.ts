@@ -143,13 +143,19 @@ function loadBotConfig(name: string) {
  */
 async function getSigningSecretForAccount(accountName: string) {
     const keyStore = getKeyStore();
+    const origLog = console.log;
+    console.log = (...args: any[]) => {
+        const isNoisy = args.some(
+            (arg) => typeof arg === 'string' && (arg.includes('bitshares_client') || arg.includes('modules/'))
+        );
+        if (!isNoisy) {
+            origLog.apply(console, args);
+        }
+    };
     try {
         return await keyStore.resolveSigningKey(accountName);
-    } catch (err: any) {
-        if (err && err.message && err.message.includes('No master password set')) {
-            throw err;
-        }
-        throw err;
+    } finally {
+        console.log = origLog;
     }
 }
 

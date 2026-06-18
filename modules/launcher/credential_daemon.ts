@@ -14,6 +14,7 @@ const {
 const { createPasswordBootstrapServer } = require('./credential_bootstrap');
 const { buildScopedChildEnv } = require('./child_env');
 const { buildRuntimeScriptArgs } = require('./runtime_entry');
+const { Config } = require('../config');
 const { PATHS } = require('../paths');
 const { safeUnlink } = require('../utils/fs_utils');
 const { readHeadlessPassword } = require('./headless_password');
@@ -114,7 +115,7 @@ function createCredentialDaemonController({
 
         try {
             const childStdio: StdioOptions = stdioOption ?? (detached ? 'ignore' : 'inherit');
-            daemonProcess = spawn(process.execPath, daemonArgs, {
+            daemonProcess = spawn(Config.EXEC_PATH, daemonArgs, {
                 cwd: root,
                 env: buildScopedChildEnv({
                     extra: {

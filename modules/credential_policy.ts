@@ -19,6 +19,7 @@ const { PATHS } = require('./paths');
 const Logger = require('./logger');
 const { getStorage } = require('./storage');
 const storage = getStorage();
+const { runtime } = require('./runtime');
 const { ensureDir, readJSON, safeUnlink, writeJSON } = require('./utils/fs_utils');
 
 // Module-scope logger for library-style helpers that don't own a process
@@ -247,7 +248,7 @@ function ensurePolicyConfig(filePath: string): PolicyConfig {
     if (!storage.exists(filePath)) {
         try {
             storage.ensureDir(path.dirname(filePath));
-            storage.writeJSON(filePath, createMinimalPolicyConfig(), { mode: 0o600 });
+            storage.writeJSON(filePath, createMinimalPolicyConfig(), { mode: 0o600, flag: 'wx' });
         } catch (err: any) {
             if (err.code !== 'EEXIST') {
                 const wrapped = new Error(`Failed to create required policy config: ${err.message}`) as Error & { code: string };
@@ -1311,11 +1312,14 @@ async function evaluatePolicy(policy: any, context: PolicyContext): Promise<{ al
  * Must output { "allow": true/false, "reason": "..." } to stdout within 5 seconds.
  * Returns Promise<{ allow: boolean, reason: string|null }>
  */
+// File mode check: execute permission (X_OK = 1 on POSIX)
+const X_OK = 1;
+
 function evaluateExecutable(exePath: string, context: PolicyContext): Promise<{ allow: boolean; reason: string | null }> {
     return new Promise((resolve) => {
         // Check file exists and is executable
         try {
-            storage.access(exePath, 1);
+            storage.access(exePath, X_OK);
         } catch {
             return resolve({ allow: false, reason: `executable not found or not executable: ${exePath}` });
         }
@@ -1457,7 +1461,7 @@ function loadBotHmacSecret(accountName: string, policyConfigPath: string, option
             }
             const daemonInfo = JSON.parse(raw);
             if (daemonInfo && typeof daemonInfo.pid === 'number') {
-                process.kill(daemonInfo.pid, 'SIGHUP');
+                runtime.kill(daemonInfo.pid, 'SIGHUP');
                 info(`[policy] Sent SIGHUP to credential daemon (pid ${daemonInfo.pid}) to activate new secret`);
             } else {
                 warn(`[policy] Ready file ${readyFile} has no numeric pid field; skipping SIGHUP`);

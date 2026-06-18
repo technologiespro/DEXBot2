@@ -17,6 +17,8 @@ const { UPDATER, LAUNCHER } = require('../constants');
 const { safeUnlink } = require('../utils/fs_utils');
 const { readProcStat } = require('./status_reporting');
 const foreignCredDaemon = require('./foreign_cred_daemon');
+const { Config } = require('../config');
+const { runtime } = require('../runtime');
 const { getCredentialReadyFilePath, getCredentialSocketPath } = require('../credential_runtime');
 const { resolveRawBotEntries, loadSettingsFile } = require('../bot_settings');
 
@@ -121,51 +123,43 @@ async function stopCredentialDaemonPid(pid: string | number) {
         return;
     }
 
-    try {
-        process.kill(daemonPid, 'SIGTERM');
-    } catch (err) {
-        if (err.code === 'ESRCH') {
-            return;
+    function isAlive(targetPid: number): boolean {
+        try {
+            return runtime.kill(targetPid, 0);
+        } catch (_) {
+            return false;
         }
-        throw err;
+    }
+
+    try {
+        runtime.kill(daemonPid, 'SIGTERM');
+    } catch (e: any) {
+        if (e.code !== 'ESRCH') throw e;
+        return;
     }
 
     const startedAt = Date.now();
     while ((Date.now() - startedAt) < 5000) {
-        try {
-            process.kill(daemonPid, 0);
-            await new Promise((resolve) => setTimeout(resolve, 100));
-        } catch (err) {
-            if (err.code === 'ESRCH') {
-                return;
-            }
-            throw err;
+        if (!isAlive(daemonPid)) {
+            return;
         }
-    }
-
-    const sigkillStartedAt = Date.now();
-    try {
-        process.kill(daemonPid, 'SIGKILL');
-    } catch (err) {
-        if (err.code !== 'ESRCH') {
-            throw err;
-        }
-        return;
+        await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
     const SIGKILL_DEADLINE_MS = LAUNCHER.MONOLITHIC.DAEMON_SIGKILL_DEADLINE_MS;
-    while ((Date.now() - sigkillStartedAt) < SIGKILL_DEADLINE_MS) {
-        try {
-            process.kill(daemonPid, 0);
-            await new Promise((resolve) => setTimeout(resolve, 100));
-        } catch (err) {
-            if (err.code === 'ESRCH') {
+    const sigkillStartedAt = Date.now();
+    let sigkillSent = false;
+    try {
+        sigkillSent = runtime.kill(daemonPid, 'SIGKILL');
+    } catch (e: any) {
+        if (e.code !== 'ESRCH') throw e;
+        return;
+    }
+    if (sigkillSent) {
+        while ((Date.now() - sigkillStartedAt) < SIGKILL_DEADLINE_MS) {
+            if (!isAlive(daemonPid)) {
                 return;
             }
-            console.warn(
-                `stopCredentialDaemonPid: unexpected error probing pid ${daemonPid}: ` +
-                `${err?.code || ''} ${err?.message || err}. Continuing wait.`
-            );
             await new Promise((resolve) => setTimeout(resolve, 100));
         }
     }
@@ -294,7 +288,7 @@ function createUpdateScheduler({ botProcessRef, log = console.log, warn = consol
                     scriptSegments: ['scripts', 'update'],
                     scriptArgs: [],
                 });
-                const updateChild = spawn(process.execPath, updateArgs, {
+                const updateChild = spawn(Config.EXEC_PATH, updateArgs, {
                     cwd: PATHS.PROJECT_ROOT,
                     stdio: 'inherit',
                     env: buildScopedChildEnv({ extra: { DEXBOT_UPDATE_SKIP_RELOAD: '1' } }),

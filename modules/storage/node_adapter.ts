@@ -32,9 +32,24 @@ class NodeStorageAdapter {
       this.ensureDir(dir);
     }
 
+    const content = JSON.stringify(data, null, 2) + '\n';
+
+    if (options.flag === 'wx') {
+      const mode = options.mode ?? 0o666;
+      const fd = fs.openSync(filePath, 'wx', mode);
+      try {
+        fs.writeSync(fd, content, 0, 'utf8');
+        if (options.fsync) {
+          fs.fsyncSync(fd);
+        }
+      } finally {
+        fs.closeSync(fd);
+      }
+      return;
+    }
+
     const suffix = options.tmpPrefix || `.${process.pid}.${Date.now()}.${randomBytes(8).toString('hex')}.tmp`;
     const tmpPath = `${filePath}${suffix}`;
-    const content = JSON.stringify(data, null, 2) + '\n';
 
     try {
       if (options.mode !== undefined || options.fsync) {

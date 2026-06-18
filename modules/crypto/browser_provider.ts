@@ -1,5 +1,6 @@
 import { ripemd160 as pureRipemd160 } from './pure_ripemd160';
 import { privateKeyToPublicKey as pureSecp256k1Pubkey } from './pure_secp256k1';
+import { scrypt as pureScrypt } from './pure_scrypt';
 import type { CryptoProvider, ScryptOptions, Aes256GcmEncryptResult } from './provider';
 
 function toAB(data: Uint8Array): ArrayBuffer {
@@ -96,24 +97,12 @@ export class BrowserCryptoProvider implements CryptoProvider {
     }
 
     async scrypt(password: Uint8Array, salt: Uint8Array, keyLength: number, options?: ScryptOptions): Promise<Uint8Array> {
-        const subtle = webSubtle();
-        if (subtle) {
-            const passwordKey = await subtle.importKey('raw', toAB(password), { name: 'PBKDF2' }, false, ['deriveBits']);
-            const scryptParams: any = {
-                name: 'scrypt',
-                salt: toAB(salt),
-                N: options?.N ?? 16384,
-                r: options?.r ?? 8,
-                p: options?.p ?? 1,
-            };
-            if (options?.maxmem) scryptParams.maxmem = options.maxmem;
-            try {
-                return fromAB(await subtle.deriveBits(scryptParams, passwordKey, keyLength * 8));
-            } catch {
-                throw new Error('scrypt not available in this browser');
-            }
-        }
-        throw new Error('Web Crypto API not available');
+        return pureScrypt(password, salt, keyLength, {
+            N: options?.N ?? 16384,
+            r: options?.r ?? 8,
+            p: options?.p ?? 1,
+            maxmem: options?.maxmem,
+        });
     }
 
     async hkdf(key: Uint8Array, salt: Uint8Array, info: Uint8Array, keyLength: number): Promise<Uint8Array> {

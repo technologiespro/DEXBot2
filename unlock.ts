@@ -41,6 +41,7 @@ const { createCredentialDaemonController } = require('./modules/launcher/credent
 const { buildScopedChildEnv } = require('./modules/launcher/child_env');
 const { parseUnlockArgs } = require('./modules/launcher/launch_modes');
 const { UPDATER, LAUNCHER, MARKET_ADAPTER, BUILD_DIR } = require('./modules/constants');
+const { runtime } = require('./modules/runtime');
 const { PATHS } = require('./modules/paths');
 const { buildRuntimeScriptArgs, buildRuntimeScriptPath } = require('./modules/launcher/runtime_entry');
 const {
@@ -325,7 +326,7 @@ async function launchDetachedSupervisor({ botName = null, credentialDaemonPid = 
         return child.pid || 0;
     } catch (err) {
         if (child && child.pid) {
-            try { process.kill(child.pid, 'SIGTERM'); } catch (_) {}
+            try { runtime.kill(child.pid, 'SIGTERM'); } catch (_) {}
         }
         throw err;
     } finally {
@@ -706,7 +707,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                     console.log(`Stop signal sent to market adapter PID ${adapterResult.pid}`);
                 }
                 try {
-                    process.kill(pid, 'SIGUSR2');
+                    runtime.kill(pid, 'SIGUSR2');
                 } catch (err) {
                     if (err.code !== 'ESRCH') throw err;
                 }
@@ -814,11 +815,11 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
 
             let monolithicExited = false;
             try {
-                process.kill(pid, 'SIGTERM');
+                runtime.kill(pid, 'SIGTERM');
                 const timeoutMs = effectiveCmd === 'delete' ? LAUNCHER.MONOLITHIC.controlStopTimeoutMs : 5000;
                 monolithicExited = await waitForPidExit(pid, timeoutMs);
                 if (!monolithicExited && effectiveCmd === 'delete') {
-                    process.kill(pid, 'SIGKILL');
+                    runtime.kill(pid, 'SIGKILL');
                     monolithicExited = await waitForPidExit(pid, 2000);
                     if (!monolithicExited) {
                         throw new Error(`monolithic wrapper PID ${pid} did not exit after SIGKILL`);

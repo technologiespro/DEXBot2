@@ -10,8 +10,11 @@ export interface IStorageAdapter {
    *   - `mode`: file permissions (e.g. 0o600). When set, uses fd-level openSync with the given mode.
    *   - `fsync`: if true, calls fsyncSync on the fd before rename for extra durability.
    *   - `tmpPrefix`: custom temp file prefix (default: `.tmp.${pid}.${Date.now()}.${random}`)
+   *   - `flag`: 'w' (default) overwrites via tmp+rename. 'wx' does an atomic
+   *     exclusive-create directly on the target — caller must handle EEXIST.
+   *     Use 'wx' when the file should be created only if it does not exist.
    */
-  writeJSON(path: string, data: any, options?: { mode?: number; fsync?: boolean; tmpPrefix?: string }): void;
+  writeJSON(path: string, data: any, options?: { mode?: number; fsync?: boolean; tmpPrefix?: string; flag?: 'w' | 'wx' }): void;
 
   /** Check if a path exists */
   exists(path: string): boolean;

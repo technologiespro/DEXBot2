@@ -5,6 +5,7 @@ const { path } = require('../path_api');
 const { spawn } = require('child_process');
 const { MARKET_ADAPTER } = require('../constants');
 const { buildRuntimeScriptArgs } = require('./runtime_entry');
+const { Config } = require('../config');
 const { PATHS } = require('../paths');
 const { isLikelyMarketAdapterProcess, isLockStale } = require('./market_adapter_runtime');
 const { readJSON, safeUnlink } = require('../utils/fs_utils');
@@ -86,7 +87,7 @@ function createMarketAdapterWatchdog({
 
     function spawnChild(outLog, errorLog) {
         const args = buildRuntimeScriptArgs({ codeRoot, scriptSegments: ['market_adapter', 'market_adapter'] });
-        const child = spawn(process.execPath, args, {
+        const child = spawn(Config.EXEC_PATH, args, {
             cwd: root,
             env: process.env,
             stdio: ['ignore', 'pipe', 'pipe'],

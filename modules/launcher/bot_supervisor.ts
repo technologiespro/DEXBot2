@@ -244,9 +244,8 @@ function forwardSignal(child, signal) {
 function isPidAlive(pid) {
     if (!Number.isInteger(pid) || pid <= 0) return false;
     try {
-        process.kill(pid, 0);
-        return true;
-    } catch (_: any) {
+        return runtime.kill(pid, 0);
+    } catch (_) {
         return false;
     }
 }
@@ -343,10 +342,10 @@ async function stopMarketAdapterFromLock(timeoutMs = 5000) {
     }
 
     try {
-        process.kill(pid, 'SIGTERM');
+        runtime.kill(pid, 'SIGTERM');
         let stopped = await waitForPidExit(pid, timeoutMs);
         if (!stopped && isNodeProcessWithExactScript(pid, ['market_adapter', 'market_adapter'])) {
-            process.kill(pid, 'SIGKILL');
+            runtime.kill(pid, 'SIGKILL');
             stopped = await waitForPidExit(pid, 2000);
         }
         return { pid, stopped };

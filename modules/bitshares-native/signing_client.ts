@@ -45,7 +45,7 @@ function createSigningClient(chainClient: any, accountName: string, privateKey: 
     function wifToBuffer(wif: any): any {
         if (typeof wif !== 'string') return wif;
         try {
-            const { wifDecode } = require('./crypto/ecc');
+            const { wifDecode } = require('./crypto/ecc_selector')();
             return wifDecode(wif).privateKey;
         } catch (_: any) {
             return Buffer.from(wif, 'hex');

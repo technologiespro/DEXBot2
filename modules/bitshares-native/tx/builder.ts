@@ -3,7 +3,8 @@
 const { NATIVE_CLIENT } = require('../../constants');
 const { TRANSACTION, CHAIN } = NATIVE_CLIENT;
 const { ops: serialOps } = require('../serial');
-const { sha256, sign } = require('../crypto/ecc');
+const getEcc = require('../crypto/ecc_selector');
+const { sha256, sign } = getEcc();
 
 const MAX_TX_SIZE: number = TRANSACTION.MAX_SIZE_BYTES;
 const MAX_OPS_PER_TX: number = TRANSACTION.MAX_OPS_PER_TX;

@@ -6,7 +6,8 @@ const { createSubscriptionManager } = require('./subscriptions');
 const { createSigningClient } = require('./signing_client');
 const { createResolvers } = require('./resolvers');
 const serial = require('./serial');
-const ecc = require('./crypto/ecc');
+const getEcc = require('./crypto/ecc_selector');
+const ecc = getEcc();
 const tx = require('./tx/builder');
 const { GRAPHENE_CHAIN_ID, GRAPHENE_ADDRESS_PREFIX, GRAPHENE_BLOCKCHAIN_PRECISION } = require('./serial/chain_constants');
 

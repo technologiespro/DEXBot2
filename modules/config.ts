@@ -171,7 +171,7 @@ function getOpenOrdersSyncLoopMs(): number | undefined {
 }
 
 function setUmask(mode: number): void {
-    try { process.umask(mode); } catch { /* browser: no-op */ }
+    if (hasProcess()) { process.umask(mode); }
 }
 
 export = {
