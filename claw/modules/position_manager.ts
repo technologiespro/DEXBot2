@@ -1,6 +1,7 @@
 const fs = require('fs/promises');
 const path = require('path');
-const { resolveProjectRoot } = require('../../modules/launcher/runtime_entry');
+const { PATHS } = require('../../modules/paths');
+const { Config } = require('../../modules/config');
 const {
   closeShortOnBts,
   openShortOnBts,
@@ -24,9 +25,7 @@ function getBlockchainToFloat() {
   return loadDexbotOrderUtils().blockchainToFloat;
 }
 
-const PM_PARENT_DIR = path.dirname(path.dirname(__dirname));
-const PM_PROJECT_ROOT = resolveProjectRoot(PM_PARENT_DIR);
-const DEFAULT_STATE_PATH = path.join(PM_PROJECT_ROOT, 'claw', 'data', 'positions.json');
+const DEFAULT_STATE_PATH = PATHS.CLAW.POSITIONS_FILE;
 const STRATEGY_NAME = 'short-mpa-bts';
 
 const { clone } = require('./utils');
@@ -387,7 +386,7 @@ class PositionManager {
 
   async createShortPosition(options: Partial<ShortPositionOptions> = {}) {
     const state = await this.loadState();
-    const accountName = requireString(options.accountName || process.env.BITSHARES_ACCOUNT, 'accountName');
+    const accountName = requireString(options.accountName || Config.BITSHARES_ACCOUNT, 'accountName');
     const mpaInput = requireString(options.mpaAsset, 'mpaAsset');
     const debtAmount = requirePositiveNumber(options.debtAmount, 'debtAmount');
     const collateralAmount = requirePositiveNumber(options.collateralAmount, 'collateralAmount');

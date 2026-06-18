@@ -22,8 +22,9 @@ const { normalizePoolId } = require('../../market_adapter/utils/chain');
 const { toIntervalLabel } = require('../../market_adapter/interval_utils');
 const { MARKET_ADAPTER } = require('../../modules/constants');
 const kibanaSource = require('../../market_adapter/inputs/kibana_source');
+const { PATHS } = require('../../modules/paths');
 const { ensureDir, writeJSON } = require('../../modules/utils/fs_utils');
-const DATA_DIR = path.resolve(__dirname, '../../market_adapter/data/lp');
+const DATA_DIR = PATHS.MARKET_ADAPTER.LP_DATA_DIR;
 const HOURS_3Y  = 3 * 365 * 24; // 26280
 function slugPart(value) {
     return String(value || '')

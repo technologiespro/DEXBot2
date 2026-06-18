@@ -1,13 +1,9 @@
-const fs = require('fs');
-const path = require('path');
 const { NODE_MANAGEMENT } = require('./constants');
-const { resolveProjectRoot } = require('./launcher/runtime_entry');
+const { PATHS, getNodeHealthCacheFile } = require('./paths');
 const { writeJsonFileAtomic } = require('./bots_file_lock');
 const { readJSON } = require('./utils/fs_utils');
 
-const MODULE_DIR = path.dirname(__dirname);
-const PROJECT_ROOT = resolveProjectRoot(MODULE_DIR);
-const DEFAULT_HEALTH_CACHE_FILE = path.join(PROJECT_ROOT, 'profiles', 'node_health_cache.json');
+const DEFAULT_HEALTH_CACHE_FILE = PATHS.PROFILES.NODE_HEALTH_CACHE_JSON;
 
 interface HealthCacheOptions {
     healthCacheFile?: string;
@@ -53,9 +49,9 @@ function resolveHealthCacheFile(config: HealthCacheOptions = {}): string {
         return config.healthCacheFile;
     }
     if (typeof config.stateDir === 'string' && config.stateDir.trim()) {
-        return path.join(config.stateDir, 'node_health_cache.json');
+        return getNodeHealthCacheFile(config.stateDir);
     }
-    return DEFAULT_HEALTH_CACHE_FILE;
+    return getNodeHealthCacheFile();
 }
 
 function normalizeNodeList(nodes: unknown): string[] {

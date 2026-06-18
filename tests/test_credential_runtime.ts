@@ -7,20 +7,37 @@ const path = require('path');
 console.log('Running credential runtime path tests');
 
 const runtime = require('../modules/credential_runtime');
+const { Config } = require('../modules/config');
 const { ensureDir } = require('../modules/utils/fs_utils');
 
-function testDefaultPathsUseProfilesRun() {
-    const originalXdg = process.env.XDG_RUNTIME_DIR;
-    const originalRuntimeDir = process.env.DEXBOT_CRED_RUNTIME_DIR;
-    const originalSocket = process.env.DEXBOT_CRED_DAEMON_SOCKET;
-    const originalReady = process.env.DEXBOT_CRED_DAEMON_READY_FILE;
-    const root = path.resolve(__dirname, '..');
-    delete process.env.XDG_RUNTIME_DIR;
-    delete process.env.DEXBOT_CRED_RUNTIME_DIR;
-    delete process.env.DEXBOT_CRED_DAEMON_SOCKET;
-    delete process.env.DEXBOT_CRED_DAEMON_READY_FILE;
-
+function withConfigSnapshot(fn) {
+    const snapshot = {
+        XDG_RUNTIME_DIR: Config.XDG_RUNTIME_DIR,
+        DEXBOT_CRED_RUNTIME_DIR: Config.DEXBOT_CRED_RUNTIME_DIR,
+        DEXBOT_CRED_DAEMON_SOCKET: Config.DEXBOT_CRED_DAEMON_SOCKET,
+        DEXBOT_CRED_DAEMON_READY_FILE: Config.DEXBOT_CRED_DAEMON_READY_FILE,
+    };
+    const restore = () => {
+        Config.XDG_RUNTIME_DIR = snapshot.XDG_RUNTIME_DIR;
+        Config.DEXBOT_CRED_RUNTIME_DIR = snapshot.DEXBOT_CRED_RUNTIME_DIR;
+        Config.DEXBOT_CRED_DAEMON_SOCKET = snapshot.DEXBOT_CRED_DAEMON_SOCKET;
+        Config.DEXBOT_CRED_DAEMON_READY_FILE = snapshot.DEXBOT_CRED_DAEMON_READY_FILE;
+    };
     try {
+        return fn(restore);
+    } finally {
+        restore();
+    }
+}
+
+function testDefaultPathsUseProfilesRun() {
+    withConfigSnapshot((restore) => {
+        Config.XDG_RUNTIME_DIR = undefined;
+        Config.DEXBOT_CRED_RUNTIME_DIR = undefined;
+        Config.DEXBOT_CRED_DAEMON_SOCKET = undefined;
+        Config.DEXBOT_CRED_DAEMON_READY_FILE = undefined;
+
+        const root = path.resolve(__dirname, '..');
         const runtimeDir = runtime.getCredentialRuntimeDir({ root });
         assert.strictEqual(runtimeDir, path.join(root, 'profiles', 'run'));
         assert.strictEqual(
@@ -31,47 +48,28 @@ function testDefaultPathsUseProfilesRun() {
             runtime.getCredentialReadyFilePath({ root }),
             path.join(root, 'profiles', 'run', 'dexbot-cred-daemon.ready')
         );
-    } finally {
-        if (originalXdg === undefined) delete process.env.XDG_RUNTIME_DIR;
-        else process.env.XDG_RUNTIME_DIR = originalXdg;
-        if (originalRuntimeDir === undefined) delete process.env.DEXBOT_CRED_RUNTIME_DIR;
-        else process.env.DEXBOT_CRED_RUNTIME_DIR = originalRuntimeDir;
-        if (originalSocket === undefined) delete process.env.DEXBOT_CRED_DAEMON_SOCKET;
-        else process.env.DEXBOT_CRED_DAEMON_SOCKET = originalSocket;
-        if (originalReady === undefined) delete process.env.DEXBOT_CRED_DAEMON_READY_FILE;
-        else process.env.DEXBOT_CRED_DAEMON_READY_FILE = originalReady;
-    }
+    });
 }
 
 function testXdgRuntimeOverride() {
-    const originalXdg = process.env.XDG_RUNTIME_DIR;
-    const originalRuntimeDir = process.env.DEXBOT_CRED_RUNTIME_DIR;
-    const originalSocket = process.env.DEXBOT_CRED_DAEMON_SOCKET;
-    const originalReady = process.env.DEXBOT_CRED_DAEMON_READY_FILE;
-    const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-runtime-xdg-'));
-    const xdgRuntimeDir = path.join(baseDir, 'xdg-runtime');
+    withConfigSnapshot((restore) => {
+        const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-runtime-xdg-'));
+        const xdgRuntimeDir = path.join(baseDir, 'xdg-runtime');
 
-    ensureDir(xdgRuntimeDir);
-    process.env.XDG_RUNTIME_DIR = xdgRuntimeDir;
-    delete process.env.DEXBOT_CRED_RUNTIME_DIR;
-    delete process.env.DEXBOT_CRED_DAEMON_SOCKET;
-    delete process.env.DEXBOT_CRED_DAEMON_READY_FILE;
+        ensureDir(xdgRuntimeDir);
+        Config.XDG_RUNTIME_DIR = xdgRuntimeDir;
+        Config.DEXBOT_CRED_RUNTIME_DIR = undefined;
+        Config.DEXBOT_CRED_DAEMON_SOCKET = undefined;
+        Config.DEXBOT_CRED_DAEMON_READY_FILE = undefined;
 
-    try {
-        assert.strictEqual(runtime.getCredentialRuntimeDir(), path.join(xdgRuntimeDir, 'dexbot2'));
-        assert.strictEqual(runtime.getCredentialSocketPath(), path.join(xdgRuntimeDir, 'dexbot2', 'dexbot-cred-daemon.sock'));
-        assert.strictEqual(runtime.getCredentialReadyFilePath(), path.join(xdgRuntimeDir, 'dexbot2', 'dexbot-cred-daemon.ready'));
-    } finally {
-        if (originalXdg === undefined) delete process.env.XDG_RUNTIME_DIR;
-        else process.env.XDG_RUNTIME_DIR = originalXdg;
-        if (originalRuntimeDir === undefined) delete process.env.DEXBOT_CRED_RUNTIME_DIR;
-        else process.env.DEXBOT_CRED_RUNTIME_DIR = originalRuntimeDir;
-        if (originalSocket === undefined) delete process.env.DEXBOT_CRED_DAEMON_SOCKET;
-        else process.env.DEXBOT_CRED_DAEMON_SOCKET = originalSocket;
-        if (originalReady === undefined) delete process.env.DEXBOT_CRED_DAEMON_READY_FILE;
-        else process.env.DEXBOT_CRED_DAEMON_READY_FILE = originalReady;
-        try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
-    }
+        try {
+            assert.strictEqual(runtime.getCredentialRuntimeDir(), path.join(xdgRuntimeDir, 'dexbot2'));
+            assert.strictEqual(runtime.getCredentialSocketPath(), path.join(xdgRuntimeDir, 'dexbot2', 'dexbot-cred-daemon.sock'));
+            assert.strictEqual(runtime.getCredentialReadyFilePath(), path.join(xdgRuntimeDir, 'dexbot2', 'dexbot-cred-daemon.ready'));
+        } finally {
+            try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+        }
+    });
 }
 
 function testEnsureRuntimeDirUsesPrivatePermissions() {
@@ -142,43 +140,33 @@ async function testSecurePathChecksRecognizePrivateFilesAndSockets() {
 }
 
 function testInvalidXdgRuntimeFallsBackToProfilesRun() {
-    const originalXdg = process.env.XDG_RUNTIME_DIR;
-    const originalRuntimeDir = process.env.DEXBOT_CRED_RUNTIME_DIR;
-    const originalSocket = process.env.DEXBOT_CRED_DAEMON_SOCKET;
-    const originalReady = process.env.DEXBOT_CRED_DAEMON_READY_FILE;
-    const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-runtime-fallback-'));
-    const root = path.join(baseDir, 'project-root');
-    const invalidXdg = path.join(baseDir, 'missing', 'runtime');
+    withConfigSnapshot((restore) => {
+        const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-runtime-fallback-'));
+        const root = path.join(baseDir, 'project-root');
+        const invalidXdg = path.join(baseDir, 'missing', 'runtime');
 
-    delete process.env.DEXBOT_CRED_RUNTIME_DIR;
-    delete process.env.DEXBOT_CRED_DAEMON_SOCKET;
-    delete process.env.DEXBOT_CRED_DAEMON_READY_FILE;
-    process.env.XDG_RUNTIME_DIR = invalidXdg;
+        Config.DEXBOT_CRED_RUNTIME_DIR = undefined;
+        Config.DEXBOT_CRED_DAEMON_SOCKET = undefined;
+        Config.DEXBOT_CRED_DAEMON_READY_FILE = undefined;
+        Config.XDG_RUNTIME_DIR = invalidXdg;
 
-    try {
-        const expectedRuntimeDir = path.join(root, 'profiles', 'run');
-        assert.strictEqual(
-            runtime.getCredentialRuntimeDir({ root }),
-            expectedRuntimeDir,
-            'invalid XDG runtime directories should fall back to profiles/run'
-        );
-        assert.strictEqual(
-            runtime.ensureCredentialRuntimeDirSync({ root }),
-            expectedRuntimeDir,
-            'runtime directory creation should also use the fallback path'
-        );
-        assert.ok(fs.existsSync(expectedRuntimeDir), 'fallback runtime directory should be created');
-    } finally {
-        if (originalXdg === undefined) delete process.env.XDG_RUNTIME_DIR;
-        else process.env.XDG_RUNTIME_DIR = originalXdg;
-        if (originalRuntimeDir === undefined) delete process.env.DEXBOT_CRED_RUNTIME_DIR;
-        else process.env.DEXBOT_CRED_RUNTIME_DIR = originalRuntimeDir;
-        if (originalSocket === undefined) delete process.env.DEXBOT_CRED_DAEMON_SOCKET;
-        else process.env.DEXBOT_CRED_DAEMON_SOCKET = originalSocket;
-        if (originalReady === undefined) delete process.env.DEXBOT_CRED_DAEMON_READY_FILE;
-        else process.env.DEXBOT_CRED_DAEMON_READY_FILE = originalReady;
-        try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
-    }
+        try {
+            const expectedRuntimeDir = path.join(root, 'profiles', 'run');
+            assert.strictEqual(
+                runtime.getCredentialRuntimeDir({ root }),
+                expectedRuntimeDir,
+                'invalid XDG runtime directories should fall back to profiles/run'
+            );
+            assert.strictEqual(
+                runtime.ensureCredentialRuntimeDirSync({ root }),
+                expectedRuntimeDir,
+                'runtime directory creation should also use the fallback path'
+            );
+            assert.ok(fs.existsSync(expectedRuntimeDir), 'fallback runtime directory should be created');
+        } finally {
+            try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+        }
+    });
 }
 
 function testRootBypassesOwnerCheck() {

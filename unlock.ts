@@ -33,12 +33,15 @@ process.umask(0o077);
 
 const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('./modules/storage');
+const storage = getStorage();
 const { spawn } = require('child_process');
 const { createCredentialDaemonController } = require('./modules/launcher/credential_daemon');
 const { buildScopedChildEnv } = require('./modules/launcher/child_env');
 const { parseUnlockArgs } = require('./modules/launcher/launch_modes');
 const { UPDATER, LAUNCHER, MARKET_ADAPTER, BUILD_DIR } = require('./modules/constants');
-const { buildRuntimeScriptArgs, buildRuntimeScriptPath, resolveProjectRoot } = require('./modules/launcher/runtime_entry');
+const { PATHS } = require('./modules/paths');
+const { buildRuntimeScriptArgs, buildRuntimeScriptPath } = require('./modules/launcher/runtime_entry');
 const {
     createBotSupervisor, SOCKET_PATH,
     forwardSignal, isPidAlive, waitForPidExit,
@@ -78,15 +81,16 @@ const {
     listConfiguredBots, getAllControlBotNames, getControlBotNames, getControlActionLabel,
     getControlServiceNames, printControlActionSummary, formatBotCount,
 } = require('./modules/launcher/monolithic_runtime');
+const { Config } = require('./modules/config');
 
 const CODE_ROOT = __dirname;
-const ROOT = resolveProjectRoot(CODE_ROOT);
-const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
-const LOGS_DIR = path.join(ROOT, 'profiles', 'logs');
+const ROOT = PATHS.PROJECT_ROOT;
+const BOTS_FILE = PATHS.PROFILES.BOTS_JSON;
+const LOGS_DIR = PATHS.LOGS_DIR;
 const SUPERVISOR_OUT_LOG = path.join(LOGS_DIR, 'supervisor.log');
 const SUPERVISOR_ERROR_LOG = path.join(LOGS_DIR, 'supervisor-error.log');
 
-const controller = createCredentialDaemonController({ root: ROOT, codeRoot: CODE_ROOT });
+const controller = createCredentialDaemonController({ root: PATHS.PROJECT_ROOT, codeRoot: CODE_ROOT });
 const DEFAULT_STARTUP_GRACE_MS = 750;
 const botProcessRef: { current: any } = { current: null };
 
@@ -257,7 +261,7 @@ function waitForSupervisorReady({ child = null, timeoutMs = 15000, intervalMs = 
 }
 
 function ensureSupervisorLogDir() {
-    if (!fs.existsSync(LOGS_DIR)) {
+    if (!storage.exists(LOGS_DIR)) {
         ensureDir(LOGS_DIR);
     }
 }
@@ -282,7 +286,7 @@ async function sendIsolatedDeleteIfAvailable(): Promise<boolean> {
 async function launchDetachedSupervisor({ botName = null, credentialDaemonPid = null }: any = {}) {
     try {
         await sendControlCommand({ cmd: 'status' });
-        throw new Error(`another isolated supervisor is already running at ${process.env.DEXBOT_SUPERVISOR_SOCKET || SOCKET_PATH}`);
+        throw new Error(`another isolated supervisor is already running at ${Config.DEXBOT_SUPERVISOR_SOCKET || SOCKET_PATH}`);
     } catch (err) {
         if (!String(err && err.message || '').includes('No supervisor socket found')) {
             throw err;
@@ -290,8 +294,8 @@ async function launchDetachedSupervisor({ botName = null, credentialDaemonPid = 
     }
 
     ensureSupervisorLogDir();
-    const stdoutFd = fs.openSync(SUPERVISOR_OUT_LOG, 'a', 0o600);
-    const stderrFd = fs.openSync(SUPERVISOR_ERROR_LOG, 'a', 0o600);
+    const stdoutFd = storage.open(SUPERVISOR_OUT_LOG, 'a', 0o600);
+    const stderrFd = storage.open(SUPERVISOR_ERROR_LOG, 'a', 0o600);
     const args = buildRuntimeScriptArgs({
         codeRoot: CODE_ROOT,
         scriptSegments: ['unlock'],
@@ -301,7 +305,7 @@ async function launchDetachedSupervisor({ botName = null, credentialDaemonPid = 
 
     try {
         child = spawn(process.execPath, args, {
-            cwd: ROOT,
+            cwd: PATHS.PROJECT_ROOT,
             detached: true,
             env: buildScopedChildEnv({
                 extra: {
@@ -324,8 +328,8 @@ async function launchDetachedSupervisor({ botName = null, credentialDaemonPid = 
         }
         throw err;
     } finally {
-        try { fs.closeSync(stdoutFd); } catch (_) {}
-        try { fs.closeSync(stderrFd); } catch (_) {}
+        try { storage.close(stdoutFd); } catch (_) {}
+        try { storage.close(stderrFd); } catch (_) {}
     }
 }
 
@@ -406,12 +410,12 @@ async function runIsolated({ botName, botEntry = null, stayResident = false, sta
 
 async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRACE_MS } = {}) {
     if (typeof chainKeys.checkKeysFileSecurity === 'function') chainKeys.checkKeysFileSecurity();
-    if (typeof credentialPolicy.checkPolicyFileSecurity === 'function') credentialPolicy.checkPolicyFileSecurity(path.join(ROOT, 'profiles', 'daemon-policies.json'));
+    if (typeof credentialPolicy.checkPolicyFileSecurity === 'function') credentialPolicy.checkPolicyFileSecurity(PATHS.PROFILES.DAEMON_POLICIES_JSON);
 
     const parsed = parseUnlockArgs(argv);
-    const isDetachedSupervisorChild = process.env.DEXBOT_ISOLATED_CHILD === '1';
-    const forceForegroundIsolated = process.env.DEXBOT_ISOLATED_FOREGROUND === '1';
-    const isMonolithicBgChild = process.env.DEXBOT_MONOLITHIC_BG === '1';
+    const isDetachedSupervisorChild = Config.DEXBOT_ISOLATED_CHILD;
+    const forceForegroundIsolated = Config.DEXBOT_ISOLATED_FOREGROUND;
+    const isMonolithicBgChild = Config.DEXBOT_MONOLITHIC_BG;
     const forceForeground = argv.includes('--foreground');
 
     if (parsed.control) {
@@ -452,11 +456,11 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
 
             if (!clawOnly && !isolated && !forceForeground) {
                 ensureMonolithicLogDir();
-                daemonOutFd = fs.openSync(MONOLITHIC_OUT_LOG, 'a', 0o600);
+                daemonOutFd = storage.open(MONOLITHIC_OUT_LOG, 'a', 0o600);
                 try {
-                    daemonErrFd = fs.openSync(MONOLITHIC_ERROR_LOG, 'a', 0o600);
+                    daemonErrFd = storage.open(MONOLITHIC_ERROR_LOG, 'a', 0o600);
                 } catch (_e) {
-                    try { fs.closeSync(daemonOutFd); } catch (_) {}
+                    try { storage.close(daemonOutFd); } catch (_) {}
                     daemonOutFd = null;
                     throw _e;
                 }
@@ -473,8 +477,8 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
                     console.log(statusSuccess('✓ Authentication successful'));
                 }
             } finally {
-                if (daemonOutFd !== null) try { fs.closeSync(daemonOutFd); } catch (_) {}
-                if (daemonErrFd !== null) try { fs.closeSync(daemonErrFd); } catch (_) {}
+                if (daemonOutFd !== null) try { storage.close(daemonOutFd); } catch (_) {}
+                if (daemonErrFd !== null) try { storage.close(daemonErrFd); } catch (_) {}
             }
         } else if (!(await controller.isDaemonReady())) {
             throw new Error('credential daemon is not ready for isolated supervisor startup');
@@ -492,23 +496,23 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
 
             const credentialDaemonPid = controller.getManagedDaemonPid();
             if (credentialDaemonPid) {
-                try { fs.writeFileSync(MONOLITHIC_CRED_PID_FILE, String(credentialDaemonPid), { mode: 0o600 }); } catch (_) {}
+                try { storage.writeFile(MONOLITHIC_CRED_PID_FILE, String(credentialDaemonPid), { mode: 0o600 }); } catch (_) {}
             }
             controller.releaseManagedDaemon();
             daemonReleased = true;
 
             ensureMonolithicLogDir();
-            const stdoutFd = fs.openSync(MONOLITHIC_OUT_LOG, 'a', 0o600);
+            const stdoutFd = storage.open(MONOLITHIC_OUT_LOG, 'a', 0o600);
             let stderrFd;
             try {
-                stderrFd = fs.openSync(MONOLITHIC_ERROR_LOG, 'a', 0o600);
+                stderrFd = storage.open(MONOLITHIC_ERROR_LOG, 'a', 0o600);
             } catch (_e) {
-                try { fs.closeSync(stdoutFd); } catch (_) {}
+                try { storage.close(stdoutFd); } catch (_) {}
                 throw _e;
             }
 
             const child = spawn(process.execPath, [__filename, ...argv.slice(2)], {
-                cwd: ROOT,
+                cwd: PATHS.PROJECT_ROOT,
                 detached: true,
                 env: {
                     ...process.env,
@@ -518,7 +522,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
                 stdio: ['ignore', stdoutFd, stderrFd],
             });
             child.unref();
-            fs.writeFileSync(MONOLITHIC_PID_FILE, String(child.pid), { mode: 0o600 });
+            storage.writeFile(MONOLITHIC_PID_FILE, String(child.pid), { mode: 0o600 });
 
             printLauncherStartupSummary({ botNames: launchedBotNames, mode: 'background' });
             process.exit(0);
@@ -550,7 +554,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
             daemonReleased = true;
             printLauncherStartupSummary({ botNames: launchedBotNames, mode: 'isolated' });
             console.log(`Supervisor PID: ${supervisorPid}`);
-            console.log(`Control socket: ${process.env.DEXBOT_SUPERVISOR_SOCKET || SOCKET_PATH}`);
+            console.log(`Control socket: ${Config.DEXBOT_SUPERVISOR_SOCKET || SOCKET_PATH}`);
             console.log(`Supervisor logs: ${SUPERVISOR_OUT_LOG}`);
             process.exitCode = 0;
             return;
@@ -562,7 +566,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
 
         const watchdog = createMarketAdapterWatchdog({
             codeRoot: CODE_ROOT,
-            root: ROOT,
+            root: PATHS.PROJECT_ROOT,
             logsDir: LOGS_DIR,
         });
         const cancelWatchdog = watchdog.schedule(MONOLITHIC_OUT_LOG, MONOLITHIC_ERROR_LOG);
@@ -583,17 +587,17 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
                 const dexbotArgs = buildDexbotStartArgs(botName, dryrun);
 
                 const botProcess = spawn(process.execPath, dexbotArgs, {
-                    cwd: ROOT,
+                    cwd: PATHS.PROJECT_ROOT,
                     env: process.env,
                     stdio: isMonolithicBgChild ? 'pipe' : 'inherit',
                 });
                 botProcessRef.current = botProcess;
 
                 if (isMonolithicBgChild) {
-                    try { fs.writeFileSync(MONOLITHIC_BOT_PID_FILE, String(botProcess.pid), { mode: 0o600 }); } catch (_) {}
+                    try { storage.writeFile(MONOLITHIC_BOT_PID_FILE, String(botProcess.pid), { mode: 0o600 }); } catch (_) {}
                     const botStat = botProcess.pid ? readProcStat(botProcess.pid) : null;
                     try {
-                        fs.writeFileSync(
+                        storage.writeFile(
                             MONOLITHIC_BOT_INFO_FILE,
                             JSON.stringify({ botName, botNames: launchedBotNames, pid: botProcess.pid, starttime: botStat?.starttime ?? null }),
                             { mode: 0o600 }
@@ -714,7 +718,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
 
                 let targetPid = pid;
                 let botPidRaw = null;
-                try { botPidRaw = fs.readFileSync(MONOLITHIC_BOT_PID_FILE, 'utf8').trim(); } catch (_) {}
+                try { botPidRaw = storage.readFile(MONOLITHIC_BOT_PID_FILE).trim(); } catch (_) {}
                 if (botPidRaw) {
                     const bp = Number(botPidRaw);
                     if (isExpectedMonolithicBotPid(bp, botInfo)) {
@@ -740,12 +744,12 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                 let credPid = null;
                 let credForeign = false;
                 try {
-                    const raw = fs.readFileSync(MONOLITHIC_CRED_PID_FILE, 'utf8').trim();
+                    const raw = storage.readFile(MONOLITHIC_CRED_PID_FILE).trim();
                     const n = Number(raw);
                     if (Number.isInteger(n) && n > 0) credPid = n;
                 } catch (_) {}
 
-                if (!credPid && fs.existsSync(CREDENTIAL_SOCKET_FILE)) {
+                if (!credPid && storage.exists(CREDENTIAL_SOCKET_FILE)) {
                     const ownerPid = findCredentialSocketOwnerPid();
                     if (ownerPid > 0 && isLikelyCredentialDaemonProcess(ownerPid)) {
                         credPid = ownerPid;
@@ -851,7 +855,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
         }
     }
 
-    if (effectiveCmd === 'delete' && !target && fs.existsSync(MONOLITHIC_CRED_PID_FILE)) {
+    if (effectiveCmd === 'delete' && !target && storage.exists(MONOLITHIC_CRED_PID_FILE)) {
         await sendIsolatedDeleteIfAvailable();
         const credResult = await stopCredentialDaemon();
         if (credResult.signaled) {
@@ -898,9 +902,9 @@ const isUnlockStartDirectRun = require.main === module || (
 );
 if (isUnlockStartDirectRun) {
     setupGracefulShutdown();
-    if (process.env.DEXBOT_ISOLATED_CHILD === '1') {
-        registerCleanup('Credential daemon', () => stopCredentialDaemonPid(process.env.DEXBOT_MANAGED_CRED_PID));
-    } else if (process.env.DEXBOT_MONOLITHIC_BG === '1') {
+    if (Config.DEXBOT_ISOLATED_CHILD) {
+        registerCleanup('Credential daemon', () => stopCredentialDaemonPid(Config.DEXBOT_MANAGED_CRED_PID));
+    } else if (Config.DEXBOT_MONOLITHIC_BG) {
         registerCleanup('PID files', cleanupStateFiles);
         registerCleanup('Bot process', async () => {
             const bot = botProcessRef.current;

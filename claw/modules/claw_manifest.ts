@@ -1,3 +1,4 @@
+const { Config } = require('../../modules/config');
 const {
   buildClawCommandExamples,
   getClawToolCatalog,
@@ -33,7 +34,7 @@ function describeClawBridge(options: Record<string, any> = {}) {
     commands: listClawCommandNames(),
     options: {
       accountName: options.accountName || null,
-      profileRoot: options.profileRoot || process.env.DEXBOT_PROFILE_ROOT || null,
+      profileRoot: options.profileRoot || Config.DEXBOT_PROFILE_ROOT || null,
       runtimeName: focusedRuntime ? focusedRuntime.runtime : null,
       socketPath: options.socketPath || null
     },

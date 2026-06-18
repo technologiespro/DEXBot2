@@ -16,11 +16,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
+const { PATHS } = require('../modules/paths');
 
-const PARENT = path.dirname(__dirname);
-const ROOT = resolveProjectRoot(PARENT);
-const livePath = path.join(ROOT, 'profiles', 'bots.json');
+const livePath = PATHS.PROFILES.BOTS_JSON;
 
 /**
  * checkConfig: Validate bot configuration entries

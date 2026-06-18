@@ -65,11 +65,9 @@ const path = require('path');
 const readline = require('readline');
 const Format = require('./format');
 const { TIMING, DEFAULT_CONFIG } = require('../constants');
-const { resolveProjectRoot } = require('../launcher/runtime_entry');
+const { PATHS } = require('../paths');
 const Logger = require('../logger');
 const exportLogger = new Logger('Export');
-const EXPORT_PARENT = path.dirname(path.dirname(__dirname));
-const EXPORT_ROOT = resolveProjectRoot(EXPORT_PARENT);
 
 /**
  * Parse a fill line from PM2 log file
@@ -306,7 +304,7 @@ async function exportBotTrades(botKey, botConfig, outputDir = './exports') {
         await fsPromises.mkdir(outputDir, { recursive: true });
 
         // Find log file (PM2 format: {botKey}-error.log or {botKey}.log)
-        const logsDir = path.join(EXPORT_ROOT, 'profiles', 'logs');
+        const logsDir = PATHS.LOGS_DIR;
         let logFilePath = null;
 
         try {

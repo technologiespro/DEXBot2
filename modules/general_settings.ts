@@ -5,17 +5,14 @@
  * Provides read/write operations with fallback handling.
  */
 
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('./storage');
+const storage = getStorage();
+const { PATHS } = require('./paths');
 const { writeJsonFileAtomic } = require('./bots_file_lock');
-const { BUILD_DIR, isDistRuntime } = require('./utils/build_dir');
 
-// Resolve profiles directory correctly whether running from source (modules/)
-// or compiled output (dist/modules/)
-const PARENT_DIR = path.dirname(__dirname);
-const ROOT = isDistRuntime(PARENT_DIR) ? path.dirname(PARENT_DIR) : PARENT_DIR;
-const PROFILES_DIR = path.join(ROOT, 'profiles');
-const SETTINGS_FILE = path.join(PROFILES_DIR, 'general.settings.json');
+const PROFILES_DIR = PATHS.PROFILES_DIR;
+const SETTINGS_FILE = PATHS.PROFILES.GENERAL_SETTINGS_JSON;
 
 /**
  * Read general application settings from file.
@@ -27,10 +24,10 @@ const SETTINGS_FILE = path.join(PROFILES_DIR, 'general.settings.json');
  * @returns {Object|*} Parsed settings object or fallback value
  */
 function readGeneralSettings({ fallback = null, onError = null }: { fallback?: any; onError?: ((err: Error, filePath: string) => void) | null } = {}): any {
-    if (!fs.existsSync(SETTINGS_FILE)) return fallback;
+    if (!storage.exists(SETTINGS_FILE)) return fallback;
 
     try {
-        const raw = fs.readFileSync(SETTINGS_FILE, 'utf8');
+        const raw = storage.readFile(SETTINGS_FILE);
         if (!raw || !raw.trim()) return fallback;
         return JSON.parse(raw);
     } catch (err: any) {

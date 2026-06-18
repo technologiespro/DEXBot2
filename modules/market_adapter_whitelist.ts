@@ -1,15 +1,11 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const { resolveProjectRoot } = require('./launcher/runtime_entry');
+const { PATHS } = require('./paths');
+const { getStorage } = require('./storage');
+const storage = getStorage();
 const { readJSON } = require('./utils/fs_utils');
 
-const CODE_ROOT = path.join(__dirname, '..');
-const ROOT = resolveProjectRoot(CODE_ROOT);
-const PROFILES_DIR = path.join(ROOT, 'profiles');
-const WHITELIST_FILE = process.env.DEXBOT_TEST_MARKET_ADAPTER_WHITELIST_FILE
-    || path.join(PROFILES_DIR, 'market_adapter_whitelist.json');
+const WHITELIST_FILE = PATHS.PROFILES.MARKET_ADAPTER_WHITELIST_JSON();
 
 interface WhitelistFlags {
     ama: boolean;
@@ -39,7 +35,7 @@ function normalizeEntry(entry: any): WhitelistFlags {
 
 function loadMarketAdapterWhitelist(): Map<string, WhitelistFlags> | false {
     if (_whitelistCache !== null) return _whitelistCache;
-    if (!fs.existsSync(WHITELIST_FILE)) {
+    if (!storage.exists(WHITELIST_FILE)) {
         _whitelistCache = false;
         return _whitelistCache;
     }

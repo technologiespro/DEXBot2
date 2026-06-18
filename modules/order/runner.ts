@@ -60,11 +60,10 @@
 const fs = require('fs');
 const path = require('path');
 const { OrderManager } = require('./manager');
-const { resolveProjectRoot } = require('../launcher/runtime_entry');
-const RUNNER_PARENT = path.dirname(path.dirname(__dirname));
-const RUNNER_ROOT = resolveProjectRoot(RUNNER_PARENT);
+const { PATHS } = require('../paths');
 const Grid = require('./grid');
 const { readBotsFileSync } = require('../bots_file_lock');
+const { Config } = require('../config');
 const { parseJsonWithComments } = require('./utils/system');
 const { derivePrice } = require('./utils/system');
 const { isNumeric } = require('./format');
@@ -76,14 +75,14 @@ const { isNumeric } = require('./format');
  * @throws {Error} If config invalid or startPrice outside bounds
  */
 async function runOrderManagerCalculation() {
-    const cfgFile = path.join(RUNNER_ROOT, 'profiles', 'bots.json');
+        const cfgFile = PATHS.PROFILES.BOTS_JSON;
     let botConfig: any = {};
 
     try {
         const { config } = readBotsFileSync(cfgFile, parseJsonWithComments);
         const bots = config.bots || [];
 
-        const envName = process.env.LIVE_BOT_NAME || process.env.BOT_NAME;
+        const envName = Config.LIVE_BOT_NAME || Config.BOT_NAME;
         let chosenBot = null;
         if (envName) chosenBot = bots.find(b => String(b.name).toLowerCase() === String(envName).toLowerCase());
         if (!chosenBot) chosenBot = bots[0];
@@ -130,8 +129,8 @@ async function runOrderManagerCalculation() {
     const manager = new OrderManager(botConfig);
     await Grid.initializeGrid(manager);
 
-    const cycles = Number(process.env.CALC_CYCLES || 3);
-    const delayMs = Number(process.env.CALC_DELAY_MS || 500);
+    const cycles = Config.CALC_CYCLES;
+    const delayMs = Config.CALC_DELAY_MS;
 
     for (let cycle = 1; cycle <= cycles; cycle++) {
         manager.logger.log(`\n----- Cycle ${cycle}/${cycles} -----`, 'info');

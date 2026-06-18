@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
 const { makeControllerStub, getActiveBotNames, stripAnsi, makeFakeChild } = require('./helpers/unlock_test_helpers');
+const { setProcessDiscovery, resetProcessDiscovery } = require('../modules/process_discovery');
 
 console.log('Running unlock output tests');
 
@@ -95,6 +96,53 @@ function resetState() {
     process.exitCode = 0;
 }
 
+function makeMockDiscovery(state: any) {
+    return {
+        isAlive(pid: number): boolean {
+            if (pid === 999999) return state.liveMonolithicPid && state.monolithicAlive;
+            return false;
+        },
+        readArgs(pid: number): string[] {
+            if (pid === 999999 && state.liveMonolithicPid && state.monolithicAlive) {
+                return ['node', path.resolve(__dirname, '..', 'unlock.js')];
+            }
+            return [];
+        },
+        readCmdline(pid: number): string {
+            return this.readArgs(pid).join(' ');
+        },
+        readCwd(pid: number): string {
+            if (pid === 999999 && state.liveMonolithicPid && state.monolithicAlive) {
+                return path.resolve(__dirname, '..');
+            }
+            return '';
+        },
+        readRSSBytes(pid: number): number {
+            if (pid === 999999 && state.liveMonolithicPid && state.monolithicAlive) return 123456 * 1024;
+            return -1;
+        },
+        readStat(pid: number): any {
+            if (pid === 999999 && state.liveMonolithicPid && state.monolithicAlive) {
+                return { utime: 0, stime: 0, starttime: 1234567 };
+            }
+            return null;
+        },
+        readMemMB(pid: number): string {
+            if (pid === 999999 && state.liveMonolithicPid && state.monolithicAlive) return '120MB';
+            return '-';
+        },
+        readCpuTime(_pid: number): string { return '-'; },
+        async readCpuPercent(_pid: number, _samples?: number, _intervalMs?: number): Promise<string> { return '-'; },
+        readUptime(_pid: number): string { return '-'; },
+        readSystemUptimeSec(): number { return 1234567; },
+        readSocketInode(_socketPath: string): number { return 0; },
+        findSocketOwnerPid(_socketPath: string, _isLikelyProcess?: (pid: number) => boolean): number { return 0; },
+        listAllPids(): number[] {
+            return state.liveMonolithicPid && state.monolithicAlive ? [999999] : [];
+        },
+    };
+}
+
 function installStubs() {
     setCachedModule(controllerPath, {
         createCredentialDaemonController: () => controller,
@@ -105,12 +153,11 @@ function installStubs() {
         return makeFakeChild();
     };
 
+    setProcessDiscovery(makeMockDiscovery(state));
+
     fs.existsSync = (filePath) => {
         if (String(filePath) === monolithicPidPath) return state.liveMonolithicPid;
         if (String(filePath) === monolithicBotInfoPath) return !!state.monolithicBotInfoJson;
-        if (String(filePath) === `/proc/999999/cmdline`) {
-            return state.liveMonolithicPid && state.monolithicAlive;
-        }
         if (monolithicStatePaths.has(String(filePath))) return false;
         return originalExistsSync(filePath);
     };
@@ -121,25 +168,7 @@ function installStubs() {
         if (String(filePath) === monolithicBotInfoPath && state.monolithicBotInfoJson) {
             return state.monolithicBotInfoJson;
         }
-        if (String(filePath) === `/proc/999999/cmdline` && state.liveMonolithicPid && state.monolithicAlive) {
-            return ['node', path.resolve(__dirname, '..', 'unlock.js')].join('\0');
-        }
-        if (String(filePath) === `/proc/999999/stat` && state.liveMonolithicPid && state.monolithicAlive) {
-            return '999999 (node) S 1 1 1 0 -1 4194560 0 0 0 0 0 0 0 0 20 0 1 0 1234567 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0';
-        }
-        if (String(filePath) === `/proc/999999/status` && state.liveMonolithicPid && state.monolithicAlive) {
-            return 'VmRSS:\t123456 kB\n';
-        }
-        if (String(filePath) === '/proc/uptime' && state.liveMonolithicPid && state.monolithicAlive) {
-            return '1234567.00 0.00\n';
-        }
         return originalReadFileSync(filePath, options);
-    };
-    fs.realpathSync = (filePath) => {
-        if (String(filePath) === `/proc/999999/cwd`) {
-            return path.resolve(__dirname, '..');
-        }
-        return originalRealpathSync(filePath);
     };
     fs.openSync = (filePath, flags, mode) => {
         if (monolithicLogPaths.has(String(filePath))) {
@@ -198,6 +227,7 @@ function restoreStubs() {
     process.kill = originalProcessKill;
     process.exit = originalProcessExit;
     setStdoutTTY(originalStdoutIsTTY);
+    resetProcessDiscovery();
     if (originalMonolithicBg === undefined) {
         delete process.env.DEXBOT_MONOLITHIC_BG;
     } else {
@@ -324,8 +354,9 @@ async function runClawOnlyTest() {
 
 async function runStartupFailureSuppressesSuccessTest() {
     resetState();
-    const previousMonolithicBg = process.env.DEXBOT_MONOLITHIC_BG;
-    process.env.DEXBOT_MONOLITHIC_BG = '1';
+    const { Config } = require('../modules/config');
+    const previousMonolithicBg = Config.DEXBOT_MONOLITHIC_BG;
+    Config.DEXBOT_MONOLITHIC_BG = true;
     try {
         await assert.rejects(
             () => unlock.main({ argv: ['node', 'unlock'], startupGraceMs: 50 }),
@@ -333,11 +364,7 @@ async function runStartupFailureSuppressesSuccessTest() {
             'launcher should fail when the child exits during the startup grace period'
         );
     } finally {
-        if (previousMonolithicBg === undefined) {
-            delete process.env.DEXBOT_MONOLITHIC_BG;
-        } else {
-            process.env.DEXBOT_MONOLITHIC_BG = previousMonolithicBg;
-        }
+        Config.DEXBOT_MONOLITHIC_BG = previousMonolithicBg;
     }
 
     assert.ok(!logs.includes('DEXBot2 started successfully!'), 'launcher should not print the success footer on startup failure');

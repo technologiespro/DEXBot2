@@ -5,6 +5,7 @@ const path = require('path');
 const Format = require('./format');
 const LoggerState = require('./logger_state');
 const { LOGGING_CONFIG, ORDER_STATES } = require('../constants');
+const { Config } = require('../config');
 
 /**
  * Color-coded console logger with structured output, optional file logging,

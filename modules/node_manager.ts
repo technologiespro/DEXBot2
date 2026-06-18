@@ -40,22 +40,16 @@
  * ===============================================================================
  */
 
-const fs = require('fs');
-const path = require('path');
 const _WebSocket = globalThis.WebSocket;
 const Logger = require('./logger');
 const { NODE_MANAGEMENT } = require('./constants');
-const { resolveProjectRoot } = require('./launcher/runtime_entry');
+const { PATHS, getNodeBlacklistFile } = require('./paths');
 const { writeJsonFileAtomic } = require('./bots_file_lock');
 const { readJSON } = require('./utils/fs_utils');
 const {
     resolveHealthCacheFile,
     writeHealthCache,
 } = require('./node_health_cache');
-
-const MODULE_DIR = path.dirname(__dirname);
-const PROJECT_ROOT = resolveProjectRoot(MODULE_DIR);
-const BLACKLIST_STATE_FILE = path.join(PROJECT_ROOT, 'profiles', 'node_blacklist.json');
 
 interface NodeManagerConfig {
     list?: string[];
@@ -109,8 +103,8 @@ class NodeManager {
         this.blacklistStateFile = typeof config.blacklistStateFile === 'string' && config.blacklistStateFile.trim()
             ? config.blacklistStateFile
             : (typeof config.stateDir === 'string' && config.stateDir.trim()
-                ? path.join(config.stateDir, 'node_blacklist.json')
-                : BLACKLIST_STATE_FILE);
+                ? getNodeBlacklistFile(config.stateDir)
+                : PATHS.PROFILES.NODE_BLACKLIST_JSON);
         this.healthCacheFile = resolveHealthCacheFile(config);
         this.config = {
             list: config.list || [],

@@ -11,14 +11,15 @@ const { toIntervalLabel } = require('../../market_adapter/interval_utils');
 const { loadCandleFile } = require('../math_utils');
 const { ensureDir, readJSON } = require('../../modules/utils/fs_utils');
 
-const DEFAULT_CHART_DIR = path.join(__dirname, '..', 'charts');
+const { PATHS } = require('../../modules/paths');
+const DEFAULT_CHART_DIR = PATHS.ANALYSIS.CHARTS_DIR;
 const DEFAULT_CHART_FILE = path.join(DEFAULT_CHART_DIR, 'tradingview_chart.html');
 const DEFAULT_AMA = MARKET_ADAPTER.AMAS?.AMA3 || MARKET_ADAPTER.AMAS?.[MARKET_ADAPTER.DEFAULT_AMA_KEY] || {
     erPeriod: 781,
     fastPeriod: 5.2,
     slowPeriod: 112.7,
 };
-const DEFAULT_BOTS_FILE = path.join(__dirname, '..', '..', 'profiles', 'bots.json');
+const DEFAULT_BOTS_FILE = PATHS.PROFILES.BOTS_JSON;
 
 function parseArgs() {
     const args = process.argv.slice(2);
@@ -125,7 +126,7 @@ function inferTitle(meta, fallback) {
 function resolveMarketAdapterCandleFile(botKey, intervalSeconds = 3600) {
     if (!botKey) throw new Error('--bot-key is required when using --source market_adapter');
     const label = toIntervalLabel(intervalSeconds);
-    return path.join(__dirname, '..', '..', 'market_adapter', 'data', `market_adapter_${botKey}_${label}.json`);
+    return path.join(PATHS.MARKET_ADAPTER.DATA_DIR, `market_adapter_${botKey}_${label}.json`);
 }
 
 async function main() {

@@ -20,6 +20,7 @@
 'use strict';
 
 const path = require('path');
+const { PATHS } = require('../modules/paths');
 const { HurstAnalyzer }              = require('./trend_detection/hurst_analyzer');
 const { PermutationEntropyAnalyzer } = require('./trend_detection/permutation_entropy_analyzer');
 const { MARKET_ADAPTER } = require('../modules/constants');
@@ -407,7 +408,7 @@ async function main() {
     try {
         const srcConfig = config.source.config;
         if (config.source.type === 'market_adapter' && !srcConfig.stateDir) {
-            srcConfig.stateDir = path.join(__dirname, '..', 'market_adapter', 'state');
+            srcConfig.stateDir = PATHS.MARKET_ADAPTER.STATE_DIR;
         }
 
         const source = createSource(config.source.type, srcConfig);

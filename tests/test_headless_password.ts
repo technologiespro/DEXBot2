@@ -3,13 +3,16 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { readHeadlessPassword } = require('../modules/launcher/headless_password');
+const { Config } = require('../modules/config');
 
 console.log('Running headless password helper tests');
 
 const originalEnv = process.env.DEXBOT_MASTER_PASSWORD;
+const originalConfigPassword = Config.DEXBOT_MASTER_PASSWORD;
 
 // Test 1: reads from env var
 process.env.DEXBOT_MASTER_PASSWORD = 'secret-from-env';
+Config.DEXBOT_MASTER_PASSWORD = 'secret-from-env';
 assert.strictEqual(
     readHeadlessPassword({}),
     'secret-from-env',
@@ -25,6 +28,7 @@ assert.strictEqual(
 
 // Test 3: throws when no source available
 delete process.env.DEXBOT_MASTER_PASSWORD;
+Config.DEXBOT_MASTER_PASSWORD = undefined;
 assert.throws(
     () => readHeadlessPassword({}),
     /Headless mode requires either --password-file <path> or DEXBOT_MASTER_PASSWORD env var/,
@@ -34,6 +38,7 @@ assert.throws(
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-headless-test-'));
 try {
     process.env.DEXBOT_MASTER_PASSWORD = originalEnv;
+    Config.DEXBOT_MASTER_PASSWORD = originalConfigPassword;
 
     // Test 4: reads from password file
     const pwFile = path.join(tmpDir, 'password.txt');
@@ -48,6 +53,7 @@ try {
 
     // Test 5: passwordFile takes precedence over env var
     process.env.DEXBOT_MASTER_PASSWORD = 'env-secret';
+    Config.DEXBOT_MASTER_PASSWORD = 'env-secret';
     assert.strictEqual(
         readHeadlessPassword({ passwordFile: pwFile }),
         'secret-from-file',
@@ -101,6 +107,7 @@ try {
     } else {
         process.env.DEXBOT_MASTER_PASSWORD = originalEnv;
     }
+    Config.DEXBOT_MASTER_PASSWORD = originalConfigPassword;
 }
 
 console.log('headless password helper tests passed');

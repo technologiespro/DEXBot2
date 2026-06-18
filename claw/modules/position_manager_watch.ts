@@ -1,13 +1,12 @@
 const fsPromises = require('fs/promises');
 const path = require('path');
-const { resolveProjectRoot } = require('../../modules/launcher/runtime_entry');
+const { PATHS } = require('../../modules/paths');
 const { PositionManager, DEFAULT_STATE_PATH } = require('./position_manager');
 const { waitForConnected } = require('./bitshares_client');
 const { PIPELINE_TIMING } = require('../../modules/constants');
+const { Config } = require('../../modules/config');
 
-const PW_PARENT_DIR = path.dirname(path.dirname(__dirname));
-const PW_PROJECT_ROOT = resolveProjectRoot(PW_PARENT_DIR);
-const DEFAULT_HEALTH_PATH = path.join(PW_PROJECT_ROOT, 'claw', 'data', 'watcher-health.json');
+const DEFAULT_HEALTH_PATH = PATHS.CLAW.WATCHER_HEALTH_FILE;
 const DEFAULT_MAX_CONSECUTIVE_FAILURES = 5;
 
 const { clone } = require('./utils');
@@ -73,7 +72,7 @@ function resolveLogger(logger: any) {
 function createPositionManagerWatcher(options: Record<string, any> = {}) {
   const logger = resolveLogger(options.logger);
   const resolvedOptions = {
-    accountName: options.accountName || process.env.BITSHARES_ACCOUNT || null,
+    accountName: options.accountName || Config.BITSHARES_ACCOUNT || null,
     healthPath: options.healthPath || DEFAULT_HEALTH_PATH,
     maxConsecutiveFailures: Number.isFinite(Number(options.maxConsecutiveFailures))
       ? Number(options.maxConsecutiveFailures)

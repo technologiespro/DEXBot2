@@ -1,6 +1,8 @@
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('../storage');
+const storage = getStorage();
 const { safeUnlink } = require('../utils/fs_utils');
+const { getProcessDiscovery } = require('../process_discovery');
 
 /**
  * Foreign credential daemon detection.
@@ -14,7 +16,7 @@ const { safeUnlink } = require('../utils/fs_utils');
  *
  * This module exposes the helper we use to detect and clean up that case.
  * Ownership is tracked via a PID file written by the launcher; the live
- * socket owner is discovered through /proc/net/unix. If the two disagree
+ * socket owner is discovered through ProcessDiscovery. If the two disagree
  * the helper kills the foreign daemon, removes the orphan runtime files,
  * and lets the caller fall through to the normal "prompt for master
  * password" path.
@@ -31,71 +33,17 @@ function isPidAlive(pid) {
 }
 
 function readCredentialSocketInode(socketPath) {
-    if (!socketPath) return 0;
-    try {
-        const lines = fs.readFileSync('/proc/net/unix', 'utf8').split('\n');
-        for (const line of lines) {
-            if (!line) continue;
-            // /proc/net/unix columns:
-            //   0: Num (kernel pointer)
-            //   1: RefCount
-            //   2: Protocol
-            //   3: Flags
-            //   4: Type
-            //   5: St
-            //   6: Inode
-            //   7: Path (optional, may be empty for kernel-internal sockets)
-            //
-            // We MUST compare the Path column exactly — using line.includes
-            // here could match a longer socket path that happens to embed
-            // our socket path as a substring, and the helper would then
-            // SIGTERM the wrong PID.
-            const parts = line.trim().split(/\s+/);
-            if (parts.length < 7) continue;
-            const path = parts[7] || '';
-            if (path !== socketPath) continue;
-            const inode = Number(parts[6]);
-            if (Number.isInteger(inode) && inode > 0) return inode;
-        }
-    } catch (_) {}
-    return 0;
+    return getProcessDiscovery().readSocketInode(socketPath);
 }
 
 function findCredentialSocketOwnerPid(socketPath, isLikelyProcess) {
-    const inode = readCredentialSocketInode(socketPath);
-    if (!inode) return 0;
-    const target = `socket:[${inode}]`;
-
-    let pids = [];
-    try {
-        pids = fs.readdirSync('/proc').filter((name) => /^\d+$/.test(name));
-    } catch (_) {
-        return 0;
-    }
-
-    for (const pidStr of pids) {
-        const fdDir = `/proc/${pidStr}/fd`;
-        let fds = [];
-        try { fds = fs.readdirSync(fdDir); } catch (_) { continue; }
-        for (const fd of fds) {
-            let link;
-            try { link = fs.readlinkSync(`${fdDir}/${fd}`); } catch (_) { continue; }
-            if (link === target) {
-                const pid = Number(pidStr);
-                if (Number.isInteger(pid) && pid > 0) {
-                    if (typeof isLikelyProcess === 'function' && !isLikelyProcess(pid)) continue;
-                    return pid;
-                }
-            }
-        }
-    }
-    return 0;
+    return getProcessDiscovery().findSocketOwnerPid(socketPath, isLikelyProcess || undefined);
 }
 
 function readOwnedCredentialDaemonPid(pidFile, isLikelyProcess) {
     if (!pidFile) return 0;
     let raw;
-    try { raw = fs.readFileSync(pidFile, 'utf8'); } catch (_) { return 0; }
+    try { raw = storage.readFile(pidFile); } catch (_) { return 0; }
     const pid = Number(raw.trim());
     if (!Number.isInteger(pid) || pid <= 0) {
         safeUnlink(pidFile)
@@ -169,8 +117,8 @@ async function ensureNoForeignCredentialDaemon({
     verbose?: boolean;
 } = {}) {
     if (!socketPath || !readyFilePath) return false;
-    const socketExists = fs.existsSync(socketPath);
-    const readyExists = fs.existsSync(readyFilePath);
+    const socketExists = storage.exists(socketPath);
+    const readyExists = storage.exists(readyFilePath);
 
     // Nothing on disk: nothing to clean, nothing to kill.
     if (!socketExists && !readyExists) return false;

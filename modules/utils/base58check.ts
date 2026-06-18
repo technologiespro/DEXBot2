@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const ALPHABET_MAP = new Map([...ALPHABET].map((ch, index) => [ch, index]));
 
+// ── Sync (Node crypto) — used by chain_keys, ecc.ts ────────────────
 function checksum(payload: Buffer | string | Uint8Array): Buffer {
     const first = crypto.createHash('sha256').update(payload).digest();
     return crypto.createHash('sha256').update(first).digest().subarray(0, 4);
@@ -76,7 +77,42 @@ function decode(value: string): Buffer {
     return payload;
 }
 
+// ── Async (CryptoProvider) — browser-safe, returns Uint8Array ──────
+async function checksumAsync(payload: Uint8Array): Promise<Uint8Array> {
+    const { getCrypto } = require('../crypto');
+    const provider = getCrypto();
+    const first = await provider.sha256(payload);
+    const second = await provider.sha256(first);
+    return second.slice(0, 4);
+}
+
+async function encodeAsync(payload: Uint8Array): Promise<string> {
+    const csum = await checksumAsync(payload);
+    const combined = new Uint8Array(payload.length + csum.length);
+    combined.set(payload);
+    combined.set(csum, payload.length);
+    return base58Encode(combined);
+}
+
+async function decodeAsync(value: string): Promise<Uint8Array> {
+    const { getCrypto } = require('../crypto');
+    const provider = getCrypto();
+    const decoded = base58Decode(value);
+    if (decoded.length < 4) throw new Error('Invalid Base58Check payload');
+
+    const payload = decoded.subarray(0, -4);
+    const expected = decoded.subarray(-4);
+    const actual = await checksumAsync(payload);
+    if (!await provider.timingSafeEqual(expected, actual)) {
+        throw new Error('Invalid Base58Check checksum');
+    }
+
+    return new Uint8Array(payload);
+}
+
 export = {
     decode,
     encode,
+    encodeAsync,
+    decodeAsync,
 };

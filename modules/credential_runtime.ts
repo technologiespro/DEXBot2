@@ -1,6 +1,8 @@
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('./storage');
+const storage = getStorage();
 const { resolveProjectRoot } = require('./launcher/runtime_entry');
+const { Config } = require('./config');
 const { ensureDir } = require('./utils/fs_utils');
 
 interface RuntimeDirOptions {
@@ -34,8 +36,8 @@ function getDexbotRoot() {
 
 function isUsableRuntimeBaseDir(dirPath) {
     try {
-        fs.accessSync(dirPath, fs.constants.W_OK | fs.constants.X_OK);
-        return fs.statSync(dirPath).isDirectory();
+        storage.access(dirPath, 3);
+        return storage.stat(dirPath).isDirectory();
     } catch (err: any) {
         return false;
     }
@@ -45,11 +47,11 @@ function getCredentialRuntimeDir(options: RuntimeDirOptions = {}) {
     if (options.runtimeDir) {
         return path.resolve(options.runtimeDir);
     }
-    if (process.env.DEXBOT_CRED_RUNTIME_DIR) {
-        return path.resolve(process.env.DEXBOT_CRED_RUNTIME_DIR);
+    if (Config.DEXBOT_CRED_RUNTIME_DIR) {
+        return path.resolve(Config.DEXBOT_CRED_RUNTIME_DIR);
     }
-    if (process.env.XDG_RUNTIME_DIR) {
-        const xdgRuntimeDir = path.resolve(process.env.XDG_RUNTIME_DIR);
+    if (Config.XDG_RUNTIME_DIR) {
+        const xdgRuntimeDir = path.resolve(Config.XDG_RUNTIME_DIR);
         if (isUsableRuntimeBaseDir(xdgRuntimeDir)) {
             return path.join(xdgRuntimeDir, DEFAULT_RUNTIME_DIR_NAME);
         }
@@ -63,8 +65,8 @@ function getCredentialSocketPath(options: SocketPathOptions = {}) {
     if (options.socketPath) {
         return path.resolve(options.socketPath);
     }
-    if (process.env.DEXBOT_CRED_DAEMON_SOCKET) {
-        return path.resolve(process.env.DEXBOT_CRED_DAEMON_SOCKET);
+    if (Config.DEXBOT_CRED_DAEMON_SOCKET) {
+        return path.resolve(Config.DEXBOT_CRED_DAEMON_SOCKET);
     }
     return path.join(getCredentialRuntimeDir(options), DEFAULT_SOCKET_BASENAME);
 }
@@ -73,8 +75,8 @@ function getCredentialReadyFilePath(options: ReadyFilePathOptions = {}) {
     if (options.readyFilePath) {
         return path.resolve(options.readyFilePath);
     }
-    if (process.env.DEXBOT_CRED_DAEMON_READY_FILE) {
-        return path.resolve(process.env.DEXBOT_CRED_DAEMON_READY_FILE);
+    if (Config.DEXBOT_CRED_DAEMON_READY_FILE) {
+        return path.resolve(Config.DEXBOT_CRED_DAEMON_READY_FILE);
     }
     return path.join(getCredentialRuntimeDir(options), DEFAULT_READY_BASENAME);
 }
@@ -103,13 +105,13 @@ function assertPrivatePathSecurity(filePath: string, options: PrivatePathOptions
     const requireOwner = options.requireOwner !== false;
 
     if (process.platform === 'win32' && expectedType === 'socket') {
-        if (!fs.existsSync(filePath)) {
+        if (!storage.exists(filePath)) {
             throw new Error(`Missing socket path: ${filePath}`);
         }
         return null;
     }
 
-    const stat = fs.lstatSync(filePath);
+    const stat = storage.lstat(filePath);
 
     if (stat.isSymbolicLink()) {
         throw new Error(`Refusing to use symbolic link: ${filePath}`);

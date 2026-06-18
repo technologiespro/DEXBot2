@@ -14,6 +14,7 @@
 'use strict';
 
 const path = require('path');
+const { PATHS } = require('../modules/paths');
 const { KalmanTrendAnalyzer } = require('./trend_detection/kalman_trend_analyzer');
 const { generateHTML } = require('./trend_detection/kalman_chart_generator');
 const { createSource } = require('./price_sources');
@@ -70,7 +71,7 @@ async function main() {
     try {
         const srcConfig = config.source.config;
         if (config.source.type === 'market_adapter' && !srcConfig.stateDir) {
-            srcConfig.stateDir = path.join(__dirname, '..', 'market_adapter', 'state');
+            srcConfig.stateDir = PATHS.MARKET_ADAPTER.STATE_DIR;
         }
 
         const source = createSource(config.source.type, srcConfig);

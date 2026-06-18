@@ -1,29 +1,29 @@
 const path = require('path');
-const fs = require('fs');
+const { getStorage } = require('../../modules/storage');
+const storage = getStorage();
 const { BUILD_DIR } = require('../../modules/constants');
-const { resolveProjectRoot } = require('../../modules/launcher/runtime_entry');
+const { PATHS } = require('../../modules/paths');
+const { Config } = require('../../modules/config');
 
 function candidateExists(candidatePath: string) {
-  if (fs.existsSync(candidatePath)) {
+  if (storage.exists(candidatePath)) {
     return true;
   }
-  if (!path.extname(candidatePath) && fs.existsSync(`${candidatePath}.js`)) {
+  if (!path.extname(candidatePath) && storage.exists(`${candidatePath}.js`)) {
     return true;
   }
-  if (candidatePath.endsWith('.js') && fs.existsSync(candidatePath.replace(/\.js$/, '.ts'))) {
+  if (candidatePath.endsWith('.js') && storage.exists(candidatePath.replace(/\.js$/, '.ts'))) {
     return true;
   }
   return false;
 }
 
 function getDexbot2Root() {
-  if (process.env.DEXBOT2_ROOT) {
-    return path.resolve(process.env.DEXBOT2_ROOT);
+  if (Config.DEXBOT2_ROOT) {
+    return path.resolve(Config.DEXBOT2_ROOT);
   }
 
-  const DB_PARENT_DIR = path.dirname(path.dirname(__dirname));
-  const DB_PROJECT_ROOT = resolveProjectRoot(DB_PARENT_DIR);
-  const repoRoot = DB_PROJECT_ROOT;
+  const repoRoot = PATHS.PROJECT_ROOT;
   if (
     candidateExists(path.join(repoRoot, 'modules', 'order', 'index.js')) ||
     candidateExists(path.join(repoRoot, BUILD_DIR, 'modules', 'order', 'index.js'))

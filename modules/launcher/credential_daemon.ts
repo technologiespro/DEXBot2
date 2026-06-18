@@ -1,5 +1,6 @@
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('../storage');
+const storage = getStorage();
 const { spawn } = require('child_process');
 import type { StdioOptions } from 'child_process';
 const chainKeys = require('../chain_keys');
@@ -12,12 +13,12 @@ const {
 } = require('../credential_runtime');
 const { createPasswordBootstrapServer } = require('./credential_bootstrap');
 const { buildScopedChildEnv } = require('./child_env');
-const { buildRuntimeScriptArgs, resolveProjectRoot } = require('./runtime_entry');
+const { buildRuntimeScriptArgs } = require('./runtime_entry');
+const { PATHS } = require('../paths');
 const { safeUnlink } = require('../utils/fs_utils');
 const { readHeadlessPassword } = require('./headless_password');
 
 const DEFAULT_CODE_ROOT = path.resolve(__dirname, '..', '..');
-const DEFAULT_ROOT = resolveProjectRoot(DEFAULT_CODE_ROOT);
 const DEFAULT_POLL_INTERVAL_MS = 1000;
 
 function waitForExit(child: any): Promise<any> {
@@ -28,7 +29,7 @@ function waitForExit(child: any): Promise<any> {
 }
 
 function createCredentialDaemonController({
-    root = DEFAULT_ROOT,
+    root = PATHS.PROJECT_ROOT,
     codeRoot = DEFAULT_CODE_ROOT,
     socketPath = getCredentialSocketPath({ root }),
     readyFilePath = getCredentialReadyFilePath({ root }),
@@ -44,17 +45,17 @@ function createCredentialDaemonController({
     async function removeStaleDaemonFiles() {
         if (await isDaemonReady()) return;
         try {
-            if (fs.existsSync(socketPath)) {
+            if (storage.exists(socketPath)) {
                 assertPrivatePathSecurity(socketPath, { expectedType: 'socket', requiredMode: 0o600 });
-                fs.unlinkSync(socketPath);
+                storage.unlink(socketPath);
             }
         } catch (err: any) {
             throw new Error(`Insecure credential socket path: ${err.message}`);
         }
         try {
-            if (fs.existsSync(readyFilePath)) {
+            if (storage.exists(readyFilePath)) {
                 assertPrivatePathSecurity(readyFilePath, { expectedType: 'file', requiredMode: 0o600 });
-                fs.unlinkSync(readyFilePath);
+                storage.unlink(readyFilePath);
             }
         } catch (err: any) {
             throw new Error(`Insecure credential ready path: ${err.message}`);
@@ -103,7 +104,7 @@ function createCredentialDaemonController({
         // instead of a PM2-persistable env var.
         const bootstrapPathFile = path.join(path.dirname(socketPath), '.dexbot-cred-bootstrap-path');
         try {
-            fs.writeFileSync(bootstrapPathFile, bootstrap.socketPath, { mode: 0o600 });
+            storage.writeFile(bootstrapPathFile, bootstrap.socketPath, { mode: 0o600 });
         } catch (err: any) {
             bootstrap.close();
             throw new Error(
@@ -194,9 +195,9 @@ function createCredentialDaemonController({
 
 export = {
     createCredentialDaemonController,
-    DEFAULT_ROOT,
+    DEFAULT_ROOT: PATHS.PROJECT_ROOT,
     DEFAULT_POLL_INTERVAL_MS,
-    DEFAULT_READY_FILE: getCredentialReadyFilePath({ root: DEFAULT_ROOT }),
-    DEFAULT_SOCKET_PATH: getCredentialSocketPath({ root: DEFAULT_ROOT }),
+    DEFAULT_READY_FILE: getCredentialReadyFilePath({ root: PATHS.PROJECT_ROOT }),
+    DEFAULT_SOCKET_PATH: getCredentialSocketPath({ root: PATHS.PROJECT_ROOT }),
     waitForExit,
 };

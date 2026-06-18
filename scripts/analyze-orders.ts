@@ -17,14 +17,12 @@ const fs = require('fs');
 const path = require('path');
 const { formatPrice6 } = require('../modules/order/format');
 const { ORDER_TYPES, ORDER_STATES, MARKET_ADAPTER } = require('../modules/constants');
-const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
+const { PATHS } = require('../modules/paths');
 const { getWhitelistFlags } = require('../modules/market_adapter_whitelist');
 const { readJSON } = require('../modules/utils/fs_utils');
 
-const PARENT = path.dirname(__dirname);
-const ROOT = resolveProjectRoot(PARENT);
-const ORDERS_DIR = path.join(ROOT, 'profiles/orders');
-const BOTS_CONFIG = path.join(ROOT, 'profiles/bots.json');
+const ORDERS_DIR = PATHS.ORDERS_DIR;
+const BOTS_CONFIG = PATHS.PROFILES.BOTS_JSON;
 
 // Color codes for terminal output
 const colors = {

@@ -51,16 +51,18 @@
 // keys.json and daemon-policies.json from world-readable exposure.
 process.umask(0o077);
 
-const fs = require('fs');
-const path = require('path');
+const { getStorage } = require('./modules/storage');
+const storage = getStorage();
 const { createPm2AwareLogger } = require('./modules/logger');
 const DEXBot = require('./modules/dexbot_class');
 const { normalizeBotEntry } = require('./modules/dexbot_class');
 const { loadSettingsFile, resolveRawBotEntries, selectBotEntry } = require('./modules/bot_settings');
 const { setupGracefulShutdown, registerCleanup, unregisterCleanup } = require('./modules/graceful_shutdown');
 const chainKeys = require('./modules/chain_keys');
+const { getKeyStore } = require('./modules/key_store');
 const credentialPolicy = require('./modules/credential_policy');
-const launcherRuntime = require('./modules/launcher/runtime_entry');
+const { PATHS } = require('./modules/paths');
+const { Config } = require('./modules/config');
 
 // Setup graceful shutdown handlers
 setupGracefulShutdown();
@@ -69,9 +71,9 @@ setupGracefulShutdown();
 // world-readable (would indicate a prior run with a permissive umask).
 if (typeof chainKeys.checkKeysFileSecurity === 'function') chainKeys.checkKeysFileSecurity();
 // Same migration-aware check for daemon-policies.json.
-const ROOT = launcherRuntime.resolveProjectRoot(__dirname);
-if (typeof credentialPolicy.checkPolicyFileSecurity === 'function') credentialPolicy.checkPolicyFileSecurity(path.join(ROOT, 'profiles', 'daemon-policies.json'));
-const PROFILES_BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
+const ROOT = PATHS.PROJECT_ROOT;
+if (typeof credentialPolicy.checkPolicyFileSecurity === 'function') credentialPolicy.checkPolicyFileSecurity(PATHS.PROFILES.DAEMON_POLICIES_JSON);
+const PROFILES_BOTS_FILE = PATHS.PROFILES.BOTS_JSON;
 const launcherLogger = createPm2AwareLogger('bot.js');
 
 // Get bot name from args or environment
@@ -82,7 +84,7 @@ if (botNameArg && botNameArg.startsWith('--')) {
     // Strip '--' prefix if present (e.g., --mybot becomes mybot)
     botNameArg = botNameArg.substring(2);
 }
-const botNameEnv = process.env.BOT_NAME || process.env.PREFERRED_ACCOUNT;
+const botNameEnv = Config.BOT_NAME || Config.PREFERRED_ACCOUNT;
 const botName = botNameArg || botNameEnv;
 
 if (!botName) {
@@ -97,7 +99,7 @@ if (!botName) {
  * @returns {Object} The bot configuration entry. Exits process on failure.
  */
 function loadBotConfig(name: string) {
-    if (!fs.existsSync(PROFILES_BOTS_FILE)) {
+    if (!storage.exists(PROFILES_BOTS_FILE)) {
         launcherLogger.error('profiles/bots.json not found. Run: dexbot bots');
         process.exit(1);
     }
@@ -107,7 +109,7 @@ function loadBotConfig(name: string) {
         const botEntry = selectBotEntry(config, name);
 
         // Validate all profile files at startup (skip for PM2 child processes and tests)
-        if (process.env.DEXBOT_SKIP_PROFILE_VALIDATION !== '1' && !process.env.PM2_HOME) {
+        if (!Config.DEXBOT_SKIP_PROFILE_VALIDATION && !Config.PM2_HOME) {
             const { validateAllProfiles, printValidationProblems } = require('./modules/validate_profiles');
             const result = validateAllProfiles();
             const ok = printValidationProblems(result);
@@ -139,41 +141,10 @@ function loadBotConfig(name: string) {
  * @throws {Error} If both daemon and interactive authentication fail.
  */
 async function getSigningSecretForAccount(accountName: string) {
-    // Try daemon first
-    if (await chainKeys.isDaemonResponsive()) {
-        try {
-            const sessionId = await chainKeys.probeAccountInDaemon(accountName);
-            const botHmacSecret = credentialPolicy.loadBotHmacSecret(
-                accountName,
-                path.join(ROOT, 'profiles', 'daemon-policies.json'),
-                { quiet: true }
-            );
-            return chainKeys.createDaemonSigningToken(accountName, { sessionId, botHmacSecret });
-        } catch (err) {
-            // Fall back to interactive authentication if the daemon is stale or unresponsive.
-        }
-    }
-
-    // Fallback to interactive master password prompt
-    const originalLog = console.log;
+    const keyStore = getKeyStore();
     try {
-        // Suppress BitShares client logs during password prompt
-        console.log = (...args) => {
-            const msg = args.join(' ');
-            if (!msg.includes('bitshares_client') && !msg.includes('modules/')) {
-                originalLog(...args);
-            }
-        };
-
-        const masterPassword = await chainKeys.authenticate();
-
-        // Restore console before getting key
-        console.log = originalLog;
-
-        // Get the private key using master password
-        return chainKeys.getPrivateKey(accountName, masterPassword);
+        return await keyStore.resolveSigningKey(accountName);
     } catch (err: any) {
-        console.log = originalLog;
         if (err && err.message && err.message.includes('No master password set')) {
             throw err;
         }

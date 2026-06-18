@@ -23,8 +23,9 @@ const fs   = require('fs');
 const path = require('path');
 const { MARKET_ADAPTER } = require('../../modules/constants');
 const { readJSON } = require('../../modules/utils/fs_utils');
+const { PATHS } = require('../../modules/paths');
 const { roundTo } = require('../../modules/utils/math_utils');
-const DEFAULT_DATA = path.join(__dirname, '..', '..', 'market_adapter', 'data', 'lp',
+const DEFAULT_DATA = path.join(PATHS.MARKET_ADAPTER.LP_DATA_DIR,
     '1_3_5537_1_3_0', 'lp_pool_133_1h.json');
 const FALLBACK_ER_PERIOD = 781;
 function parseArgs() {

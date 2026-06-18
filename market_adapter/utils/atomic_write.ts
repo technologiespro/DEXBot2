@@ -1,22 +1,14 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const { ensureDir, safeUnlink, writeJSON } = require('../../modules/utils/fs_utils');
+const { getStorage } = require('../../modules/storage');
+const storage = getStorage();
 
+/**
+ * Write JSON atomically — delegates to the unified StorageAdapter.
+ * Subsumed by storage.writeJSON; kept as a backward-compat alias.
+ */
 function writeJsonAtomic(targetPath, data, options = {}) {
-    const dir = path.dirname(targetPath);
-    if (!fs.existsSync(dir)) {
-        ensureDir(dir);
-    }
-    const tmpPath = `${targetPath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
-    try {
-        writeJSON(tmpPath, data);
-        fs.renameSync(tmpPath, targetPath);
-    } catch (err) {
-        safeUnlink(tmpPath)
-        throw err;
-    }
+    storage.writeJSON(targetPath, data, options);
 }
 
 export = {

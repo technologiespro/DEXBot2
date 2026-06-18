@@ -5,6 +5,7 @@ const path = require('path');
 const { MARKET_ADAPTER } = require('../../modules/constants');
 const { escapeHtml, serializeJsonForScript } = require('../chart_utils');
 const { normalizeCandle } = require('../math_utils');
+const { PATHS } = require('../../modules/paths');
 const { readJSON } = require('../../modules/utils/fs_utils');
 
 function inferBaseIntervalSeconds(candles, fallback = 3600) {
@@ -24,7 +25,7 @@ function inferBaseIntervalSeconds(candles, fallback = 3600) {
     return Math.max(60, Math.round(med));
 }
 
-function loadMarketProfiles(filePath = path.join(__dirname, '..', '..', 'profiles', 'market_profiles.json')) {
+function loadMarketProfiles(filePath = PATHS.PROFILES.MARKET_PROFILES_JSON) {
     if (!filePath || !fs.existsSync(filePath)) return null;
     try {
         return readJSON(filePath);

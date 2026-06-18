@@ -1,4 +1,5 @@
-const fs = require('fs');
+const { getStorage } = require('./storage');
+const storage = getStorage();
 const { readBotsFileSync } = require('./bots_file_lock');
 const { parseJsonWithComments } = require('./order/utils/system');
 const crypto = require('crypto');
@@ -8,7 +9,7 @@ const { resolveMinCollateralIncreaseThreshold } = require('./cr_planner');
 const { writeJSON } = require('./utils/fs_utils');
 
 function loadSettingsFile(filePath: string, { silent = false, exitOnError = true }: { silent?: boolean; exitOnError?: boolean } = {}): { config: any; filePath: string } {
-    if (!fs.existsSync(filePath)) {
+    if (!storage.exists(filePath)) {
         if (!silent) {
             console.error(`${filePath} not found. Run: dexbot bots`);
         }

@@ -1,8 +1,10 @@
 'use strict';
 
-const fs = require('fs');
 const fsPromises = require('fs/promises');
+const { getStorage } = require('../../modules/storage');
+const storage = getStorage();
 const { readJSON, safeUnlink } = require('../../modules/utils/fs_utils');
+const { getProcessDiscovery } = require('../../modules/process_discovery');
 
 function loadLockInfo(lockPath: any) {
     try {
@@ -14,23 +16,14 @@ function loadLockInfo(lockPath: any) {
 }
 
 function isProcessAlive(pid: any) {
-    if (!Number.isInteger(pid) || pid <= 0) return false;
-    try {
-        process.kill(pid, 0);
-        return true;
-    } catch (_: any) {
-        return false;
-    }
+    return getProcessDiscovery().isAlive(pid);
 }
 
 function isLikelyMarketAdapterProcess(pid: any) {
-    if (!isProcessAlive(pid)) return false;
-    try {
-        const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ');
-        return cmdline.includes('node') && /market_adapter\/market_adapter\.(?:js|ts)\b/.test(cmdline);
-    } catch (_: any) {
-        return false;
-    }
+    if (!getProcessDiscovery().isAlive(pid)) return false;
+    const cmdline = getProcessDiscovery().readCmdline(pid);
+    if (!cmdline) return false;
+    return cmdline.includes('node') && /market_adapter\/market_adapter\.(?:js|ts)\b/.test(cmdline);
 }
 
 function acquireFileLockSync(lockPath: any, opts: any = {}) {
@@ -40,24 +33,24 @@ function acquireFileLockSync(lockPath: any, opts: any = {}) {
     for (let pass = 0; pass < 2; pass++) {
         let fd: number | null = null;
         try {
-            fd = fs.openSync(lockPath, 'wx');
+            fd = storage.open(lockPath, 'wx');
             const payload = {
                 pid: process.pid,
                 createdAt: new Date(now).toISOString(),
             };
-            fs.writeFileSync(fd, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+            storage.writeFile(fd, `${JSON.stringify(payload, null, 2)}\n`);
             const heartbeatMs = Math.max(30000, Math.floor(staleMs / 2));
             const heartbeat = setInterval(() => {
                 try {
                     const ts = new Date();
-                    fs.utimesSync(lockPath, ts, ts);
+                    storage.utimes(lockPath, ts, ts);
                 } catch (_: any) {}
             }, heartbeatMs);
             if (typeof heartbeat.unref === 'function') heartbeat.unref();
             return { fd, lockPath, heartbeat };
         } catch (err: any) {
             if (fd !== null) {
-                try { fs.closeSync(fd); } catch (_: any) {}
+                try { storage.close(fd); } catch (_: any) {}
             }
             if (err.code !== 'EEXIST') throw err;
 
@@ -65,7 +58,7 @@ function acquireFileLockSync(lockPath: any, opts: any = {}) {
             let stale = false;
             let stat = null;
             try {
-                stat = fs.statSync(lockPath);
+                stat = storage.stat(lockPath);
                 stale = (now - stat.mtimeMs) > staleMs;
             } catch (_: any) {
                 stale = true;
@@ -87,7 +80,7 @@ function acquireFileLockSync(lockPath: any, opts: any = {}) {
 function releaseFileLockSync(lock: any) {
     if (!lock) return;
     try { if (lock.heartbeat) clearInterval(lock.heartbeat); } catch (_: any) {}
-    try { if (typeof lock.fd === 'number') fs.closeSync(lock.fd); } catch (_: any) {}
+    try { if (typeof lock.fd === 'number') storage.close(lock.fd); } catch (_: any) {}
     if (lock.lockPath) safeUnlink(lock.lockPath)
 }
 
@@ -107,16 +100,16 @@ function acquirePathLockSync(filePath: any, opts: any = {}) {
     while (Date.now() < deadline) {
         let fd: number | null = null;
         try {
-            fd = fs.openSync(lockPath, 'wx');
-            fs.writeFileSync(fd, `${JSON.stringify({ pid: process.pid, at: Date.now() })}\n`, 'utf8');
+            fd = storage.open(lockPath, 'wx');
+            storage.writeFile(fd, `${JSON.stringify({ pid: process.pid, at: Date.now() })}\n`);
             return { fd, lockPath };
         } catch (err: any) {
             if (fd !== null) {
-                try { fs.closeSync(fd); } catch (_: any) {}
+                try { storage.close(fd); } catch (_: any) {}
             }
             if (err.code !== 'EEXIST') throw err;
             try {
-                const stat = fs.statSync(lockPath);
+                const stat = storage.stat(lockPath);
                 if (Date.now() - stat.mtimeMs > staleMs) {
                     safeUnlink(lockPath)
                     continue;

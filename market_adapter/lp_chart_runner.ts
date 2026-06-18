@@ -21,8 +21,9 @@
  * - fetch/export of LP data (`market_adapter/inputs/fetch_lp_data.js`)
  */
 
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('../modules/storage');
+const storage = getStorage();
 const { exec } = require('child_process');
 
 const { calculateAMA } = require('./core/strategies/ama');
@@ -31,11 +32,11 @@ const { generateHTML } = require('./lp_chart_core');
 const { loadStrategiesForLpChart } = require('./lp_chart_strategy_loader');
 const { findLatestLpData } = require('./utils/data_discovery');
 
-const { PROJECT_ROOT: ROOT } = require('./utils/paths');
+const { PATHS } = require('../modules/paths');
 const { ensureDir, readJSON } = require('../modules/utils/fs_utils');
-const LP_DATA_DIR = path.join(ROOT, 'market_adapter', 'data', 'lp');
-const ANALYSIS_CHARTS_DIR = path.join(ROOT, 'analysis', 'charts');
-const AMA_PROFILES_FILE = path.join(ROOT, 'profiles', 'market_profiles.json');
+const LP_DATA_DIR = PATHS.MARKET_ADAPTER.LP_DATA_DIR;
+const ANALYSIS_CHARTS_DIR = PATHS.ANALYSIS.CHARTS_DIR;
+const AMA_PROFILES_FILE = PATHS.PROFILES.MARKET_PROFILES_JSON;
 const DEFAULT_COMPARISON_COLORS = ['#26a69a', '#fb8c00', '#5c9ee6', '#ef5350'];
 const DEFAULT_COMPARISON_DASHES = ['dot', 'solid', 'dash', 'dashdot'];
 const DEFAULT_COMPARISON_STRATEGIES = Object.keys(MARKET_ADAPTER.AMAS).map((key: string, index: number) => {
@@ -213,7 +214,7 @@ function resolveLpDataFile(dataFile?: string): string {
     if (!resolved) {
         throw new Error('No LP data file found. Use --data <path> or run the fetch step first.');
     }
-    if (!fs.existsSync(resolved)) {
+    if (!storage.exists(resolved)) {
         throw new Error(`File not found: ${resolved}`);
     }
     return resolved;
@@ -314,7 +315,7 @@ function calculateMetrics(amaValues: number[], candles: LpCandleObject[]): Metri
 function writeChartHtml({ meta, candleArrays, amaResults, outFile }: ChartHtmlParams): void {
     const html = generateHTML(meta, candleArrays, amaResults);
     ensureDir(path.dirname(outFile));
-    fs.writeFileSync(outFile, html);
+    storage.writeFile(outFile, html);
 }
 
 function generateMarketLpChart(options: MarketChartOptions = {}): { dataFile: string; outFile: string; amaResults: AmaResult[]; meta: LpMeta | null; candleArrays: NormalizedLpCandle[] } {

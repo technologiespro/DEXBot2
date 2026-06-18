@@ -1,6 +1,7 @@
 const fs = require('fs/promises');
 const path = require('path');
-const { resolveProjectRoot } = require('../../modules/launcher/runtime_entry');
+const { PATHS } = require('../../modules/paths');
+const { Config } = require('../../modules/config');
 
 const bitsharesClient = require('./bitshares_client');
 const chainBroadcast = require('./chain_broadcast');
@@ -26,11 +27,9 @@ import type {
   ClawInfrastructureOptions,
 } from './types';
 
-const CI_PARENT_DIR = path.dirname(path.dirname(__dirname));
-const CI_PROJECT_ROOT = resolveProjectRoot(CI_PARENT_DIR);
-const CLAW_ROOT = path.join(CI_PROJECT_ROOT, 'claw');
-const DEFAULT_DATA_DIR = path.join(CLAW_ROOT, 'data');
-const DEFAULT_STATE_DIR = path.join(DEFAULT_DATA_DIR, 'state');
+const CLAW_ROOT = PATHS.CLAW.DIR;
+const DEFAULT_DATA_DIR = PATHS.CLAW.DATA_DIR;
+const DEFAULT_STATE_DIR = PATHS.CLAW.STATE_DIR;
 
 const { clone } = require('./utils');
 
@@ -46,7 +45,7 @@ function createRuntimeContext(options: RuntimeContextOptions = {}) {
     cwd: process.cwd(),
     logger: options.logger || console,
     name: options.name || 'claw-runtime',
-    profileRoot: options.profileRoot || process.env.DEXBOT_PROFILE_ROOT || null,
+    profileRoot: options.profileRoot || Config.DEXBOT_PROFILE_ROOT || null,
     readyFilePath: options.readyFilePath || credentialClient.DEFAULT_READY_FILE,
     socketPath: options.socketPath || credentialClient.DEFAULT_SOCKET_PATH,
     stateDir

@@ -7,7 +7,6 @@
  * Default-deny on errors: validation failures, executable timeouts, etc.
  */
 
-const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
@@ -16,8 +15,10 @@ const { isPositiveInt } = require('./order/utils/math');
 const { parseJsonWithComments } = require('./order/utils/system');
 const { FEE_PARAMETERS } = require('./constants');
 const { getCredentialReadyFilePath, assertPrivatePathSecurity } = require('./credential_runtime');
-const { resolveProjectRoot } = require('./launcher/runtime_entry');
+const { PATHS } = require('./paths');
 const Logger = require('./logger');
+const { getStorage } = require('./storage');
+const storage = getStorage();
 const { ensureDir, readJSON, safeUnlink, writeJSON } = require('./utils/fs_utils');
 
 // Module-scope logger for library-style helpers that don't own a process
@@ -25,9 +26,7 @@ const { ensureDir, readJSON, safeUnlink, writeJSON } = require('./utils/fs_utils
 // is configured, matching the rest of the codebase.
 const policyLogger = new Logger('credential-policy');
 
-const PROJECT_ROOT = resolveProjectRoot(path.dirname(__dirname));
-
-const BOTS_JSON_PATH = path.join(PROJECT_ROOT, 'profiles', 'bots.json');
+const BOTS_JSON_PATH = PATHS.PROFILES.BOTS_JSON;
 const ASSET_OBJECT_ID_PATTERN = /^1\.3\.\d+$/;
 
 const POLICY_DENIED_PREFIX = 'POLICY_DENIED: ';
@@ -177,7 +176,7 @@ function createMinimalPolicyConfig(): { accounts: Record<string, never> } {
 }
 
 function readPolicyConfigDetailed(filePath: string): { status: string; config: any; error: string | null } {
-    if (!fs.existsSync(filePath)) {
+    if (!storage.exists(filePath)) {
         return {
             status: 'missing',
             config: null,
@@ -220,14 +219,14 @@ function readPolicyConfigDetailed(filePath: string): { status: string; config: a
  * @param {string} filePath - Path to daemon-policies.json
  */
 function checkPolicyFileSecurity(filePath: string) {
-    if (!fs.existsSync(filePath)) return;
+    if (!storage.exists(filePath)) return;
     try {
         assertPrivatePathSecurity(filePath, { expectedType: 'file', requiredMode: 0o600 });
     } catch (err: any) {
-        const stat = fs.lstatSync(filePath);
+        const stat = storage.lstat(filePath);
         const mode = stat.mode & 0o777;
         if (mode === 0o644 && !stat.isSymbolicLink()) {
-            fs.chmodSync(filePath, 0o600);
+            storage.chmod(filePath, 0o600);
             policyLogger.warn(`[security] Auto-fixed ${filePath} permissions from 0o644 to 0o600. Run: chmod 600 profiles/daemon-policies.json`);
             return;
         }
@@ -245,14 +244,10 @@ function checkPolicyFileSecurity(filePath: string) {
  * @throws {Error} When the existing file is invalid or creation fails
  */
 function ensurePolicyConfig(filePath: string): PolicyConfig {
-    if (!fs.existsSync(filePath)) {
+    if (!storage.exists(filePath)) {
         try {
-            ensureDir(path.dirname(filePath));
-            fs.writeFileSync(filePath, JSON.stringify(createMinimalPolicyConfig(), null, 2), {
-                encoding: 'utf8',
-                mode: 0o600,
-                flag: 'wx',
-            });
+            storage.ensureDir(path.dirname(filePath));
+            storage.writeJSON(filePath, createMinimalPolicyConfig(), { mode: 0o600 });
         } catch (err: any) {
             if (err.code !== 'EEXIST') {
                 const wrapped = new Error(`Failed to create required policy config: ${err.message}`) as Error & { code: string };
@@ -596,8 +591,8 @@ function validatePolicyObject(policy: any): { valid: boolean; errors: string[] }
 function deriveDebtPolicyConstraints(accountName: string): Record<string, any> {
     if (!accountName) return {};
     try {
-        if (!fs.existsSync(BOTS_JSON_PATH)) return {};
-        const raw = fs.readFileSync(BOTS_JSON_PATH, 'utf8');
+        if (!storage.exists(BOTS_JSON_PATH)) return {};
+        const raw = storage.readFile(BOTS_JSON_PATH);
         const parsed = parseJsonWithComments(raw);
         const bots = Array.isArray(parsed)
             ? parsed.filter(Boolean)
@@ -1320,7 +1315,7 @@ function evaluateExecutable(exePath: string, context: PolicyContext): Promise<{ 
     return new Promise((resolve) => {
         // Check file exists and is executable
         try {
-            fs.accessSync(exePath, fs.constants.X_OK);
+            storage.access(exePath, 1);
         } catch {
             return resolve({ allow: false, reason: `executable not found or not executable: ${exePath}` });
         }
@@ -1431,24 +1426,8 @@ function loadBotHmacSecret(accountName: string, policyConfigPath: string, option
         const newSecret = crypto.randomBytes(32).toString('hex');
         config.accounts[accountName].botHmacSecret = newSecret;
 
-        // Atomic write: write to temp file with 0o600, then rename.
-        // This prevents truncated files on crash and ensures the file is
-        // never world-readable regardless of the process umask.
-        const tmpPath = `${policyConfigPath}.${process.pid}.${Date.now()}.${crypto.randomBytes(8).toString('hex')}.tmp`;
-        try {
-            const fd = fs.openSync(tmpPath, 'w', 0o600);
-            try {
-                const json = JSON.stringify(config, null, 2);
-                fs.writeSync(fd, json, 0, 'utf8');
-                fs.fsyncSync(fd);
-            } finally {
-                fs.closeSync(fd);
-            }
-            fs.renameSync(tmpPath, policyConfigPath);
-        } catch (err) {
-            safeUnlink(tmpPath)
-            throw err;
-        }
+        // Atomic write via unified StorageAdapter.
+        storage.writeJSON(policyConfigPath, config, { mode: 0o600, fsync: true });
         warn(`[policy] SECURITY: Auto-provisioned strict botHmacSecret for ${accountName} — first-time secret generation`);
 
         // Best-effort SIGHUP to the credential daemon so the new secret is
@@ -1461,13 +1440,13 @@ function loadBotHmacSecret(accountName: string, policyConfigPath: string, option
         //   - process.kill error (ESRCH=process gone, EPERM=not allowed):
         //     warn — the fs.watch safety net will still pick up the change
         try {
-            const readyFile = getCredentialReadyFilePath({ root: PROJECT_ROOT });
-            if (!fs.existsSync(readyFile)) {
+            const readyFile = getCredentialReadyFilePath({ root: PATHS.PROJECT_ROOT });
+            if (!storage.exists(readyFile)) {
                 info(`[policy] Ready file ${readyFile} not present; daemon not running, SIGHUP skipped`);
                 secret = newSecret;
                 return secret;
             }
-            const raw = fs.readFileSync(readyFile, 'utf8');
+            const raw = storage.readFile(readyFile);
             if (!raw.trim()) {
                 // File exists but is empty: daemon is mid-startup.  Don't warn —
                 // this is the expected race window between fork and ready-file write.

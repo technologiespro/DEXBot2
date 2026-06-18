@@ -21,8 +21,9 @@
  *     --out market_adapter/data/lp/<pair>/lp_pool_<poolShort>_1h.json
  */
 
-const fs   = require('fs');
 const path = require('path');
+const { getStorage } = require('../modules/storage');
+const storage = getStorage();
 const { mergeCandles } = require('./candle_utils');
 const { ensureDir, readJSON, writeJSON } = require('../modules/utils/fs_utils');
 
@@ -88,7 +89,7 @@ function run() {
 
     const [dataA, dataB] = files.map((f, i) => {
         const resolved = path.resolve(f);
-        if (!fs.existsSync(resolved)) throw new Error(`File not found: ${resolved}`);
+        if (!storage.exists(resolved)) throw new Error(`File not found: ${resolved}`);
         const parsed = readJSON(resolved);
         console.log(`  file${i + 1}: ${path.relative(process.cwd(), resolved)}  (${parsed.candles.length} candles)`);
         return parsed;
@@ -132,7 +133,7 @@ function run() {
 
     ensureDir(path.dirname(outPath));
     writeJSON(outPath, output);
-    const kb = (fs.statSync(outPath).size / 1024).toFixed(1);
+    const kb = (storage.stat(outPath).size / 1024).toFixed(1);
 
     console.log('');
     console.log(`  Saved: ${path.relative(process.cwd(), outPath)}  (${kb} KB)`);

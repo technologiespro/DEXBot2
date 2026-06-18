@@ -1,6 +1,7 @@
 /** Credential client module - connects to credential daemon for key operations */
-const fs = require('fs');
 const net = require('net');
+const { getStorage } = require('./storage');
+const storage = getStorage();
 const crypto = require('crypto');
 const { TIMING } = require('./constants');
 const {
@@ -175,8 +176,8 @@ function isCredentialDaemonReady(options: CredentialClientOptions = {}): boolean
     try {
         const readyFilePath = getReadyFilePath(options);
         const socketPath = getSocketPath(options);
-        return fs.existsSync(readyFilePath) &&
-            fs.existsSync(socketPath) &&
+        return storage.exists(readyFilePath) &&
+            storage.exists(socketPath) &&
             isPrivatePathSecure(readyFilePath, { expectedType: 'file', requiredMode: 0o600 }) &&
             isPrivatePathSecure(socketPath, { expectedType: 'socket', requiredMode: 0o600 });
     } catch {

@@ -53,17 +53,17 @@
  * ===============================================================================
  */
 
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('./storage');
+const storage = getStorage();
 const { ORDER_TYPES, ORDER_STATES } = require('./constants');
-const { resolveProjectRoot } = require('./launcher/runtime_entry');
+const { PATHS } = require('./paths');
 const AsyncLock = require('./order/async_lock');
 const { isPhantomOrder } = require('./order/utils/order');
 const Format = require('./order/format');
 const { toFiniteNumber } = Format;
 
 const { ensureDir } = require('./order/utils/system');
-const { readJSON } = require('./utils/fs_utils');
 
 const Logger = require('./logger');
 const accountOrdersLogger = new Logger('AccountOrders');
@@ -141,8 +141,8 @@ function migrateBotKeyFile(profilesDir, oldKey, newKey) {
     const oldPath = path.join(ordersDir, `${oldKey}${ext}`);
     const newPath = path.join(ordersDir, `${newKey}${ext}`);
     try {
-      if (fs.existsSync(oldPath) && !fs.existsSync(newPath)) {
-        fs.renameSync(oldPath, newPath);
+      if (storage.exists(oldPath) && !storage.exists(newPath)) {
+        storage.rename(oldPath, newPath);
       }
     } catch (_err) {
       // Best-effort migration; ignore failures
@@ -224,15 +224,13 @@ class AccountOrders {
     this.botKey = options.botKey;
 
     // Use per-bot file: {botKey}.json
-    const MODULE_DIR = path.dirname(__dirname);
-    const PROJECT_ROOT = resolveProjectRoot(MODULE_DIR);
-    const ordersDir = options.ordersDir || path.join(PROJECT_ROOT, 'profiles', 'orders');
+    const ordersDir = options.ordersDir || PATHS.ORDERS_DIR;
     this.profilesPath = options.profilesPath || path.join(ordersDir, `${this.botKey}.json`);
 
     // AsyncLock prevents concurrent read-modify-write races on file I/O
     this._persistenceLock = new AsyncLock();
 
-    this._needsBootstrapSave = !fs.existsSync(this.profilesPath);
+    this._needsBootstrapSave = !storage.exists(this.profilesPath);
     this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
     if (this._needsBootstrapSave) {
       this._persist();
@@ -257,7 +255,7 @@ class AccountOrders {
    */
   _readFile(filePath) {
     try {
-      const parsed = readJSON(filePath);
+      const parsed = storage.readJSON(filePath);
       if (typeof parsed === 'object' && parsed !== null) return parsed;
     } catch (err: any) {
       if (err?.code !== 'ENOENT' && !(err instanceof SyntaxError)) {
@@ -273,14 +271,7 @@ class AccountOrders {
    */
   _persist() {
     ensureDirExists(this.profilesPath);
-    const tmpPath = `${this.profilesPath}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}`;
-    const content = JSON.stringify(this.data, null, 2) + '\n';
-    fs.writeFileSync(tmpPath, content, 'utf8');
-    try {
-      const fd = fs.openSync(tmpPath, 'r');
-      try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-    } catch (_) {}
-    fs.renameSync(tmpPath, this.profilesPath);
+    storage.writeJSON(this.profilesPath, this.data);
   }
 
   /**

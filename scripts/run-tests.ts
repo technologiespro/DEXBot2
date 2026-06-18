@@ -1,6 +1,13 @@
 import { globSync } from 'node:fs';
 import { spawnSync } from 'child_process';
 
+// ── Intentionally uses process.env directly, NOT Config ───────────
+// This script runs BEFORE any module is loaded — Config's startup
+// snapshot doesn't apply here.  NODE_OPTIONS is read, mutated, and
+// re-read in the same function; RUN_LIVE_BITSHARES_TESTS is a
+// test-only flag with no place in a production Config object.
+// ──────────────────────────────────────────────────────────────────
+
 // Suppress Node.js circular dependency warnings across all tests.
 // NOTE: Mutating process.env here only affects child node processes spawned
 // by spawnSync below; the parent process's env is unchanged after this script

@@ -3,6 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
+const { Config } = require('../modules/config');
 
 console.log('Running chain_keys vault tests');
 
@@ -40,8 +41,10 @@ async function withTempKeysFile(runTest) {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-chain-keys-'));
     const keysFile = path.join(tempDir, 'keys.json');
     const originalKeysFile = process.env.DEXBOT_KEYS_FILE;
+    const originalConfigKeysFile = Config.DEXBOT_KEYS_FILE;
 
     process.env.DEXBOT_KEYS_FILE = keysFile;
+    Config.DEXBOT_KEYS_FILE = keysFile;
 
     try {
         await runTest(keysFile);
@@ -51,6 +54,7 @@ async function withTempKeysFile(runTest) {
         } else {
             delete process.env.DEXBOT_KEYS_FILE;
         }
+        Config.DEXBOT_KEYS_FILE = originalConfigKeysFile;
         fs.rmSync(tempDir, { recursive: true, force: true });
     }
 }

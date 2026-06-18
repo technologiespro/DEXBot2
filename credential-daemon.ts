@@ -73,6 +73,8 @@ const { TIMING, NODE_MANAGEMENT, DAEMON_ERRORS } = require('./modules/constants'
 const { readGeneralSettings } = require('./modules/general_settings');
 const { orderNodesForSettings } = require('./modules/node_health_cache');
 const credentialPolicy = require('./modules/credential_policy');
+const { getStorage } = require('./modules/storage');
+const storage = getStorage();
 let _nativeChainClient: any = null;
 let _nativeNodeList: any[] = [];
 
@@ -114,17 +116,18 @@ const { fetchBootstrapPassword } = require('./modules/launcher/credential_bootst
 const { normalizeBootstrapCredential } = require('./modules/launcher/credential_secret');
 const Logger = require('./modules/logger');
 const { ensureDir, safeUnlink } = require('./modules/utils/fs_utils');
+const { Config } = require('./modules/config');
 const daemonLogger = new Logger('credential-daemon');
 
 // Resolve project root — handles running from dist/ (compiled) vs source
-const { resolveProjectRoot } = require('./modules/launcher/runtime_entry');
-const PROJECT_ROOT = resolveProjectRoot(__dirname);
+const { PATHS } = require('./modules/paths');
+const PROJECT_ROOT = PATHS.PROJECT_ROOT;
 
 // Unix sockets are required; only Unix-like systems are supported
 
-const RUNTIME_DIR = getCredentialRuntimeDir({ root: PROJECT_ROOT });
-const SOCKET_PATH = getCredentialSocketPath({ root: PROJECT_ROOT, runtimeDir: RUNTIME_DIR });
-const READY_FILE = getCredentialReadyFilePath({ root: PROJECT_ROOT, runtimeDir: RUNTIME_DIR });
+const RUNTIME_DIR = getCredentialRuntimeDir({ root: PATHS.PROJECT_ROOT });
+const SOCKET_PATH = getCredentialSocketPath({ root: PATHS.PROJECT_ROOT, runtimeDir: RUNTIME_DIR });
+const READY_FILE = getCredentialReadyFilePath({ root: PATHS.PROJECT_ROOT, runtimeDir: RUNTIME_DIR });
 
 let vaultSecret: any = null;
 let sessionSecret: any = null;
@@ -220,15 +223,15 @@ function performAuditLogPrune() {
         }
 
         try {
-            const stat = fs.statSync(auditLogPath);
+            const stat = storage.stat(auditLogPath);
             const perFileLimit = Math.floor(TIMING.AUDIT_LOG_MAX_SIZE / (TIMING.AUDIT_LOG_MAX_FILES + 1));
             if (stat.size >= perFileLimit) {
                 for (let i = TIMING.AUDIT_LOG_MAX_FILES - 1; i >= 1; i--) {
                     const oldPath = auditLogPath + '.' + i;
                     const newPath = auditLogPath + '.' + (i + 1);
-                    try { if (fs.existsSync(oldPath)) fs.renameSync(oldPath, newPath); } catch (err: any) { debugLog('Audit log rotation rename failed', err); }
+                    try { if (storage.exists(oldPath)) storage.rename(oldPath, newPath); } catch (err: any) { debugLog('Audit log rotation rename failed', err); }
                 }
-                try { if (fs.existsSync(auditLogPath)) fs.renameSync(auditLogPath, auditLogPath + '.1'); } catch (err: any) { debugLog('Audit log rotation rename failed', err); }
+                try { if (storage.exists(auditLogPath)) storage.rename(auditLogPath, auditLogPath + '.1'); } catch (err: any) { debugLog('Audit log rotation rename failed', err); }
                 resolve();
                 return;
             }
@@ -268,11 +271,14 @@ async function resolveVaultSecret() {
     // before starting the daemon.  We read it, connect, get the secret,
     // and delete the file.  Future restarts will not find the file and
     // will fall through to interactive auth.
-    const bootstrapPathFile = process.env.DEXBOT_CRED_BOOTSTRAP_PATH_FILE;
+    const bootstrapPathFile = Config.DEXBOT_CRED_BOOTSTRAP_PATH_FILE;
     if (bootstrapPathFile) {
         try {
-            const bootstrapSocket = fs.readFileSync(bootstrapPathFile, 'utf-8').trim();
+            const bootstrapSocket = storage.readFile(bootstrapPathFile, 'utf-8').trim();
             if (bootstrapSocket) {
+                // Uses delete on process.env directly (not Config) intentionally:
+                // security cleanup — scrubs the one-shot path from the env block
+                // so /proc/self/environ doesn't leak it to child processes.
                 delete process.env.DEXBOT_CRED_BOOTSTRAP_PATH_FILE;
                 safeUnlink(bootstrapPathFile)
                 daemonLogger.log?.(`[credential-daemon] Resolving vault secret from bootstrap path file: ${bootstrapSocket}`);
@@ -290,6 +296,7 @@ async function resolveVaultSecret() {
                     '[credential-daemon] Credential daemon is locked — no bootstrap path file and no TTY. ' +
                     'Run \'node pm2\' to unlock.'
                 );
+                // delete on process.env directly (not Config) — see note above
                 delete process.env.DEXBOT_CRED_BOOTSTRAP_PATH_FILE;
                 process.exit(0);
             }
@@ -297,6 +304,7 @@ async function resolveVaultSecret() {
                 `[credential-daemon] Bootstrap path file not available (${err.message}), falling back to interactive auth.`
             );
         }
+        // delete on process.env directly (not Config) — see note above
         delete process.env.DEXBOT_CRED_BOOTSTRAP_PATH_FILE;
     }
 
@@ -305,7 +313,7 @@ async function resolveVaultSecret() {
 }
 
 function removeSecureStaleFile(filePath: string, expectedType: any) {
-    if (!fs.existsSync(filePath)) {
+    if (!storage.exists(filePath)) {
         return;
     }
 
@@ -318,7 +326,7 @@ function removeSecureStaleFile(filePath: string, expectedType: any) {
         requiredMode: 0o600,
     });
 
-    fs.unlinkSync(filePath);
+    storage.unlink(filePath);
 }
 
 async function loadCurrentPrivateKey(accountName: any) {
@@ -459,8 +467,8 @@ function getCredentialDaemonNodeRefreshIntervalMs(settings: any) {
 async function initialize() {
     try {
         // Check if profiles/keys.json exists
-        const keysPath = path.join(PROJECT_ROOT, 'profiles', 'keys.json');
-        if (!fs.existsSync(keysPath)) {
+        const keysPath = path.join(PATHS.PROJECT_ROOT, 'profiles', 'keys.json');
+        if (!storage.exists(keysPath)) {
             throw new Error('profiles/keys.json not found. Please run: tsx dexbot.ts keys');
         }
 
@@ -480,13 +488,13 @@ async function initialize() {
         }
 
         // Load policy config — auto-remediate legacy 0o644 permissions first
-        const policyConfigPath = path.join(PROJECT_ROOT, 'profiles', 'daemon-policies.json');
+        const policyConfigPath = PATHS.PROFILES.DAEMON_POLICIES_JSON;
         credentialPolicy.checkPolicyFileSecurity(policyConfigPath);
         policyConfig = credentialPolicy.loadRequiredPolicyConfig(policyConfigPath);
 
         // Set audit log path
-        const auditLogDir = path.join(PROJECT_ROOT, 'profiles', 'logs');
-        if (!fs.existsSync(auditLogDir)) {
+        const auditLogDir = PATHS.LOGS_DIR;
+        if (!storage.exists(auditLogDir)) {
             try {
                 ensureDir(auditLogDir, { mode: 0o700 });
             } catch (err: any) {
@@ -574,7 +582,7 @@ async function initialize() {
             daemonLogger.warn?.(`[credential-daemon] Could not watch policy config file ${policyConfigPath}: ${watchErr.message}. SIGHUP from bot process is now the only reload path.`);
         }
 
-        ensureCredentialRuntimeDirSync({ root: PROJECT_ROOT, runtimeDir: RUNTIME_DIR, socketPath: SOCKET_PATH, readyFilePath: READY_FILE });
+        ensureCredentialRuntimeDirSync({ root: PATHS.PROJECT_ROOT, runtimeDir: RUNTIME_DIR, socketPath: SOCKET_PATH, readyFilePath: READY_FILE });
         daemonLogger.log?.(`[credential-daemon] Runtime socket path: ${SOCKET_PATH}`);
         daemonLogger.log?.(`[credential-daemon] Ready file path: ${READY_FILE}`);
 
@@ -590,7 +598,7 @@ async function initialize() {
         server = net.createServer(handleConnection);
         server.listen(SOCKET_PATH, () => {
             try {
-                fs.chmodSync(SOCKET_PATH, 0o600);
+                storage.chmod(SOCKET_PATH, 0o600);
                 assertPrivatePathSecurity(SOCKET_PATH, { expectedType: 'socket', requiredMode: 0o600 });
             } catch (err: any) {
                 daemonLogger.error?.(`[credential-daemon] FATAL: Insecure socket permissions on ${SOCKET_PATH}: ${err.message}`);
@@ -603,12 +611,7 @@ async function initialize() {
             // Write JSON with pid so callers can send SIGHUP to trigger policy reload.
             try {
                 const readyPayload = JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() });
-                const fd = fs.openSync(READY_FILE, 'w', 0o600);
-                try {
-                    fs.writeSync(fd, readyPayload, 0, 'utf8');
-                } finally {
-                    fs.closeSync(fd);
-                }
+                storage.writeFile(READY_FILE, readyPayload, { mode: 0o600 });
                 assertPrivatePathSecurity(READY_FILE, { expectedType: 'file', requiredMode: 0o600 });
                 daemonLogger.log?.(`[credential-daemon] Ready: listening on ${SOCKET_PATH}`);
             } catch (err: any) {

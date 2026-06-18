@@ -2,6 +2,7 @@ const assert = require('assert');
 
 const chainOrders = require('../modules/chain_orders');
 const { NATIVE_CLIENT } = require('../modules/constants');
+const { setKeyStore, resetKeyStore } = require('../modules/key_store');
 
 const TTL_MS = NATIVE_CLIENT.ORDER_EVENTS.RECENT_OWN_CANCEL_TTL_MS;
 const MAX_ENTRIES = NATIVE_CLIENT.ORDER_EVENTS.RECENT_OWN_CANCEL_MAX_ENTRIES;
@@ -298,32 +299,24 @@ async function runTests() {
         const baseTime = realNow();
         const daemonOrderId = uniqueId('daemon-batch-cancel');
 
-        const credentialClientPath = require.resolve('../modules/dexbot_credential_client');
-        const originalCredentialClientCache = require.cache[credentialClientPath];
         const calls = { count: 0, operations: null, options: null };
-        require.cache[credentialClientPath] = {
-            id: credentialClientPath,
-            filename: credentialClientPath,
-            loaded: true,
-            exports: {
-                executeOperationsViaCredentialDaemon: async (_accountName, operations, options) => {
-                    calls.count += 1;
-                    calls.operations = operations;
-                    calls.options = options;
-                    return {
-                        raw: { ok: true },
-                        operation_results: [[2, true]]
-                    };
-                }
+        setKeyStore({
+            isDaemonSigningKey: () => true,
+            executeOperations: async (_accountName, operations, signingKey, _options) => {
+                calls.count += 1;
+                calls.operations = operations;
+                calls.options = { socketPath: signingKey.socketPath };
+                return {
+                    success: true,
+                    raw: { ok: true },
+                    operation_results: [[2, true]]
+                };
             }
-        } as any;
+        });
 
         try {
-            delete require.cache[require.resolve('../modules/chain_orders')];
-            const liveChainOrders = require('../modules/chain_orders');
-
             Date.now = () => baseTime;
-            const result = await liveChainOrders.executeBatch('test-account', {
+            const result = await chainOrders.executeBatch('test-account', {
                 kind: 'dexbot-daemon-signing-token',
                 accountName: 'test-account',
                 socketPath: '/tmp/test-dexbot-cred.sock',
@@ -339,20 +332,20 @@ async function runTests() {
             assert.strictEqual(calls.options.socketPath, '/tmp/test-dexbot-cred.sock', 'Daemon socket path should be passed through');
             assert.deepStrictEqual(result.operation_results, [[2, true]], 'Daemon operation results should be returned');
             assert.strictEqual(
-                liveChainOrders.wasRecentlyOwnCancelled(daemonOrderId),
+                chainOrders.wasRecentlyOwnCancelled(daemonOrderId),
                 true,
                 'Daemon batch cancel op must be recorded in recent-own-cancel buffer after successful broadcast'
             );
 
             withStubbedClock(baseTime + TTL_MS + 1, () => {
                 assert.strictEqual(
-                    liveChainOrders.wasRecentlyOwnCancelled(daemonOrderId),
+                    chainOrders.wasRecentlyOwnCancelled(daemonOrderId),
                     false,
                     'Daemon batch cancel entry should expire after TTL'
                 );
             });
         } finally {
-            require.cache[credentialClientPath] = originalCredentialClientCache;
+            resetKeyStore();
             Date.now = realNow;
         }
     }
@@ -363,27 +356,18 @@ async function runTests() {
         const baseTime = realNow();
         const failedDaemonOrderId = uniqueId('daemon-batch-fail');
 
-        const credentialClientPath = require.resolve('../modules/dexbot_credential_client');
-        const originalCredentialClientCache = require.cache[credentialClientPath];
-        require.cache[credentialClientPath] = {
-            id: credentialClientPath,
-            filename: credentialClientPath,
-            loaded: true,
-            exports: {
-                executeOperationsViaCredentialDaemon: async () => {
-                    throw new Error('simulated daemon broadcast failure');
-                }
+        setKeyStore({
+            isDaemonSigningKey: () => true,
+            executeOperations: async () => {
+                throw new Error('simulated daemon broadcast failure');
             }
-        } as any;
+        });
 
         try {
-            delete require.cache[require.resolve('../modules/chain_orders')];
-            const liveChainOrders = require('../modules/chain_orders');
-
             Date.now = () => baseTime;
             let threw = false;
             try {
-                await liveChainOrders.executeBatch('test-account', {
+                await chainOrders.executeBatch('test-account', {
                     kind: 'dexbot-daemon-signing-token',
                     accountName: 'test-account',
                     socketPath: '/tmp/test-dexbot-cred.sock'
@@ -397,12 +381,12 @@ async function runTests() {
 
             assert.strictEqual(threw, true, 'Daemon executeBatch failure should propagate');
             assert.strictEqual(
-                liveChainOrders.wasRecentlyOwnCancelled(failedDaemonOrderId),
+                chainOrders.wasRecentlyOwnCancelled(failedDaemonOrderId),
                 false,
                 'Failed daemon batch must NOT record own-cancel'
             );
         } finally {
-            require.cache[credentialClientPath] = originalCredentialClientCache;
+            resetKeyStore();
             Date.now = realNow;
         }
     }

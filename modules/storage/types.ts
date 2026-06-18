@@ -1,0 +1,78 @@
+export interface IStorageAdapter {
+  /** Read and parse a JSON file */
+  readJSON<T = any>(path: string): T;
+
+  /**
+   * Atomically write a JSON file using tmp-file + rename.
+   * Unified implementation — replaces all 5 prior atomic-write variants.
+   *
+   * Options:
+   *   - `mode`: file permissions (e.g. 0o600). When set, uses fd-level openSync with the given mode.
+   *   - `fsync`: if true, calls fsyncSync on the fd before rename for extra durability.
+   *   - `tmpPrefix`: custom temp file prefix (default: `.tmp.${pid}.${Date.now()}.${random}`)
+   */
+  writeJSON(path: string, data: any, options?: { mode?: number; fsync?: boolean; tmpPrefix?: string }): void;
+
+  /** Check if a path exists */
+  exists(path: string): boolean;
+
+  /** Ensure a directory exists (recursive mkdir) */
+  ensureDir(path: string, options?: { mode?: number }): void;
+
+  /** Delete a file; no-op if missing */
+  unlink(path: string): void;
+
+  /** Read a file as string */
+  readFile(path: string, encoding?: string): string;
+
+  /** Write a file (non-atomic; use writeJSON for structured/atomic writes) */
+  writeFile(path: string, data: string, options?: { mode?: number } | string): void;
+
+  /** Rename / move a file */
+  rename(oldPath: string, newPath: string): void;
+
+  /** Get file stats */
+  stat(path: string): { mtimeMs: number; isFile(): boolean; isDirectory(): boolean };
+
+  /** List directory contents */
+  readdir(path: string): string[];
+
+  /** Open a file descriptor */
+  open(path: string, flags: string | number, mode?: number): number;
+
+  /** Close a file descriptor */
+  close(fd: number): void;
+
+  /** Synchronous write to a file descriptor */
+  write(fd: number, buffer: string, position?: number | null, encoding?: string): void;
+
+  /** Flush a file descriptor to disk */
+  fsync(fd: number): void;
+
+  /** Change file permissions */
+  chmod(path: string, mode: number): void;
+
+  /** Resolve symlinks */
+  realpath(path: string): string;
+
+  /** Check file access */
+  access(path: string, mode?: number): void;
+
+  /** Update file timestamps */
+  utimes(path: string, atime: Date | number, mtime: Date | number): void;
+
+  /** Get file stats without following symlinks */
+  lstat(path: string): { mtimeMs: number; isFile(): boolean; isDirectory(): boolean };
+
+  /** Remove a directory (must be empty) */
+  rmdir(path: string): void;
+
+  /** Remove a file or directory tree (recursive, force) */
+  rm(path: string, options?: { recursive?: boolean; force?: boolean }): void;
+
+  /** Create a unique temporary directory */
+  mkdtemp(prefix: string): string;
+
+  /** Read the target of a symbolic link */
+  readlink(path: string): string;
+}

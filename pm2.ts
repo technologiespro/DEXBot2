@@ -87,8 +87,12 @@ const { createPasswordBootstrapServer } = require('./modules/launcher/credential
 const { parsePm2Args } = require('./modules/launcher/launch_modes');
 const { setupGracefulShutdown } = require('./modules/graceful_shutdown');
 const { UPDATER, TIMING } = require('./modules/constants');
-const { resolveProjectRoot, isDistCodeRoot, buildRuntimeScriptPath } = require('./modules/launcher/runtime_entry');
+const { PATHS } = require('./modules/paths');
+const { isDistCodeRoot, buildRuntimeScriptPath } = require('./modules/launcher/runtime_entry');
+const { getStorage } = require('./modules/storage');
+const storage = getStorage();
 const { ensureDir, safeUnlink } = require('./modules/utils/fs_utils');
+const { Config } = require('./modules/config');
 
 // Setup graceful shutdown handlers
 setupGracefulShutdown();
@@ -101,7 +105,7 @@ const PM2_COLORS = {
 };
 
 function colorPm2Output(text: string, color: string, stream: any = process.stdout): string {
-    return stream.isTTY && !process.env.NO_COLOR
+    return stream.isTTY && !Config.NO_COLOR
         ? `${color}${text}${PM2_COLORS.reset}`
         : text;
 }
@@ -115,15 +119,14 @@ function pm2Error(text: string): string {
 }
 
 const CODE_ROOT = __dirname;
-const ROOT = resolveProjectRoot(CODE_ROOT);
-const PROFILES_DIR = path.join(ROOT, 'profiles');
-const BOTS_JSON = path.join(PROFILES_DIR, 'bots.json');
-const ECOSYSTEM_FILE = path.join(PROFILES_DIR, 'ecosystem.config.js');
-const POLICY_CONFIG_FILE = path.join(PROFILES_DIR, 'daemon-policies.json');
-const LOGS_DIR = path.join(PROFILES_DIR, 'logs');
+const ROOT = PATHS.PROJECT_ROOT;
+const BOTS_JSON = PATHS.PROFILES.BOTS_JSON;
+const ECOSYSTEM_FILE = PATHS.PROFILES.ECOSYSTEM_CONFIG_JS;
+const POLICY_CONFIG_FILE = PATHS.PROFILES.DAEMON_POLICIES_JSON;
+const LOGS_DIR = PATHS.LOGS_DIR;
 const CREDENTIAL_DAEMON_APP_NAME = 'dexbot-cred';
-const CREDENTIAL_SOCKET_PATH = getCredentialSocketPath({ root: ROOT });
-const CREDENTIAL_READY_FILE = getCredentialReadyFilePath({ root: ROOT });
+const CREDENTIAL_SOCKET_PATH = getCredentialSocketPath({ root: PATHS.PROJECT_ROOT });
+const CREDENTIAL_READY_FILE = getCredentialReadyFilePath({ root: PATHS.PROJECT_ROOT });
 
 function runtimeScript(...segments: string[]) {
     return path.join(CODE_ROOT, ...segments);
@@ -195,7 +198,7 @@ function buildEcosystemApps(bots: any, { includeUpdater = true }: { includeUpdat
             name: botName,
             script: runtimeScript('bot.js'),
             args: botName,
-            cwd: ROOT,
+            cwd: PATHS.PROJECT_ROOT,
             max_memory_restart: '250M',
             watch: false,
             autorestart: true,
@@ -215,7 +218,7 @@ function buildEcosystemApps(bots: any, { includeUpdater = true }: { includeUpdat
         apps.unshift({
             name: 'dexbot-adapter',
             script: buildRuntimeScriptPath(CODE_ROOT, ['market_adapter', 'market_adapter']),
-            cwd: ROOT,
+            cwd: PATHS.PROJECT_ROOT,
             watch: false,
             autorestart: true,
             max_memory_restart: '150M',
@@ -236,7 +239,7 @@ function buildEcosystemApps(bots: any, { includeUpdater = true }: { includeUpdat
         apps.push({
             name: "dexbot-update",
             script: runtimeScript('scripts', 'update.js'),
-            cwd: ROOT,
+            cwd: PATHS.PROJECT_ROOT,
             autorestart: false,
             cron_restart: UPDATER.SCHEDULE,
             error_file: path.join(LOGS_DIR, `dexbot-update-error.log`),
@@ -253,7 +256,7 @@ function buildCredentialDaemonApp({ credentialEnv = {} }: { credentialEnv?: any 
     return {
         name: CREDENTIAL_DAEMON_APP_NAME,
         script: runtimeScript('credential-daemon.js'),
-        cwd: ROOT,
+        cwd: PATHS.PROJECT_ROOT,
         autorestart: false,
         error_file: path.join(LOGS_DIR, 'dexbot-cred-error.log'),
         out_file: path.join(LOGS_DIR, 'dexbot-cred.log'),
@@ -287,7 +290,7 @@ function generateEcosystemConfig({ botNameFilter = null, clawOnly = false, exitO
     }
 
     // Ensure logs directory exists
-    if (!fs.existsSync(LOGS_DIR)) {
+    if (!storage.exists(LOGS_DIR)) {
         ensureDir(LOGS_DIR);
     }
 
@@ -299,11 +302,11 @@ function generateEcosystemConfig({ botNameFilter = null, clawOnly = false, exitO
 module.exports = { apps: ${JSON.stringify(appsClaw, null, 2)} };
 `;
 
-            fs.writeFileSync(ECOSYSTEM_FILE, ecosystemContent);
+            storage.writeFile(ECOSYSTEM_FILE, ecosystemContent);
             return appsClaw;
         }
 
-        if (!fs.existsSync(BOTS_JSON)) {
+        if (!storage.exists(BOTS_JSON)) {
             fail('profiles/bots.json not found. Run: dexbot bots');
         }
 
@@ -321,7 +324,7 @@ module.exports = { apps: ${JSON.stringify(appsClaw, null, 2)} };
 module.exports = { apps: ${JSON.stringify(apps, null, 2)} };
 `;
 
-            fs.writeFileSync(ECOSYSTEM_FILE, ecosystemContent);
+            storage.writeFile(ECOSYSTEM_FILE, ecosystemContent);
             return apps;
         }
 
@@ -336,7 +339,7 @@ module.exports = { apps: ${JSON.stringify(apps, null, 2)} };
 module.exports = { apps: ${JSON.stringify(apps, null, 2)} };
 `;
 
-        fs.writeFileSync(ECOSYSTEM_FILE, ecosystemContent);
+        storage.writeFile(ECOSYSTEM_FILE, ecosystemContent);
         return apps;
     } catch (err: any) {
         fail(`Error reading bots.json: ${err.message}`);
@@ -347,7 +350,7 @@ async function runManagedAppsPm2Action(action: any, { regenerate = false }: { re
     if (regenerate) {
         generateEcosystemConfig({ clawOnly: false, exitOnError: false });
     }
-    if (!fs.existsSync(ECOSYSTEM_FILE)) {
+    if (!storage.exists(ECOSYSTEM_FILE)) {
         return false;
     }
     return execPM2CommandIgnoreMissing(action, ECOSYSTEM_FILE);
@@ -368,7 +371,7 @@ async function ensureCredentialDaemonPM2({ forceRefresh = false, logReuse, headl
     headless?: boolean;
     passwordFile?: string | null;
 } = {}) {
-    ensureCredentialRuntimeDirSync({ root: ROOT, socketPath: CREDENTIAL_SOCKET_PATH, readyFilePath: CREDENTIAL_READY_FILE });
+    ensureCredentialRuntimeDirSync({ root: PATHS.PROJECT_ROOT, socketPath: CREDENTIAL_SOCKET_PATH, readyFilePath: CREDENTIAL_READY_FILE });
     credentialPolicy.ensurePolicyConfig(POLICY_CONFIG_FILE);
     const daemonReady = await chainKeys.isDaemonResponsive({
         socketPath: CREDENTIAL_SOCKET_PATH,
@@ -432,7 +435,7 @@ async function main({ botNameFilter = null, clawOnly = false, headless = false, 
     passwordFile?: string | null;
 } = {}) {
     if (typeof chainKeys.checkKeysFileSecurity === 'function') chainKeys.checkKeysFileSecurity();
-    if (typeof credentialPolicy.checkPolicyFileSecurity === 'function') credentialPolicy.checkPolicyFileSecurity(path.join(ROOT, 'profiles', 'daemon-policies.json'));
+    if (typeof credentialPolicy.checkPolicyFileSecurity === 'function') credentialPolicy.checkPolicyFileSecurity(PATHS.PROFILES.DAEMON_POLICIES_JSON);
 
     console.log('='.repeat(50));
     console.log('DEXBot2 PM2 Launcher');
@@ -512,7 +515,7 @@ async function main({ botNameFilter = null, clawOnly = false, headless = false, 
 function startPM2Process(args: any, env: any = buildScopedChildEnv()) {
     return new Promise((resolve, reject) => {
         const pm2 = spawn('pm2', args, {
-            cwd: ROOT,
+            cwd: PATHS.PROJECT_ROOT,
             env,
             stdio: ['ignore', 'pipe', 'pipe'],
             detached: false,
@@ -586,7 +589,7 @@ async function startManagedRuntimePM2({ apps, bootstrap = null }: { apps?: any; 
             '.dexbot-cred-bootstrap-path'
         );
         try {
-            fs.writeFileSync(bootstrapPathFile, bootstrap.socketPath, { mode: 0o600 });
+            storage.writeFile(bootstrapPathFile, bootstrap.socketPath, { mode: 0o600 });
         } catch (err: any) {
             throw new Error(
                 `Cannot write bootstrap path file at ${bootstrapPathFile}: ${err.message}. ` +
@@ -815,9 +818,9 @@ async function stopPM2Processes(target: any) {
         // If managed apps were stopped first they'd lose key access; this order
         // ensures the daemon is the last process released.
         await execPM2CommandIgnoreMissing('stop', CREDENTIAL_DAEMON_APP_NAME);
-        if (fs.existsSync(ECOSYSTEM_FILE)) {
+        if (storage.exists(ECOSYSTEM_FILE)) {
             await runManagedAppsPm2Action('stop');
-        } else if (fs.existsSync(BOTS_JSON)) {
+        } else if (storage.exists(BOTS_JSON)) {
             try {
                 await runManagedAppsPm2Action('stop', { regenerate: true });
             } catch (err: any) {
@@ -864,9 +867,9 @@ async function deletePM2Processes(target: any) {
     if (target === 'all') {
         console.log('');
         await execPM2CommandIgnoreMissing('delete', CREDENTIAL_DAEMON_APP_NAME);
-        if (fs.existsSync(ECOSYSTEM_FILE)) {
+        if (storage.exists(ECOSYSTEM_FILE)) {
             await runManagedAppsPm2Action('delete');
-        } else if (fs.existsSync(BOTS_JSON)) {
+        } else if (storage.exists(BOTS_JSON)) {
             try {
                 await runManagedAppsPm2Action('delete', { regenerate: true });
             } catch (err: any) {

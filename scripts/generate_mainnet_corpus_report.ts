@@ -29,11 +29,8 @@ const { createReadOnlyClient } = require('../modules/bitshares-native');
 const serial = require('../modules/bitshares-native/serial');
 const ecc = require('../modules/bitshares-native/crypto/ecc');
 const { NODE_MANAGEMENT } = require('../modules/constants');
-const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
+const { PATHS } = require('../modules/paths');
 const { ensureDir, writeJSON } = require('../modules/utils/fs_utils');
-
-const PARENT = path.dirname(__dirname);
-const rootDir = resolveProjectRoot(PARENT);
 
 const argv: string[] = process.argv.slice(2);
 function flag(name: string, fallback: string | number): string | number {
@@ -46,7 +43,7 @@ const targetCount = Number(flag('--count', 50));
 const maxBlocks = Number(flag('--max-blocks', 500));
 const headOffset = Number(flag('--head-offset', 100));
 const outPath = String(flag('--out',
-    path.join(rootDir, 'profiles', 'native_validation', 'mainnet_corpus_report.json')));
+    path.join(PATHS.PROFILES.NATIVE_VALIDATION_DIR, 'mainnet_corpus_report.json')));
 
 interface TxDetail {
     blockNum: number;

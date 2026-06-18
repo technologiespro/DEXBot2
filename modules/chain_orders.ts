@@ -96,23 +96,16 @@
 const { BitShares, createAccountClient, waitForConnected, withTimeout } = require('./bitshares_client');
 const { floatToBlockchainInt, blockchainToFloat, normalizeInt, validateOrderAmountsWithinLimits } = require('./order/utils/math');
 const { FILL_PROCESSING, TIMING, NATIVE_CLIENT, DAEMON_ERRORS } = require('./constants');
-const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const Format = require('./order/format');
 const { toFiniteNumber } = Format;
 const AsyncLock = require('./order/async_lock');
 const { readInput } = require('./order/utils/system');
 const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 const chainKeys = require('./chain_keys');
-const {
-    executeOperationsViaCredentialDaemon,
-    BroadcastUncertainError,
-} = require('./dexbot_credential_client');
-const { getCredentialReadyFilePath } = require('./credential_runtime');
+const { getKeyStore } = require('./key_store');
+const { BroadcastUncertainError } = require('./dexbot_credential_client');
 
 const Logger = require('./logger');
-const { readJSON } = require('./utils/fs_utils');
 const chainOrdersLogger = new Logger('ChainOrders');
 const { ORDER_EVENTS } = NATIVE_CLIENT;
 
@@ -462,7 +455,7 @@ async function selectAccount() {
  * @returns {boolean} True if value is a daemon signing token
  */
 function isDaemonSigningToken(value) {
-    return chainKeys.isDaemonSigningToken(value);
+    return getKeyStore().isDaemonSigningKey(value);
 }
 
 /**
@@ -473,82 +466,7 @@ function isDaemonSigningToken(value) {
  * @returns {Promise<import('./types').BroadcastResult>} Broadcast result
  */
 async function executeViaDaemonToken(accountName, signingToken, operations) {
-    try {
-        const result = await executeOperationsViaCredentialDaemon(accountName, operations, {
-            socketPath: signingToken.socketPath,
-            sessionId: signingToken.sessionId || null,
-            botHmacSecret: signingToken.botHmacSecret || null,
-            requestType: 'broadcast',
-            batchId: signingToken.batchId || null,
-        });
-        return {
-            success: true,
-            raw: result.raw || null,
-            operation_results: Array.isArray(result.operation_results) ? result.operation_results : [],
-        };
-    } catch (err: any) {
-        // BroadcastUncertainError means the chain status is unknown. The
-        // recovery path in dexbot_class.ts reads the chain directly, so we
-        // MUST NOT retry — a retry could double-publish.
-        if (err instanceof BroadcastUncertainError) {
-            throw err;
-        }
-        if (err.message && (err.message.includes(DAEMON_ERRORS.SESSION_EXPIRED) || err.message.includes(DAEMON_ERRORS.SOURCE_AUTH_DENIED))) {
-            const isSourceAuthError = err.message.includes(DAEMON_ERRORS.SOURCE_AUTH_DENIED);
-            chainOrdersLogger.warn(
-                isSourceAuthError
-                    ? `Source auth denied for ${accountName}, renegotiating session and reloading daemon policy...`
-                    : `Session expired for ${accountName}, automatically renegotiating...`
-            );
-
-            // For HMAC/source-auth failures, send SIGHUP so the daemon reloads
-            // policyConfig from disk. This fixes stale botHmacSecret entries
-            // when the daemon was started before daemon-policies.json was fully
-            // populated.
-            if (isSourceAuthError) {
-                try {
-                    const PARENT = path.dirname(__dirname);
-                    const ROOT = resolveProjectRoot(PARENT);
-                    const readyFile = getCredentialReadyFilePath({ root: ROOT });
-                    if (fs.existsSync(readyFile)) {
-                        const daemonInfo = readJSON(readyFile);
-                        if (daemonInfo && typeof daemonInfo.pid === 'number') {
-                            process.kill(daemonInfo.pid, 'SIGHUP');
-                            chainOrdersLogger.log(`[credential-daemon] Sent SIGHUP (pid ${daemonInfo.pid}) to reload policy config`);
-                        }
-                    }
-                } catch (sigErr: any) {
-                    chainOrdersLogger.warn(`[credential-daemon] Could not send SIGHUP: ${sigErr.message}`);
-                }
-            }
-
-            // Probe daemon for a new session
-            const newSessionId = await chainKeys.probeAccountInDaemon(accountName);
-            // Update token in-place so future calls use the fresh session
-            signingToken.sessionId = newSessionId;
-
-            // Small delay so daemon's SIGHUP handler finishes before we retry
-            if (isSourceAuthError) {
-                await new Promise(r => setTimeout(r, 500));
-            }
-
-            // Retry exact same operation with new session
-            const retryResult = await executeOperationsViaCredentialDaemon(accountName, operations, {
-                socketPath: signingToken.socketPath,
-                sessionId: signingToken.sessionId,
-                botHmacSecret: signingToken.botHmacSecret || null,
-                requestType: 'broadcast',
-                batchId: signingToken.batchId || null,
-            });
-
-            return {
-                success: true,
-                raw: retryResult.raw || null,
-                operation_results: Array.isArray(retryResult.operation_results) ? retryResult.operation_results : [],
-            };
-        }
-        throw err;
-    }
+    return getKeyStore().executeOperations(accountName, operations, signingToken);
 }
 
 /**

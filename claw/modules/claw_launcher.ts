@@ -1,12 +1,14 @@
 'use strict';
 
-const fs = require('fs');
+const { getStorage } = require('../../modules/storage');
+const storage = getStorage();
 const path = require('path');
 const { spawn } = require('child_process');
+const { PATHS, getRecalculateTriggerFile } = require('../../modules/paths');
 const chainKeys = require('../../modules/chain_keys');
 const { loadSettingsFile, resolveRawBotEntries, saveSettingsFile, normalizeBotEntries } = require('../../modules/bot_settings');
 const { normalizeMode, detectMode, setPreferredMode, describeModeChoice } = require('./launcher_mode_detector');
-const { normalizeRoot, normalizeProfileDir, resolveRuntimeScript } = require('./launcher_paths');
+const { normalizeRoot, resolveRuntimeScript } = require('./launcher_paths');
 
 const {
   stopPM2Processes,
@@ -88,8 +90,7 @@ async function launcherDrystart(botName: string | null, options: Record<string, 
  * @returns {Promise<Object>} { reset: true, targets: [...] }
  */
 async function launcherReset(botName: string | null, options: Record<string, any> = {}) {
-  const PROFILES_DIR = normalizeProfileDir(options);
-  const PROFILES_BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
+  const PROFILES_BOTS_FILE = PATHS.PROFILES.BOTS_JSON;
 
   const { config } = loadSettingsFile(PROFILES_BOTS_FILE);
   const entries = normalizeBotEntries(resolveRawBotEntries(config));
@@ -104,8 +105,8 @@ async function launcherReset(botName: string | null, options: Record<string, any
 
   for (const bot of targets) {
     try {
-      const triggerFile = path.join(PROFILES_DIR, `recalculate.${bot.botKey}.trigger`);
-      fs.writeFileSync(triggerFile, new Date().toISOString());
+      const triggerFile = getRecalculateTriggerFile(bot.botKey);
+      storage.writeFile(triggerFile, new Date().toISOString());
       triggered.push({
         botName: bot.name,
         triggerFile: path.basename(triggerFile),
@@ -128,8 +129,7 @@ async function launcherReset(botName: string | null, options: Record<string, any
  * @returns {Promise<Object>} { disabled: true, targets: [...] } or { disabled: false, reason: '...' }
  */
 async function launcherDisable(botName: string | null, options: Record<string, any> = {}) {
-  const PROFILES_DIR = normalizeProfileDir(options);
-  const PROFILES_BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
+  const PROFILES_BOTS_FILE = PATHS.PROFILES.BOTS_JSON;
 
   const { config, filePath } = loadSettingsFile(PROFILES_BOTS_FILE);
   const entries = resolveRawBotEntries(config);
@@ -182,8 +182,7 @@ async function launcherDisable(botName: string | null, options: Record<string, a
  */
 async function launcherPm2Start(botName: string | null, options: Record<string, any> = {}) {
   const ROOT = normalizeRoot(options);
-  const PROFILES_DIR = normalizeProfileDir(options);
-  const PROFILES_BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
+  const PROFILES_BOTS_FILE = PATHS.PROFILES.BOTS_JSON;
 
   // Validate bot configuration first (better error message)
   const { config } = loadSettingsFile(PROFILES_BOTS_FILE);

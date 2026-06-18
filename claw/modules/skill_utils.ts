@@ -1,11 +1,9 @@
 const path = require('path');
 const fs = require('fs/promises');
-const { resolveProjectRoot } = require('../../modules/launcher/runtime_entry');
+const { PATHS } = require('../../modules/paths');
 
 export function normalizeRepoRoot(variableName: string, repoRoot?: string) {
-  const PARENT_DIR = path.dirname(path.dirname(__dirname));
-  const PROJECT_ROOT = resolveProjectRoot(PARENT_DIR);
-  return path.resolve(repoRoot || path.join(PROJECT_ROOT, 'claw'));
+  return path.resolve(repoRoot || PATHS.CLAW.DIR);
 }
 
 export function normalizeProfileRoot(options: Record<string, any> = {}, repoRoot: string) {

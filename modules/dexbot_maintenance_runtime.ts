@@ -5,9 +5,11 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { BitShares } = require('./bitshares_client');
 const chainOrders = require('./chain_orders');
+const { Config, hasOpenOrdersSyncLoopMsSet, getOpenOrdersSyncLoopMs } = require('./config');
 const Grid = require('./order/grid');
 const { ORDER_STATES, ORDER_TYPES, TIMING, GRID_LIMITS, FEE_PARAMETERS, BTS_PRECISION, NATIVE_CLIENT } = require('./constants');
-const { resolveProjectRoot, buildRuntimeScriptPath, isDistCodeRoot } = require('./launcher/runtime_entry');
+const { PATHS } = require('./paths');
+const { buildRuntimeScriptPath, isDistCodeRoot } = require('./launcher/runtime_entry');
 const { applyGridDivergenceCorrections, loadAmaCenterSnapshot } = require('./order/utils/system');
 const { isPm2Runtime } = require('./order/logger');
 const { getSharedMarketAdapterRuntime } = require('./launcher/market_adapter_runtime');
@@ -21,14 +23,15 @@ const { cloneWeightDistribution, calculateOrderCreationFees, calculateSwapInAmou
 const { updateDynamicGridSnapshotSync } = require('../market_adapter/utils/dynamic_grid_snapshot');
 const { reconcileGridOrders } = require('./order/grid_reconcile');
 const { formatUnmatchedChainOrder, getSideBudget } = require('./order/utils/order');
+const { getStorage } = require('./storage');
+const storage = getStorage();
 const { ensureDir, safeUnlink } = require('./utils/fs_utils');
 const fundRegistry = require('./fund_registry');
 
 const CODE_ROOT = path.join(__dirname, '..');
-const ROOT = resolveProjectRoot(CODE_ROOT);
-const PROFILES_DIR = path.join(ROOT, 'profiles');
-const PROFILES_BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
-const LOGS_DIR = path.join(PROFILES_DIR, 'logs');
+const PROFILES_DIR = PATHS.PROFILES_DIR;
+const PROFILES_BOTS_FILE = PATHS.PROFILES.BOTS_JSON;
+const LOGS_DIR = PATHS.LOGS_DIR;
 const MARKET_ADAPTER_APP_NAME = 'dexbot-adapter';
 const MARKET_ADAPTER_SCRIPT = buildRuntimeScriptPath(CODE_ROOT, ['market_adapter', 'market_adapter']);
 const MARKET_ADAPTER_ERROR_FILE = path.join(LOGS_DIR, 'dexbot-adapter-error.log');
@@ -242,7 +245,7 @@ async function maybeRunTargetedDriftReconciliation(bot, context) {
  * @returns {import('./types').BotsConfigSnapshot} Snapshot with exists flag, fingerprint, active bots list, and adapter requirement
  */
 function loadBotsConfigSnapshot() {
-    if (!fs.existsSync(PROFILES_BOTS_FILE)) {
+    if (!storage.exists(PROFILES_BOTS_FILE)) {
         return {
             exists: false,
             fingerprint: null,
@@ -251,7 +254,7 @@ function loadBotsConfigSnapshot() {
         };
     }
 
-    const raw = fs.readFileSync(PROFILES_BOTS_FILE, 'utf8');
+    const raw = storage.readFile(PROFILES_BOTS_FILE);
     if (!raw || !raw.trim()) {
         return {
             exists: false,
@@ -348,7 +351,7 @@ async function getPm2ProcessNames() {
  * @returns {Promise<void>}
  */
 async function startMarketAdapterPm2() {
-    if (!fs.existsSync(LOGS_DIR)) {
+    if (!storage.exists(LOGS_DIR)) {
         ensureDir(LOGS_DIR);
     }
 
@@ -411,7 +414,7 @@ async function syncMarketAdapterOnPeriodicConfigCheck(bot, context = 'periodic')
         }
 
         if (!isPm2Runtime()) {
-            const runtime = getSharedMarketAdapterRuntime({ root: ROOT });
+            const runtime = getSharedMarketAdapterRuntime({ root: PATHS.PROJECT_ROOT });
             const botId = String(bot.config?.botKey || bot.config?.name || bot.config?.preferredAccount || bot.config?.assetA || 'dexbot');
             const botNeedsMarketAdapter = !!snapshot.exists && runtimeConfigNeedsMarketAdapter(snapshot, bot.config);
             const required = !!snapshot.needsMarketAdapter || botNeedsMarketAdapter;
@@ -626,7 +629,7 @@ function readTriggerMetadata(triggerFile) {
     };
 
     try {
-        const raw = fs.readFileSync(triggerFile, 'utf8').trim();
+        const raw = storage.readFile(triggerFile).trim();
         if (!raw) {
             // An empty trigger is the legacy/manual CLI reset signal.
             return manualTriggerMetadata();
@@ -698,7 +701,7 @@ function promoteAmaCenterSnapshotForGridReset(botKey) {
     // Full grid resets rebuild from the latest AMA center. The active grid
     // baseline is promoted to that value before recalculation, while the raw
     // AMA output remains intact in amaCenterPrice for diagnostics.
-    const snapshotPath = path.join(PROFILES_DIR, 'orders', `${botKey}.dynamicgrid.json`);
+    const snapshotPath = path.join(PATHS.ORDERS_DIR, `${botKey}.dynamicgrid.json`);
     try {
         const result = updateDynamicGridSnapshotSync(snapshotPath, (snapshot) => {
             const amaCenterPrice = Number(snapshot?.amaCenterPrice);
@@ -737,7 +740,7 @@ function updateBotGridResetMetadata(botKey, options: { resetAt?: string; resetSo
 
     const resetAt = options.resetAt || new Date().toISOString();
     const resetSource = options.resetSource || 'dexbot_grid_resync';
-    const snapshotPath = path.join(PROFILES_DIR, 'orders', `${botKey}.dynamicgrid.json`);
+    const snapshotPath = path.join(PATHS.ORDERS_DIR, `${botKey}.dynamicgrid.json`);
 
     try {
         const result = updateDynamicGridSnapshotSync(snapshotPath, (snapshot) => {
@@ -802,7 +805,7 @@ function performGridResync(bot, options: {
     return (async () => {
         try {
             try {
-                const content = fs.readFileSync(PROFILES_BOTS_FILE, 'utf8');
+                const content = storage.readFile(PROFILES_BOTS_FILE);
                 const allBotsConfig = parseJsonWithComments(content).bots || [];
                 const myName = self.config.name;
                 const updatedBot = allBotsConfig.find(b => b.name === myName);
@@ -870,7 +873,7 @@ function performGridResync(bot, options: {
  * @returns {Promise<boolean>} True if reset was handled successfully
  */
 async function handlePendingTriggerReset(bot) {
-    if (!fs.existsSync(bot.triggerFile)) {
+    if (!storage.exists(bot.triggerFile)) {
         return false;
     }
 
@@ -912,7 +915,7 @@ async function setupTriggerFileDetection(bot) {
                 if (bot._shuttingDown) return;
 
                 if (filename === path.basename(bot.triggerFile)) {
-                    if ((eventType === 'rename' || eventType === 'change') && fs.existsSync(bot.triggerFile)) {
+                    if ((eventType === 'rename' || eventType === 'change') && storage.exists(bot.triggerFile)) {
                         if (bot._triggerDebounceTimer) clearTimeout(bot._triggerDebounceTimer);
                         bot._triggerDebounceTimer = setTimeout(() => {
                             bot._triggerDebounceTimer = null;
@@ -976,16 +979,15 @@ function isOpenOrdersSyncLoopEnabled(bot) {
 function startOpenOrdersSyncLoop(bot) {
     if (bot._mainLoopPromise) return;
 
-    const hasPreferredEnvLoopDelay = Object.prototype.hasOwnProperty.call(process.env, 'OPEN_ORDERS_SYNC_LOOP_MS');
-    const loopDelayRaw = hasPreferredEnvLoopDelay ? process.env.OPEN_ORDERS_SYNC_LOOP_MS : undefined;
-    const hasEnvLoopDelay = loopDelayRaw !== undefined;
-    const configuredLoopDelayMs = hasEnvLoopDelay ? Number(loopDelayRaw) : Number(TIMING.RUN_LOOP_DEFAULT_MS);
+    const hasEnvLoopDelay = hasOpenOrdersSyncLoopMsSet();
+    const loopDelayRaw = getOpenOrdersSyncLoopMs();
+    const configuredLoopDelayMs = hasEnvLoopDelay && loopDelayRaw !== undefined ? loopDelayRaw : Number(TIMING.RUN_LOOP_DEFAULT_MS);
     const loopDelayMs = Number.isFinite(configuredLoopDelayMs) && configuredLoopDelayMs > 0
         ? configuredLoopDelayMs
         : Number(TIMING.RUN_LOOP_DEFAULT_MS);
 
     if (hasEnvLoopDelay && loopDelayMs !== configuredLoopDelayMs) {
-        bot._warn(`Invalid OPEN_ORDERS_SYNC_LOOP_MS='${loopDelayRaw}'. Falling back to default ${TIMING.RUN_LOOP_DEFAULT_MS}ms.`);
+        bot._warn(`Invalid OPEN_ORDERS_SYNC_LOOP_MS='${Config._OPEN_ORDERS_SYNC_LOOP_MS_RAW}'. Falling back to default ${TIMING.RUN_LOOP_DEFAULT_MS}ms.`);
     }
 
     bot._mainLoopActive = true;
@@ -1194,7 +1196,7 @@ async function releaseMarketAdapterRuntime(bot, botId, context = 'shutdown') {
         return { released: false, mode: 'direct', reason: 'missing-bot-id' };
     }
 
-    const runtime = getSharedMarketAdapterRuntime({ root: ROOT });
+    const runtime = getSharedMarketAdapterRuntime({ root: PATHS.PROJECT_ROOT });
     const result = await runtime.releaseBot(botId);
     return {
         released: true,
@@ -1320,7 +1322,7 @@ function scheduleDeferredGridResync(ctx, options = {}) {
 
     const dustDelayMs = getPendingDustDelayMs(ctx);
     const idleDelayMs = getMaintenanceIdleDelayMs(ctx);
-    const triggerFileWasPresent = !!(ctx.triggerFile && fs.existsSync(ctx.triggerFile));
+    const triggerFileWasPresent = !!(ctx.triggerFile && storage.exists(ctx.triggerFile));
     const settleDelayMs = Number.isFinite(TIMING.BLOCKCHAIN_SETTLE_DELAY_MS)
         ? Math.max(0, TIMING.BLOCKCHAIN_SETTLE_DELAY_MS)
         : 6_000;
@@ -1333,7 +1335,7 @@ function scheduleDeferredGridResync(ctx, options = {}) {
     ctx._deferredGridResyncTimer = setTimeout(() => {
         ctx._deferredGridResyncTimer = null;
         if (ctx._shuttingDown) return;
-        if (triggerFileWasPresent && !fs.existsSync(ctx.triggerFile)) return;
+        if (triggerFileWasPresent && !storage.exists(ctx.triggerFile)) return;
 
         ctx.manager._fillProcessingLock.acquire(async () => {
             const ok = await ctx._performGridResync(options);

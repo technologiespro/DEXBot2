@@ -1,7 +1,7 @@
 'use strict';
 
-const fs = require('fs');
-const { isPidAlive } = require('./bot_supervisor');
+const { getProcessDiscovery } = require('../process_discovery');
+const { Config } = require('../config');
 
 const STATUS_COLORS = {
     reset: '\x1b[0m',
@@ -13,7 +13,7 @@ const STATUS_COLORS = {
 };
 
 function colorStatus(text: string, color: string, stream: any = process.stdout): string {
-    return stream.isTTY && !process.env.NO_COLOR ? `${color}${text}${STATUS_COLORS.reset}` : text;
+    return stream.isTTY && !Config.NO_COLOR ? `${color}${text}${STATUS_COLORS.reset}` : text;
 }
 
 function statusTitle(text) {
@@ -41,106 +41,37 @@ function statusError(text) {
 }
 
 function readProcStat(pid) {
-    try {
-        const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
-        const lastParen = stat.lastIndexOf(')');
-        if (lastParen === -1) return null;
-        const fields = stat.slice(lastParen + 2).split(/\s+/);
-        return {
-            utime: parseInt(fields[11], 10) || 0,
-            stime: parseInt(fields[12], 10) || 0,
-            starttime: parseInt(fields[19], 10) || 0,
-        };
-    } catch {
-        return null;
-    }
+    return getProcessDiscovery().readStat(pid);
 }
 
 function readProcMemMB(pid) {
-    try {
-        const status = fs.readFileSync(`/proc/${pid}/status`, 'utf8');
-        const match = status.match(/^VmRSS:\s+(\d+)\s+kB/m);
-        if (match) {
-            return `${Math.round(parseInt(match[1], 10) / 1024)}MB`;
-        }
-    } catch {}
-    return '-';
+    return getProcessDiscovery().readMemMB(pid);
 }
 
 function readProcCpuTotal(pid) {
-    try {
-        const stat = readProcStat(pid);
-        if (!stat) return null;
-        return (stat.utime + stat.stime) / 100;
-    } catch {
-        return null;
-    }
+    const stat = readProcStat(pid);
+    if (!stat) return null;
+    return (stat.utime + stat.stime) / 100;
 }
 
 function readProcCpuTime(pid) {
-    try {
-        const totalSec = readProcCpuTotal(pid);
-        if (totalSec == null) return '-';
-        if (totalSec < 60) return `${totalSec.toFixed(1)}s`;
-        const m = Math.floor(totalSec / 60);
-        const s = Math.floor(totalSec % 60);
-        if (m < 60) return `${m}m ${s}s`;
-        const h = Math.floor(m / 60);
-        return `${h}h ${m % 60}m`;
-    } catch {
-        return '-';
-    }
+    return getProcessDiscovery().readCpuTime(pid);
 }
 
 async function readProcCpuPercent(pid, samples = 2, intervalMs = 400) {
-    try {
-        const snap = () => {
-            const stat = readProcStat(pid);
-            if (!stat) return null;
-            return { pidCpu: stat.utime + stat.stime, ts: Date.now() };
-        };
-        let prev = snap();
-        if (!prev) return '-';
-        for (let i = 0; i < samples - 1; i++) {
-            await new Promise(r => setTimeout(r, intervalMs));
-        }
-        const cur = snap();
-        if (!cur) return '-';
-        const dt = (cur.ts - prev.ts) / 1000;
-        const dcpu = (cur.pidCpu - prev.pidCpu) / 100;
-        if (dt <= 0) return '-';
-        const pct = (dcpu / dt) * 100;
-        return `${pct.toFixed(1)}%`;
-    } catch {
-        return '-';
-    }
+    return getProcessDiscovery().readCpuPercent(pid, samples, intervalMs);
 }
 
 function readProcCmdline(pid) {
-    return readProcArgs(pid).join(' ');
+    return getProcessDiscovery().readCmdline(pid);
 }
 
 function readProcArgs(pid) {
-    if (!isPidAlive(pid)) return [];
-    try {
-        return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
-    } catch {
-        return [];
-    }
+    return getProcessDiscovery().readArgs(pid);
 }
 
 function readProcUptime(pid) {
-    try {
-        const stat = readProcStat(pid);
-        if (!stat) return '-';
-        const uptimeSec = parseFloat(fs.readFileSync('/proc/uptime', 'utf8').split(/\s+/)[0]);
-        const clkTck = 100;
-        const processStartSec = stat.starttime / clkTck;
-        const uptimeMs = (uptimeSec - processStartSec) * 1000;
-        return formatControlUptime(uptimeMs);
-    } catch {
-        return '-';
-    }
+    return getProcessDiscovery().readUptime(pid);
 }
 
 function formatControlUptime(ms) {

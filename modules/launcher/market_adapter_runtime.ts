@@ -1,17 +1,17 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('../storage');
+const storage = getStorage();
 const { spawn } = require('child_process');
 const { buildScopedChildEnv } = require('./child_env');
 const { MARKET_ADAPTER } = require('../constants');
-const { resolveProjectRoot, buildRuntimeScriptPath } = require('./runtime_entry');
+const { buildRuntimeScriptPath } = require('./runtime_entry');
+const { PATHS } = require('../paths');
 const { readJSON, safeUnlink } = require('../utils/fs_utils');
+const { getProcessDiscovery } = require('../process_discovery');
 
 const DEFAULT_CODE_ROOT = path.resolve(__dirname, '..', '..');
-const DEFAULT_ROOT = resolveProjectRoot(DEFAULT_CODE_ROOT);
-const DEFAULT_STATE_DIR = path.join(DEFAULT_ROOT, 'market_adapter', 'state');
-const DEFAULT_LOCK_FILE = path.join(DEFAULT_STATE_DIR, 'market_adapter.lock');
 const DEFAULT_SCRIPT = buildRuntimeScriptPath(DEFAULT_CODE_ROOT, ['market_adapter', 'market_adapter']);
 const DEFAULT_STALE_LOCK_MS = (
     MARKET_ADAPTER.RUNTIME_DEFAULTS.pollSeconds * 1000 +
@@ -28,34 +28,25 @@ function loadLockInfo(lockPath: string): any {
 }
 
 function isProcessAlive(pid: number): boolean {
-    if (!Number.isInteger(pid) || pid <= 0) return false;
-    try {
-        process.kill(pid, 0);
-        return true;
-    } catch (_: any) {
-        return false;
-    }
+    return getProcessDiscovery().isAlive(pid);
 }
 
 function isLikelyMarketAdapterProcess(pid: number): boolean {
     if (!Number.isInteger(pid) || pid <= 0) return false;
-    if (!isProcessAlive(pid)) return false;
-    try {
-        const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ');
-        return cmdline.includes('node') && /market_adapter\/market_adapter\.(?:js|ts)\b/.test(cmdline);
-    } catch (_: any) {
-        return false;
-    }
+    if (!getProcessDiscovery().isAlive(pid)) return false;
+    const cmdline = getProcessDiscovery().readCmdline(pid);
+    if (!cmdline) return false;
+    return cmdline.includes('node') && /market_adapter\/market_adapter\.(?:js|ts)\b/.test(cmdline);
 }
 
-function isLockStale(lockPath = DEFAULT_LOCK_FILE, staleAfterMs = DEFAULT_STALE_LOCK_MS, isAdapterProcess = isLikelyMarketAdapterProcess): boolean {
+function isLockStale(lockPath = PATHS.MARKET_ADAPTER.LOCK_FILE, staleAfterMs = DEFAULT_STALE_LOCK_MS, isAdapterProcess = isLikelyMarketAdapterProcess): boolean {
     try {
         const info = loadLockInfo(lockPath);
         const pid = Number(info.pid);
         // Runtime startup may remove malformed locks so a new owned process can acquire the file.
         if (!Number.isInteger(pid) || pid <= 0) return true;
         if (!isAdapterProcess(pid)) return true;
-        const mtimeMs = fs.statSync(lockPath).mtimeMs;
+        const mtimeMs = storage.stat(lockPath).mtimeMs;
         if ((Date.now() - mtimeMs) > staleAfterMs) {
             return !isAdapterProcess(pid);
         }
@@ -65,7 +56,7 @@ function isLockStale(lockPath = DEFAULT_LOCK_FILE, staleAfterMs = DEFAULT_STALE_
     }
 }
 
-function isLikelyAdapterRunning(lockPath = DEFAULT_LOCK_FILE) {
+function isLikelyAdapterRunning(lockPath = PATHS.MARKET_ADAPTER.LOCK_FILE) {
     try {
         const info = loadLockInfo(lockPath);
         const pid = Number(info.pid);
@@ -89,9 +80,9 @@ function waitForChildExit(child: any): Promise<any> {
 }
 
 function createMarketAdapterRuntime({
-    root = DEFAULT_ROOT,
+    root = PATHS.PROJECT_ROOT,
     script = DEFAULT_SCRIPT,
-    lockFile = DEFAULT_LOCK_FILE,
+    lockFile = PATHS.MARKET_ADAPTER.LOCK_FILE,
     spawnFn = spawn,
     buildEnv = buildScopedChildEnv,
 } = {}) {

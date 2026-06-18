@@ -1,7 +1,8 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('./storage');
+const storage = getStorage();
 const { BitShares, waitForConnected } = require('./bitshares_client');
 const chainOrders = require('./chain_orders');
 const { blockchainToFloat, floatToBlockchainInt, resolveConfigValue } = require('./order/utils/math');
@@ -18,14 +19,12 @@ const {
 } = require('./cr_planner');
 const { FEE_PARAMETERS, DEFAULT_TARGET_CR } = require('./constants');
 const { roundToDecimals } = require('./utils/math_utils');
-const { resolveProjectRoot } = require('./launcher/runtime_entry');
+const { PATHS } = require('./paths');
 const { readJSON } = require('./utils/fs_utils');
 
 const CREDIT_FEE_RATE_DENOM = 1_000_000;
 const ZERO_ASSET_ID = '1.3.0';
-const MODULE_DIR = path.dirname(__dirname);
-const PROJECT_ROOT = resolveProjectRoot(MODULE_DIR);
-const DEFAULT_STATE_DIR = path.join(PROJECT_ROOT, 'profiles', 'credit_runtime');
+const DEFAULT_STATE_DIR = PATHS.CREDIT_RUNTIME_DIR;
 const GRAPHENE_COLLATERAL_RATIO_DENOM = FEE_PARAMETERS.GRAPHENE_COLLATERAL_RATIO_DENOM;
 
 const { ensureDir: ensureDirSync } = require('./order/utils/system');
@@ -388,7 +387,7 @@ class CreditRuntime {
         }
 
         ensureDirSync(this.stateDir);
-        if (!fs.existsSync(this.statePath)) {
+        if (!storage.exists(this.statePath)) {
             this.state = this._stateWithDefaults();
             this._loaded = true;
             return this.state;

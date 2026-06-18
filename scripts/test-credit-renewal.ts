@@ -7,7 +7,7 @@ const path = require('path');
 const CreditRuntime = require('../modules/credit_runtime');
 const { disconnectClient, waitForConnected } = require('../modules/bitshares_client');
 const chainOrders = require('../modules/chain_orders');
-const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
+const { PATHS } = require('../modules/paths');
 const { loadSettingsFile, normalizeBotEntries, resolveRawBotEntries } = require('../modules/bot_settings');
 const { blockchainToFloat } = require('../modules/order/utils/math');
 
@@ -91,9 +91,7 @@ Options:
 }
 
 function loadBot(botName) {
-  const PARENT = path.dirname(__dirname);
-  const ROOT = resolveProjectRoot(PARENT);
-  const botsPath = path.join(ROOT, 'profiles', 'bots.json');
+  const botsPath = PATHS.PROFILES.BOTS_JSON;
   const { config } = loadSettingsFile(botsPath, { silent: false, exitOnError: false });
   const entries = normalizeBotEntries(resolveRawBotEntries(config));
   const bot = entries.find((entry) => entry.name === botName);

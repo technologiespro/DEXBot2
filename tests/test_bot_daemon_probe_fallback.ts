@@ -91,7 +91,7 @@ function installStubs() {
             state.authCalls += 1;
             return 'fallback-password';
         },
-        getPrivateKey: (accountName, masterPassword) => {
+        resolvePrivateKey: (accountName, masterPassword) => {
             state.getKeyCalls += 1;
             assert.strictEqual(accountName, 'xrp-account', 'bot should request the configured preferred account');
             assert.strictEqual(masterPassword, 'fallback-password', 'bot should use the interactive master password after daemon probing fails');

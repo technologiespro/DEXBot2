@@ -45,16 +45,15 @@
  * ===============================================================================
  */
 
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('../../storage');
+const storage = getStorage();
 const { API_LIMITS, TIMING, ORDER_TYPES, ORDER_STATES, COW_ACTIONS, FEE_PARAMETERS, BTS_PRECISION, PIPELINE_TIMING } = require('../../constants');
-const { resolveProjectRoot } = require('../../launcher/runtime_entry');
+const { PATHS } = require('../../paths');
 const Format = require('../format');
 const { toFiniteNumber, isValidNumber } = Format;
 const MathUtils = require('./math');
 const OrderUtils = require('./order');
-const CODE_ROOT = path.join(__dirname, '..', '..', '..');
-const ROOT = resolveProjectRoot(CODE_ROOT);
 const Logger = require('../../logger');
 const { ensureDir, readJSON } = require('../../utils/fs_utils');
 const systemLogger = new Logger('System');
@@ -514,7 +513,7 @@ async function deriveLiquidityPoolTokenValue(BitShares: any, shareAssetRef: stri
  */
 function loadAmaCenterSnapshot(botKey: string): any {
     try {
-        const gridPriceFile = path.join(ROOT, 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
+        const gridPriceFile = path.join(PATHS.ORDERS_DIR, `${botKey}.dynamicgrid.json`);
         const data = readJSON(gridPriceFile);
         const gridCenterPrice = Number(data?.gridCenterPrice ?? data?.centerPrice);
         const amaCenterPrice = Number(data?.amaCenterPrice);
@@ -1025,7 +1024,7 @@ function syncBoundaryToFunds(manager: any): { changed: boolean; newIdx?: number 
  * @returns {boolean} True if directory was created, false if it already existed
  */
 function ensureProfilesDirectory(profilesDir: string): boolean {
-    if (!fs.existsSync(profilesDir)) { ensureDir(profilesDir); return true; }
+    if (!storage.exists(profilesDir)) { ensureDir(profilesDir); return true; }
     return false;
 }
 

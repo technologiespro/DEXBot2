@@ -10,13 +10,15 @@
  */
 
 const crypto = require('crypto');
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('../../modules/storage');
+const storage = getStorage();
 const { fillCandleGaps } = require('../candle_utils');
 const { writeJsonAtomic } = require('../utils/atomic_write');
 const { parseJsonWithComments } = require('../../modules/order/utils/system');
 const { createBotKey } = require('../../modules/account_orders');
-const { PROJECT_ROOT } = require('../utils/paths');
+const { PATHS } = require('../../modules/paths');
+const PROJECT_ROOT = PATHS.PROJECT_ROOT;
 const { MARKET_ADAPTER } = require('../../modules/constants');
 const { getAmaWarmupBars } = require('../core/strategies/ama');
 const {
@@ -31,7 +33,7 @@ const DEFAULT_BASE = 'XRP';
 const DEFAULT_QUOTE = 'XAUT';
 const DEFAULT_COMMON_QUOTE = 'USDT';
 const DEFAULT_BOOTSTRAP_LOOKBACK_HOURS = 720;
-const DEFAULT_BOTS_FILE = path.join(PROJECT_ROOT, 'profiles', 'bots.json');
+const DEFAULT_BOTS_FILE = PATHS.PROFILES.BOTS_JSON;
 const DEFAULT_EXCHANGES = [
     'bybit',
     'htx',
@@ -101,8 +103,8 @@ function _stableBotId(entry) {
 
 function loadBotNameIndex(botsFile) {
     try {
-        if (!botsFile || !fs.existsSync(botsFile)) return [];
-        const raw = fs.readFileSync(botsFile, 'utf8');
+        if (!botsFile || !storage.exists(botsFile)) return [];
+        const raw = storage.readFile(botsFile, 'utf8');
         if (!raw.trim()) return [];
         const parsed = parseJsonWithComments(raw);
         const bots = Array.isArray(parsed?.bots) ? parsed.bots : [];

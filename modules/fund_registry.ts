@@ -1,9 +1,11 @@
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('./storage');
+const storage = getStorage();
+const { PATHS } = require('./paths');
 const { writeJSON, readJSON } = require('./utils/fs_utils');
 const AsyncLock = require('./order/async_lock');
 
-const REGISTRY_FILE = path.join(__dirname, '..', 'profiles', 'fund_registry.json');
+const REGISTRY_FILE = PATHS.PROFILES.FUND_REGISTRY_JSON;
 
 const _lock = new AsyncLock();
 let _registry: any = null;
@@ -21,7 +23,7 @@ function _parsePercentage(value) {
 function _loadRegistry(): any {
     if (_registry !== null) return _registry;
     try {
-        if (fs.existsSync(REGISTRY_FILE)) {
+        if (storage.exists(REGISTRY_FILE)) {
             _registry = readJSON(REGISTRY_FILE);
         } else {
             _registry = {};

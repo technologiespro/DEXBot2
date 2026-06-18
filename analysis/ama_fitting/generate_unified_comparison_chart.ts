@@ -26,8 +26,9 @@ const { ensureDir } = require('../../modules/utils/fs_utils');
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
-const LP_DATA_DIR = path.resolve(__dirname, '..', '..', 'market_adapter', 'data', 'lp');
-const CHARTS_DIR = path.resolve(__dirname, '..', 'charts');
+const { PATHS } = require('../../modules/paths');
+const LP_DATA_DIR = PATHS.MARKET_ADAPTER.LP_DATA_DIR;
+const CHARTS_DIR = PATHS.ANALYSIS.CHARTS_DIR;
 
 const DEFAULT_COLORS = ['#26a69a', '#fb8c00', '#5c9ee6', '#ef5350'];
 const DEFAULT_DASHES = ['dot', 'solid', 'dash', 'dashdot'];

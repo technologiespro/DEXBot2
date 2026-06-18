@@ -1,14 +1,13 @@
 #!/usr/bin/env node
 
 const path = require('path');
-const { resolveProjectRoot } = require('../../modules/launcher/runtime_entry');
+const { PATHS } = require('../../modules/paths');
 const {
   buildRuntimeSkillMarkdown,
   writeRuntimeSkillMarkdown
 } = require('../modules/claw_skill_md');
 
-const CS_PARENT_DIR = path.dirname(path.dirname(__dirname));
-const CS_PROJECT_ROOT = resolveProjectRoot(CS_PARENT_DIR);
+const CS_PROJECT_ROOT = PATHS.PROJECT_ROOT;
 
 function parseArgs(argv: any) {
   const options: Record<string, any> = {

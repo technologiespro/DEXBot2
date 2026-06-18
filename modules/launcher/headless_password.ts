@@ -1,5 +1,7 @@
-const fs = require('fs');
+const { getStorage } = require('../storage');
+const storage = getStorage();
 const { assertPrivatePathSecurity } = require('../credential_runtime');
+const { Config } = require('../config');
 
 function readHeadlessPassword({ passwordFile }: { passwordFile?: string | null } = {}): string {
     let password: string | null = null;
@@ -7,15 +9,15 @@ function readHeadlessPassword({ passwordFile }: { passwordFile?: string | null }
     if (passwordFile) {
         try {
             assertPrivatePathSecurity(passwordFile, { expectedType: 'file', requiredMode: 0o400 });
-            password = fs.readFileSync(passwordFile, 'utf8').trim().split('\n')[0];
+            password = storage.readFile(passwordFile).trim().split('\n')[0];
         } catch (err: any) {
             throw new Error(`Cannot read master password from '${passwordFile}': ${err.message}`);
         }
         if (!password) {
             throw new Error(`Master password file '${passwordFile}' is empty`);
         }
-    } else if (process.env.DEXBOT_MASTER_PASSWORD) {
-        password = process.env.DEXBOT_MASTER_PASSWORD;
+    } else if (Config.DEXBOT_MASTER_PASSWORD) {
+        password = Config.DEXBOT_MASTER_PASSWORD;
     }
 
     if (!password) {

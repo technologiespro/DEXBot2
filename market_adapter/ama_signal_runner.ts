@@ -2,6 +2,8 @@
 'use strict';
 
 const fs = require('fs');
+const { getStorage } = require('../modules/storage');
+const storage = getStorage();
 
 /**
  * AMA SIGNAL RUNNER
@@ -205,9 +207,11 @@ function buildOutput(payload: AmaPayload | undefined | null, botFilter: string |
     };
 }
 
+const { Config } = require('../modules/config');
+
 async function main(): Promise<void> {
     const cli = parseArgs();
-    const fixtureRaw: string | undefined = process.env.AMA_SIGNAL_RUNNER_FIXTURE_JSON;
+    const fixtureRaw: string | undefined = Config.AMA_SIGNAL_RUNNER_FIXTURE_JSON;
     let payload: AmaPayload;
     if (fixtureRaw) {
         payload = JSON.parse(fixtureRaw) as AmaPayload;

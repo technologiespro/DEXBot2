@@ -89,8 +89,9 @@
 process.umask(0o077);
 
 const { BitShares, waitForConnected, setSuppressConnectionLog, disconnectClient } = require('./modules/bitshares_client');
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('./modules/storage');
+const storage = getStorage();
 const chainKeys = require('./modules/chain_keys');
 const { initializeFeeCache, ensureProfilesDirectory, readInput } = require('./modules/order/utils/system');
 const accountBots = require('./modules/account_bots');
@@ -130,9 +131,11 @@ const {
     resolveRawBotEntries,
     saveSettingsFile,
 } = require('./modules/bot_settings');
-const { buildRuntimeScriptArgs, resolveProjectRoot } = require('./modules/launcher/runtime_entry');
+const { buildRuntimeScriptArgs } = require('./modules/launcher/runtime_entry');
+const { PATHS, getRecalculateTriggerFile } = require('./modules/paths');
 const { buildMarketAdapterWhitelistNpmArgs } = require('./modules/cli_whitelist_args');
 const credentialPolicy = require('./modules/credential_policy');
+const { Config } = require('./modules/config');
 
 // Setup graceful shutdown handlers
 setupGracefulShutdown();
@@ -141,15 +144,14 @@ setupGracefulShutdown();
 // world-readable (would indicate a prior run with a permissive umask).
 if (typeof chainKeys.checkKeysFileSecurity === 'function') chainKeys.checkKeysFileSecurity();
 // Same migration-aware check for daemon-policies.json.
-const ROOT = resolveProjectRoot(__dirname);
-if (typeof credentialPolicy.checkPolicyFileSecurity === 'function') credentialPolicy.checkPolicyFileSecurity(path.join(ROOT, 'profiles', 'daemon-policies.json'));
+if (typeof credentialPolicy.checkPolicyFileSecurity === 'function') credentialPolicy.checkPolicyFileSecurity(PATHS.PROFILES.DAEMON_POLICIES_JSON);
 
 // Note: accountOrders is now per-bot only. Each bot has its own AccountOrders instance
 // created in DEXBot.start() in modules/dexbot_class.ts. This eliminates shared-file race conditions.
 
 // Primary CLI driver that manages tracked bots and helper utilities such as key/bot editors.
-const PROFILES_BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
-const PROFILES_DIR = path.join(ROOT, 'profiles');
+const PROFILES_BOTS_FILE = PATHS.PROFILES.BOTS_JSON;
+const PROFILES_DIR = PATHS.PROFILES_DIR;
 
 
 const CLI_COMMANDS = ['start', 'test', 'reset', 'default', 'disable', 'drystart', 'keys', 'bots', 'pm2', 'update', 'export', 'order', 'clear', 'status', 'whitelist', 'unlock'];
@@ -179,7 +181,7 @@ const STARTUP_COLORS = {
 };
 
 function colorStartupOutput(text: string, color: string, stream: any = process.stdout): string {
-    return stream.isTTY && !process.env.NO_COLOR
+    return stream.isTTY && !Config.NO_COLOR
         ? `${color}${text}${STARTUP_COLORS.reset}`
         : text;
 }
@@ -738,8 +740,8 @@ async function resetBotByName(botName: string | null | undefined) {
 
     for (const bot of targets) {
         try {
-            const triggerFile = path.join(PROFILES_DIR, `recalculate.${bot.botKey}.trigger`);
-            fs.writeFileSync(triggerFile, '');
+            const triggerFile = getRecalculateTriggerFile(bot.botKey);
+            storage.writeFile(triggerFile, '');
             console.log(startupSuccess(`✓ Trigger set for '${bot.name}' (${path.basename(triggerFile)})`));
         } catch (err: any) {
             console.warn(`Failed to set trigger for '${bot.name}': ${err.message}`);
@@ -836,9 +838,9 @@ async function handleCLICommands() {
             process.exit(0);
         case 'default': {
             const { spawnSync } = require('child_process');
-            const resetScript = path.join(ROOT, 'scripts', 'reset-settings.sh');
+            const resetScript = path.join(PATHS.PROJECT_ROOT, 'scripts', 'reset-settings.sh');
             const result = spawnSync('bash', [resetScript], {
-                cwd: ROOT,
+                cwd: PATHS.PROJECT_ROOT,
                 stdio: 'inherit',
             });
             if (result.error) {
@@ -896,7 +898,7 @@ async function handleCLICommands() {
         case 'whitelist': {
             const { spawnSync } = require('child_process');
             const result = spawnSync('npm', buildMarketAdapterWhitelistNpmArgs(cliArgs.slice(1)), {
-                cwd: ROOT,
+                cwd: PATHS.PROJECT_ROOT,
                 stdio: 'inherit',
                 shell: true,
             });
@@ -915,7 +917,7 @@ async function handleCLICommands() {
                 scriptArgs: [],
             });
             const result = spawnSync(process.execPath, scriptArgs, {
-                cwd: ROOT,
+                cwd: PATHS.PROJECT_ROOT,
                 stdio: 'inherit',
             });
             if (result.error) {
@@ -927,10 +929,10 @@ async function handleCLICommands() {
         }
         case 'unlock': {
             const { spawnSync } = require('child_process');
-            const unlockScript = path.join(ROOT, 'unlock.js');
+            const unlockScript = path.join(PATHS.PROJECT_ROOT, 'unlock.js');
             const unlockArgs = [unlockScript, ...cliArgs.slice(1)];
             const result = spawnSync(process.execPath, unlockArgs, {
-                cwd: ROOT,
+                cwd: PATHS.PROJECT_ROOT,
                 stdio: 'inherit',
             });
             process.exit(result.status ?? 0);
@@ -938,9 +940,9 @@ async function handleCLICommands() {
         }
         case 'clear': {
             const { spawnSync } = require('child_process');
-            const clearScript = path.join(ROOT, 'scripts', 'clear-logs.sh');
+            const clearScript = path.join(PATHS.PROJECT_ROOT, 'scripts', 'clear-logs.sh');
             const result = spawnSync('bash', [clearScript], {
-                cwd: ROOT,
+                cwd: PATHS.PROJECT_ROOT,
                 stdio: 'inherit',
             });
             if (result.error) {
@@ -952,13 +954,13 @@ async function handleCLICommands() {
         }
         case 'status': {
             const { spawnSync, execSync } = require('child_process');
-            const MONOLITHIC_PID_FILE = path.join(PROFILES_DIR, 'monolithic.pid');
-            const SUPERVISOR_SOCK = path.join(PROFILES_DIR, 'supervisor.sock');
+            const MONOLITHIC_PID_FILE = PATHS.PROFILES.MONOLITHIC_PID;
+            const SUPERVISOR_SOCK = PATHS.PROFILES.SUPERVISOR_SOCK;
             let unlockRunning = false;
 
-            if (fs.existsSync(MONOLITHIC_PID_FILE)) {
+            if (storage.exists(MONOLITHIC_PID_FILE)) {
                 try {
-                    const pid = Number(fs.readFileSync(MONOLITHIC_PID_FILE, 'utf8').trim());
+                    const pid = Number(storage.readFile(MONOLITHIC_PID_FILE).trim());
                     if (Number.isInteger(pid) && pid > 0) {
                         try { process.kill(pid, 0); unlockRunning = true; } catch (err: any) {
                             if (err.code === 'EACCES') {
@@ -972,14 +974,14 @@ async function handleCLICommands() {
                 } catch (_) {}
             }
 
-            if (!unlockRunning && fs.existsSync(SUPERVISOR_SOCK)) {
+            if (!unlockRunning && storage.exists(SUPERVISOR_SOCK)) {
                 unlockRunning = true;
             }
 
             if (unlockRunning) {
-                const unlockScript = path.join(ROOT, 'unlock.js');
+                const unlockScript = path.join(PATHS.PROJECT_ROOT, 'unlock.js');
                 const result = spawnSync(process.execPath, [unlockScript, 'status'], {
-                    cwd: ROOT,
+                    cwd: PATHS.PROJECT_ROOT,
                     stdio: 'inherit',
                 });
                 process.exit(result.status ?? 0);
@@ -1091,7 +1093,7 @@ async function runDefaultBots({ forceDryRun = false, sourceName = 'settings', la
     const normalized = normalizeBotEntries(entries);
 
     // Validate all profile files at startup (skip for PM2 child processes and tests)
-    if (process.env.DEXBOT_SKIP_PROFILE_VALIDATION !== '1' && !process.env.PM2_HOME) {
+    if (!Config.DEXBOT_SKIP_PROFILE_VALIDATION && !Config.PM2_HOME) {
         const { validateAllProfiles, printValidationProblems } = require('./modules/validate_profiles');
         const result = validateAllProfiles();
         const ok = printValidationProblems(result);
@@ -1203,7 +1205,7 @@ const { writeJSON } = require('./modules/utils/fs_utils');
     }
 
     // Check if bots.json exists - if not, guide user
-    if (!fs.existsSync(PROFILES_BOTS_FILE)) {
+    if (!storage.exists(PROFILES_BOTS_FILE)) {
         // Suppress BitShares connection log when no bots configured
         setSuppressConnectionLog(true);
         console.log();

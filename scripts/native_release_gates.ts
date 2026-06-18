@@ -4,17 +4,15 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
+const { PATHS } = require('../modules/paths');
+const { Config } = require('../modules/config');
 const { readJSON } = require('../modules/utils/fs_utils');
-
-const ROOT_DEPTH_1 = path.dirname(__dirname);
-const root = resolveProjectRoot(ROOT_DEPTH_1);
 const nodeBin = process.execPath;
 
 function run(label: any, args: any, env: any = {}) {
     console.log(`\n=== ${label} ===`);
     const result = spawnSync(nodeBin, args, {
-        cwd: root,
+        cwd: PATHS.PROJECT_ROOT,
         stdio: 'inherit',
         env: { ...process.env, ...env },
     });
@@ -24,8 +22,8 @@ function run(label: any, args: any, env: any = {}) {
 }
 
 function assertMainnetCorpusReport() {
-    const reportPath = process.env.NATIVE_MAINNET_CORPUS_REPORT
-        || path.join(root, 'profiles', 'native_validation', 'mainnet_corpus_report.json');
+    const reportPath = Config.NATIVE_MAINNET_CORPUS_REPORT
+        || path.join(PATHS.PROFILES.NATIVE_VALIDATION_DIR, 'mainnet_corpus_report.json');
 
     if (!fs.existsSync(reportPath)) {
         console.error('\nMissing mainnet corpus validation report.');

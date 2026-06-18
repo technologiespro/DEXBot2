@@ -1,14 +1,8 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const { createBotKey } = require('./account_orders');
 const { readJSON } = require('./utils/fs_utils');
-
-const CODE_ROOT = path.join(__dirname, '..');
-const ROOT = resolveProjectRoot(CODE_ROOT);
-const PROFILES_DIR = path.join(ROOT, 'profiles');
+const { PATHS } = require('./paths');
 
 interface ValidationProblem {
     file: string;
@@ -257,7 +251,7 @@ function validateCrossFileConsistency(problems: ProblemList) {
     const botKeysInWhitelistEnabledAma = new Set<string>();
 
     // Load whitelist
-    const wlFile = path.join(PROFILES_DIR, 'market_adapter_whitelist.json');
+    const wlFile = PATHS.PROFILES.MARKET_ADAPTER_WHITELIST_JSON();
     const wlResult = loadJsonFile(wlFile);
     if (wlResult.ok && wlResult.data) {
         const raw = wlResult.data.whitelist;
@@ -281,7 +275,7 @@ function validateCrossFileConsistency(problems: ProblemList) {
     }
 
     // Load market_profiles
-    const mpFile = path.join(PROFILES_DIR, 'market_profiles.json');
+    const mpFile = PATHS.PROFILES.MARKET_PROFILES_JSON;
     const mpResult = loadJsonFile(mpFile);
     const profiles: any[] = [];
     if (mpResult.ok && mpResult.data) {
@@ -290,7 +284,7 @@ function validateCrossFileConsistency(problems: ProblemList) {
     }
 
     // Load bots.json — match AMA bots against profiles and whitelist
-    const botsFile = path.join(PROFILES_DIR, 'bots.json');
+    const botsFile = PATHS.PROFILES.BOTS_JSON;
     const botsResult = loadJsonFile(botsFile);
     const amaBotKeys = new Set<string>();
     if (botsResult.ok && botsResult.data) {
@@ -331,7 +325,7 @@ function validateAllProfiles(): { errors: ProblemList; warnings: ProblemList } {
     const all: ProblemList = [];
 
     // general.settings.json
-    const gsFile = path.join(PROFILES_DIR, 'general.settings.json');
+    const gsFile = PATHS.PROFILES.GENERAL_SETTINGS_JSON;
     const gsResult = loadJsonFile(gsFile);
     if (!gsResult.ok) {
         push(all, gsFile, '(root)', `Failed to parse — ${gsResult.error}`);
@@ -343,14 +337,14 @@ function validateAllProfiles(): { errors: ProblemList; warnings: ProblemList } {
     // Only check parse errors here; field-level validation is handled by
     // collectValidationIssues in bot_settings.ts which is already called
     // by runBotInstances (dexbot.ts).
-    const botsFile = path.join(PROFILES_DIR, 'bots.json');
+    const botsFile = PATHS.PROFILES.BOTS_JSON;
     const botsResult = loadJsonFile(botsFile);
     if (!botsResult.ok) {
         push(all, botsFile, '(root)', `Failed to parse — ${botsResult.error}`);
     }
 
     // market_adapter_whitelist.json
-    const wlFile = path.join(PROFILES_DIR, 'market_adapter_whitelist.json');
+    const wlFile = PATHS.PROFILES.MARKET_ADAPTER_WHITELIST_JSON();
     const wlResult = loadJsonFile(wlFile);
     if (!wlResult.ok) {
         push(all, wlFile, '(root)', `Failed to parse — ${wlResult.error}`);
@@ -359,7 +353,7 @@ function validateAllProfiles(): { errors: ProblemList; warnings: ProblemList } {
     }
 
     // market_profiles.json
-    const mpFile = path.join(PROFILES_DIR, 'market_profiles.json');
+    const mpFile = PATHS.PROFILES.MARKET_PROFILES_JSON;
     const mpResult = loadJsonFile(mpFile);
     if (!mpResult.ok) {
         push(all, mpFile, '(root)', `Failed to parse — ${mpResult.error}`);
@@ -368,7 +362,7 @@ function validateAllProfiles(): { errors: ProblemList; warnings: ProblemList } {
     }
 
     // market_adapter_settings.json
-    const maFile = path.join(PROFILES_DIR, 'market_adapter_settings.json');
+    const maFile = PATHS.PROFILES.MARKET_ADAPTER_SETTINGS_JSON;
     const maResult = loadJsonFile(maFile);
     if (!maResult.ok) {
         push(all, maFile, '(root)', `Failed to parse — ${maResult.error}`);

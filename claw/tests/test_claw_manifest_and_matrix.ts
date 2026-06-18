@@ -156,37 +156,34 @@ function testClawManifest() {
 
 function testDexbotBridgeRootResolution() {
   const bridgePath = require.resolve('../modules/dexbot_bridge');
+  const { Config } = require('../../modules/config');
 
-  // --- Branch 1: DEXBOT2_ROOT env var is set ---
+  // --- Branch 1: DEXBOT2_ROOT is set ---
+  // Config.DEXBOT2_ROOT is a snapshot taken at module load time,
+  // so tests must mutate Config directly rather than process.env.
   delete require.cache[bridgePath];
-  const savedEnv = process.env.DEXBOT2_ROOT;
-  process.env.DEXBOT2_ROOT = '/custom/dexbot2';
+  const savedRoot = Config.DEXBOT2_ROOT;
+  Config.DEXBOT2_ROOT = '/custom/dexbot2';
   try {
     const bridge = require('../modules/dexbot_bridge');
     assert.strictEqual(bridge.getDexbot2Root(), path.resolve('/custom/dexbot2'));
   } finally {
-    if (savedEnv === undefined) {
-      delete process.env.DEXBOT2_ROOT;
-    } else {
-      process.env.DEXBOT2_ROOT = savedEnv;
-    }
+    Config.DEXBOT2_ROOT = savedRoot;
     delete require.cache[bridgePath];
   }
 
-  // --- Branch 2: no env var, auto-detected local repo layout ---
+  // --- Branch 2: no DEXBOT2_ROOT, auto-detected local repo layout ---
   // The test is already running inside the DEXBot2 repo, so the existsSync
   // check for modules/order/index.ts should resolve to the repo root.
   delete require.cache[bridgePath];
-  delete process.env.DEXBOT2_ROOT;
+  Config.DEXBOT2_ROOT = undefined;
   try {
     const bridge = require('../modules/dexbot_bridge');
     const root = bridge.getDexbot2Root();
     const expectedRoot = path.resolve(__dirname, '..', '..');
     assert.strictEqual(root, expectedRoot);
   } finally {
-    if (savedEnv !== undefined) {
-      process.env.DEXBOT2_ROOT = savedEnv;
-    }
+    Config.DEXBOT2_ROOT = savedRoot;
     delete require.cache[bridgePath];
   }
 }

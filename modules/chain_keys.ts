@@ -83,18 +83,19 @@
  */
 
 const crypto = require('crypto');
-const fs = require('fs');
 const net = require('net');
 const path = require('path');
 const { readInput, readPassword } = require('./order/utils/system');
 const { TIMING, CREDENTIAL_PROMPTS } = require('./constants');
-const { resolveProjectRoot } = require('./launcher/runtime_entry');
+const { PATHS } = require('./paths');
 const {
     getCredentialReadyFilePath,
     getCredentialSocketPath,
     assertPrivatePathSecurity,
 } = require('./credential_runtime');
 const Logger = require('./logger');
+const { getStorage } = require('./storage');
+const storage = getStorage();
 const { ensureDir, safeUnlink } = require('./utils/fs_utils');
 const { resolvePrivateKey: resolveAuthKey } = require('./authority_resolver');
 
@@ -119,13 +120,12 @@ const VAULT_SECRET_KIND = 'dexbot-vault-secret';
 const VAULT_SESSION_SECRET_KIND = 'dexbot-session-secret';
 const VAULT_DAEMON_SIGNING_TOKEN_KIND = 'dexbot-daemon-signing-token';
 
-const MODULE_DIR = path.dirname(__dirname);
-const PROJECT_ROOT = resolveProjectRoot(MODULE_DIR);
+const { Config } = require('./config');
 
 // Profiles key file (ignored) only
-const PROFILES_KEYS_FILE = process.env.DEXBOT_KEYS_FILE
-    ? path.resolve(process.env.DEXBOT_KEYS_FILE)
-    : path.join(PROJECT_ROOT, 'profiles', 'keys.json');
+const PROFILES_KEYS_FILE = Config.DEXBOT_KEYS_FILE
+    ? path.resolve(Config.DEXBOT_KEYS_FILE)
+    : PATHS.PROFILES.KEYS_JSON();
 
 /**
  * Ensures that the profiles/keys directory exists.
@@ -133,7 +133,7 @@ const PROFILES_KEYS_FILE = process.env.DEXBOT_KEYS_FILE
  */
 function ensureProfilesKeysDirectory() {
     const dir = path.dirname(PROFILES_KEYS_FILE);
-    if (!fs.existsSync(dir)) ensureDir(dir);
+    ensureDir(dir);
 }
 
 function toBuffer(value: any, encoding: BufferEncoding = 'hex') {
@@ -435,14 +435,7 @@ function validatePrivateKey(key) {
  */
 function loadAccounts() {
     try {
-        if (!fs.existsSync(PROFILES_KEYS_FILE)) {
-            return normalizeAccountsData();
-        }
-        const content = fs.readFileSync(PROFILES_KEYS_FILE, 'utf8').trim();
-        if (!content) {
-            return normalizeAccountsData();
-        }
-        return normalizeAccountsData(JSON.parse(content));
+        return normalizeAccountsData(storage.readJSON(PROFILES_KEYS_FILE));
     } catch (error: any) {
         console.error('Error loading accounts file, resetting to default:', error.message);
         return normalizeAccountsData();
@@ -471,15 +464,15 @@ function setupModernVault(accountsData, password) {
  * Should be called early in every entry point that may read or write keys.json.
  */
 function checkKeysFileSecurity() {
-    if (!fs.existsSync(PROFILES_KEYS_FILE)) return;
+    if (!storage.exists(PROFILES_KEYS_FILE)) return;
     try {
         assertPrivatePathSecurity(PROFILES_KEYS_FILE, { expectedType: 'file', requiredMode: 0o600 });
     } catch (err: any) {
         // Auto-remediate legacy 0o644 mode (the state per the security audit)
-        const stat = fs.lstatSync(PROFILES_KEYS_FILE);
+        const stat = storage.lstat(PROFILES_KEYS_FILE);
         const mode = stat.mode & 0o777;
         if (mode === 0o644 && !stat.isSymbolicLink()) {
-            fs.chmodSync(PROFILES_KEYS_FILE, 0o600);
+            storage.chmod(PROFILES_KEYS_FILE, 0o600);
             chainKeysLogger.warn(`[security] Auto-fixed ${PROFILES_KEYS_FILE} permissions from 0o644 to 0o600. Run: chmod 600 profiles/keys.json`);
             return;
         }
@@ -781,24 +774,9 @@ function saveAccounts(data) {
         delete serialized.vaultVersion;
     }
 
-    // Atomic write: write to temp file with 0o600, then rename over target.
-    // This prevents truncated files on crash and ensures the file is never
-    // world-readable regardless of the process umask.
-    const tmpPath = `${PROFILES_KEYS_FILE}.${process.pid}.${Date.now()}.${crypto.randomBytes(8).toString('hex')}.tmp`;
-    try {
-        const fd = fs.openSync(tmpPath, 'w', 0o600);
-        try {
-            const json = JSON.stringify(serialized, null, 2);
-            fs.writeSync(fd, json, 0, 'utf8');
-            fs.fsyncSync(fd);
-        } finally {
-            fs.closeSync(fd);
-        }
-        fs.renameSync(tmpPath, PROFILES_KEYS_FILE);
-    } catch (err) {
-        safeUnlink(tmpPath)
-        throw err;
-    }
+    // Atomic write via unified StorageAdapter: tmp file with 0o600 + fsync,
+    // then rename over target.
+    storage.writeJSON(PROFILES_KEYS_FILE, serialized, { mode: 0o600, fsync: true });
 }
 
 /**
@@ -948,7 +926,7 @@ async function main() {
  */
 function isDaemonReady(options = {}) {
     try {
-        return fs.existsSync(getCredentialReadyFilePath(options)) && fs.existsSync(getCredentialSocketPath(options));
+        return storage.exists(getCredentialReadyFilePath(options)) && storage.exists(getCredentialSocketPath(options));
     } catch {
         return false;
     }

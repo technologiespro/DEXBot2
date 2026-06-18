@@ -3,13 +3,11 @@
 const fs = require('fs');
 const path = require('path');
 const { createBotKey } = require('../modules/account_orders');
-const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
+const { PATHS } = require('../modules/paths');
 const { readJSON } = require('../modules/utils/fs_utils');
 
-const PARENT = path.dirname(__dirname);
-const ROOT = resolveProjectRoot(PARENT);
-const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
-const WHITELIST_FILE = path.join(ROOT, 'profiles', 'market_adapter_whitelist.json');
+const BOTS_FILE = PATHS.PROFILES.BOTS_JSON;
+const WHITELIST_FILE = PATHS.PROFILES.MARKET_ADAPTER_WHITELIST_JSON();
 
 function isAmaGridPrice(value: any) {
     if (typeof value !== 'string') return false;

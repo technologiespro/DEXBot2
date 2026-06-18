@@ -1,7 +1,8 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('../modules/storage');
+const storage = getStorage();
 
 const { normalizeAssetSymbol, isExactPair, isSamePair } = require('./utils/chain');
 const { toIntervalLabel } = require('./interval_utils');
@@ -31,7 +32,7 @@ function buildAmaStrategy(name, ama, color, dash, lineWidth = 1.5) {
 }
 
 function loadStrategiesFromResults(resultsPath) {
-    if (!resultsPath || !fs.existsSync(resultsPath)) return null;
+    if (!resultsPath || !storage.exists(resultsPath)) return null;
 
     const json = readJSON(resultsPath);
     const meta = json?.meta;
@@ -78,7 +79,7 @@ function loadStrategiesFromResults(resultsPath) {
 }
 
 function loadStrategiesFromProfiles(profilesPath, meta) {
-    if (!profilesPath || !fs.existsSync(profilesPath)) return null;
+    if (!profilesPath || !storage.exists(profilesPath)) return null;
     if (!meta) return null;
 
     const json = readJSON(profilesPath);

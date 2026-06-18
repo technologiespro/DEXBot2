@@ -51,8 +51,9 @@
  * No wallet keys/password/auth required (read-only chain + Kibana bootstrap).
  */
 
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('../modules/storage');
+const storage = getStorage();
 
 const { parseJsonWithComments, sleep, ensureDir } = require('../modules/order/utils/system');
 const { readGeneralSettings } = require('../modules/general_settings');
@@ -106,17 +107,18 @@ const {
     buildStartupDefaultsLog,
 } = require('./log_format');
 
-const { PROJECT_ROOT: ROOT } = require('./utils/paths');
-const PROFILES_DIR = path.join(ROOT, 'profiles');
-const BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
-const DATA_DIR = path.join(ROOT, 'market_adapter', 'data');
-const STATE_DIR = path.join(ROOT, 'market_adapter', 'state');
-const STATE_FILE = path.join(STATE_DIR, 'market_adapter_state.json');
-const CENTER_FILE = path.join(STATE_DIR, 'market_adapter_centers.json');
-const LOCK_FILE = path.join(STATE_DIR, 'market_adapter.lock');
-const MARKET_ADAPTER_SOURCE = path.relative(ROOT, __filename).replace(/^dist[\\\/]/, '');
-const MARKET_PROFILES_FILE = path.join(PROFILES_DIR, 'market_profiles.json');
-const MARKET_ADAPTER_SETTINGS_FILE = path.join(PROFILES_DIR, 'market_adapter_settings.json');
+const { PATHS, getRecalculateTriggerFile } = require('../modules/paths');
+const ROOT = PATHS.PROJECT_ROOT;
+const PROFILES_DIR = PATHS.PROFILES_DIR;
+const BOTS_FILE = PATHS.PROFILES.BOTS_JSON;
+const DATA_DIR = PATHS.MARKET_ADAPTER.DATA_DIR;
+const STATE_DIR = PATHS.MARKET_ADAPTER.STATE_DIR;
+const STATE_FILE = PATHS.MARKET_ADAPTER.STATE_FILE;
+const CENTER_FILE = PATHS.MARKET_ADAPTER.CENTERS_FILE;
+const LOCK_FILE = PATHS.MARKET_ADAPTER.LOCK_FILE;
+const MARKET_ADAPTER_SOURCE = path.relative(PATHS.PROJECT_ROOT, __filename).replace(/^dist[\\\/]/, '');
+const MARKET_PROFILES_FILE = PATHS.PROFILES.MARKET_PROFILES_JSON;
+const MARKET_ADAPTER_SETTINGS_FILE = PATHS.PROFILES.MARKET_ADAPTER_SETTINGS_JSON;
 
 const LP_OP_TYPE = NATIVE_CLIENT.OPERATIONS.LIQUIDITY_POOL;
 const API_MAX_PAGE = API_LIMITS.LP_API_MAX_PAGE;
@@ -166,7 +168,7 @@ function _resetCycleCache() {
 
 function loadMarketAdapterSettings() {
     if (_marketAdapterSettingsCache !== null) return _marketAdapterSettingsCache;
-    if (!fs.existsSync(MARKET_ADAPTER_SETTINGS_FILE)) return null;
+    if (!storage.exists(MARKET_ADAPTER_SETTINGS_FILE)) return null;
     try {
         _marketAdapterSettingsCache = readJSON(MARKET_ADAPTER_SETTINGS_FILE);
         return _marketAdapterSettingsCache;
@@ -639,7 +641,7 @@ function applyRuntimeDefaultsFromGeneralSettings(cfg: any, provided: { deltaThre
 const { createPm2AwareLogger } = require('../modules/logger');
 const { readJSON } = require('../modules/utils/fs_utils');
 const { fixedTo, roundTo } = require('../modules/utils/math_utils');
-const marketAdapterLogFile = path.join(PROFILES_DIR, 'logs', 'market_adapter.log');
+const marketAdapterLogFile = path.join(PATHS.LOGS_DIR, 'market_adapter.log');
 const logger = createPm2AwareLogger('MarketAdapter', { quiet: DEFAULTS.quiet, logFile: marketAdapterLogFile });
 
 function log(cfg, ...args) {
@@ -676,10 +678,10 @@ function printHelp() {
 }
 
 function loadActiveBots() {
-    if (!fs.existsSync(BOTS_FILE)) {
-        throw new Error(`bots.json not found: ${BOTS_FILE}`);
+    if (!storage.exists(BOTS_FILE)) {
+        throw new Error(`Bots file not found at ${BOTS_FILE}`);
     }
-    const raw = parseJsonWithComments(fs.readFileSync(BOTS_FILE, 'utf8'));
+    const raw = parseJsonWithComments(storage.readFile(BOTS_FILE));
     const bots = Array.isArray(raw?.bots) ? raw.bots : (Array.isArray(raw) ? raw : []);
     return bots
         .map((b, i) => ({ ...b, botIndex: i, botKey: createBotKey(b, i), active: b.active === undefined ? true : !!b.active }))
@@ -688,7 +690,7 @@ function loadActiveBots() {
 
 function loadJson(filePath, defaultValue) {
     try {
-        if (!fs.existsSync(filePath)) return defaultValue;
+        if (!storage.exists(filePath)) return defaultValue;
         return readJSON(filePath);
     } catch (_: any) {
         return defaultValue;
@@ -956,7 +958,7 @@ async function fetchNativeMarketHistorySince(assetA: any, assetB: any, sinceMs: 
 }
 
 function writeGridResetTrigger(bot, payload) {
-    const triggerPath = path.join(PROFILES_DIR, `recalculate.${bot.botKey}.trigger`);
+    const triggerPath = getRecalculateTriggerFile(bot.botKey);
     const content = {
         createdAt: new Date().toISOString(),
         source: MARKET_ADAPTER_SOURCE,
@@ -968,7 +970,7 @@ function writeGridResetTrigger(bot, payload) {
     return triggerPath;
 }
 
-const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
+const ORDERS_DIR = PATHS.ORDERS_DIR;
 
 /**
  * Atomically write the dynamic grid snapshot for a bot to profiles/orders/<botKey>.dynamicgrid.json.

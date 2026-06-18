@@ -39,38 +39,18 @@
  * ===============================================================================
  */
 
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-const { ensureDir, safeUnlink, writeJSON } = require('./utils/fs_utils');
+const { getStorage } = require('./storage');
+const storage = getStorage();
 
 /**
- * Write a JSON document atomically by staging to a tmp file in the same
- * directory as the target and renaming into place. This is the only safe
- * way to write a JSON file from multiple processes: a `writeFileSync` to
- * the target path can be observed as a truncated / mid-write document if
- * the process crashes or if a concurrent writer truncates the file.
- *
- * Same-directory + rename is atomic on POSIX and on Windows when the target
- * exists (the latter via MoveFileEx with MOVEFILE_REPLACE_EXISTING, which
- * `fs.renameSync` uses). Best-effort cleanup of the tmp file on failure.
+ * Write a JSON document atomically — delegates to the unified StorageAdapter
+ * which uses tmp-file + rename (atomic on POSIX and Windows).
  *
  * @param {string} targetPath - Path of the final JSON file.
  * @param {*} data - Anything `JSON.stringify` accepts.
  */
 function writeJsonFileAtomic(targetPath, data) {
-    const dir = path.dirname(targetPath);
-    if (!fs.existsSync(dir)) {
-        ensureDir(dir);
-    }
-    const tmpPath = `${targetPath}.${process.pid}.${Date.now()}.${crypto.randomBytes(8).toString('hex')}.tmp`;
-    try {
-        writeJSON(tmpPath, data);
-        fs.renameSync(tmpPath, targetPath);
-    } catch (err) {
-        safeUnlink(tmpPath)
-        throw err;
-    }
+    storage.writeJSON(targetPath, data);
 }
 
 /**
@@ -125,11 +105,11 @@ const botsFileLock = new FileLock();
 async function readBotsFileWithLock(botsJsonPath, parseFunction) {
     await botsFileLock.acquire();
     try {
-        if (!fs.existsSync(botsJsonPath)) {
+        if (!storage.exists(botsJsonPath)) {
             throw new Error(`bots.json not found at ${botsJsonPath}`);
         }
 
-        const content = fs.readFileSync(botsJsonPath, 'utf8');
+        const content = storage.readFile(botsJsonPath);
         if (!content || !content.trim()) {
             return { content: '', config: { bots: [] } };
         }
@@ -171,11 +151,11 @@ async function writeBotsFileWithLock(botsJsonPath, config) {
  * @throws {Error} If file doesn't exist or JSON is invalid
  */
 function readBotsFileSync(botsJsonPath, parseFunction) {
-    if (!fs.existsSync(botsJsonPath)) {
+    if (!storage.exists(botsJsonPath)) {
         throw new Error(`bots.json not found at ${botsJsonPath}`);
     }
 
-    const content = fs.readFileSync(botsJsonPath, 'utf8');
+    const content = storage.readFile(botsJsonPath);
     if (!content || !content.trim()) {
         return { content: '', config: { bots: [] } };
     }

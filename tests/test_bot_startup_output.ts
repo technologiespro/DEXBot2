@@ -83,7 +83,7 @@ function installStubs() {
     setCachedModule(dexbotClassPath, StubDEXBot);
     setCachedModule(chainKeysPath, {
         authenticate: async () => 'test-password',
-        getPrivateKey: () => 'private-key',
+        resolvePrivateKey: () => 'private-key',
         isDaemonReady: () => false,
         isDaemonResponsive: async () => false,
         isMasterPasswordFailure: () => false,

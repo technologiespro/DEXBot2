@@ -4,24 +4,21 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { MARKET_ADAPTER } = require('../constants');
-const { buildRuntimeScriptArgs, resolveProjectRoot } = require('./runtime_entry');
+const { buildRuntimeScriptArgs } = require('./runtime_entry');
+const { PATHS } = require('../paths');
 const { isLikelyMarketAdapterProcess, isLockStale } = require('./market_adapter_runtime');
 const { readJSON, safeUnlink } = require('../utils/fs_utils');
 const { readProcMemMB, readProcUptime } = require('./status_reporting');
 const { listConfiguredBots, getActiveAmaBotFingerprint } = require('./monolithic_runtime');
 
 const DEFAULT_CODE_ROOT = path.resolve(__dirname, '..', '..');
-const DEFAULT_ROOT = resolveProjectRoot(DEFAULT_CODE_ROOT);
-const DEFAULT_LOGS_DIR = path.join(DEFAULT_ROOT, 'profiles', 'logs');
-const DEFAULT_LOCK_FILE = path.join(DEFAULT_ROOT, 'market_adapter', 'state', 'market_adapter.lock');
-const DEFAULT_BOTS_FILE = path.join(DEFAULT_ROOT, 'profiles', 'bots.json');
 
 function createMarketAdapterWatchdog({
     codeRoot = DEFAULT_CODE_ROOT,
-    root = DEFAULT_ROOT,
-    logsDir = DEFAULT_LOGS_DIR,
-    lockFile = DEFAULT_LOCK_FILE,
-    botsFile = DEFAULT_BOTS_FILE,
+    root = PATHS.PROJECT_ROOT,
+    logsDir = PATHS.LOGS_DIR,
+    lockFile = PATHS.MARKET_ADAPTER.LOCK_FILE,
+    botsFile = PATHS.PROFILES.BOTS_JSON,
     log = console.log,
     logWarn = console.warn,
     logError = console.error,

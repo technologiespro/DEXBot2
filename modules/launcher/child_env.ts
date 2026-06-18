@@ -1,3 +1,10 @@
+// ── Intentionally uses process.env directly, NOT Config ───────────
+// This module forwards env vars to child processes at spawn time
+// (runtime read, not startup snapshot).  Config reads once at import
+// and would miss vars mutated after startup.  The list also includes
+// system vars (PATH, HOME, TMPDIR) that are outside Config's scope.
+// ──────────────────────────────────────────────────────────────────
+
 const SAFE_CHILD_ENV_KEYS = [
     'AMA_SIGNAL_RUNNER_FIXTURE_JSON',
     'APPDATA',

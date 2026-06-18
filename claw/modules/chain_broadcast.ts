@@ -1,6 +1,7 @@
 const { createAccountClient } = require('./bitshares_client');
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('../../modules/storage');
+const storage = getStorage();
 const {
   isCredentialDaemonReady,
   broadcastOperationViaCredentialDaemon,
@@ -8,6 +9,7 @@ const {
   waitForCredentialDaemon
 } = require('./dexbot_credential_client');
 const { getDexbot2Root, requireDexbot2Module } = require('./dexbot_bridge');
+const { Config } = require('../../modules/config');
 const { DAEMON_ERRORS } = require('../../modules/constants');
 const { getCredentialReadyFilePath } = require('../../modules/credential_runtime');
 const { readJSON } = require('../../modules/utils/fs_utils');
@@ -30,7 +32,7 @@ function _sendSighupToDaemon() {
   try {
     const root = getDexbot2Root();
     const readyFile = getCredentialReadyFilePath({ root });
-    if (fs.existsSync(readyFile)) {
+    if (storage.exists(readyFile)) {
       const daemonInfo = readJSON(readyFile);
       if (daemonInfo && typeof daemonInfo.pid === 'number') {
         process.kill(daemonInfo.pid, 'SIGHUP');
@@ -80,7 +82,7 @@ async function createSigningClient(accountName: any, privateKey: any) {
 }
 
 function resolveAccountName(options: Record<string, any> = {}) {
-  return options.accountName || process.env.BITSHARES_ACCOUNT || null;
+  return options.accountName || Config.BITSHARES_ACCOUNT || null;
 }
 
 async function createSigningClientFromCredentialDaemon(options: Record<string, any> = {}) {

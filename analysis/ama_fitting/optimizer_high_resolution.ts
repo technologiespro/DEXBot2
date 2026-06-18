@@ -10,7 +10,8 @@ const {
     loadLpDataFile,
 } = require('../../market_adapter/lp_chart_runner');
 
-const AMA_PROFILES_FILE = path.join(__dirname, '..', '..', 'profiles', 'market_profiles.json');
+const { PATHS } = require('../../modules/paths');
+const AMA_PROFILES_FILE = PATHS.PROFILES.MARKET_PROFILES_JSON;
 
 /**
  * AMA GEOMETRIC OPTIMIZER

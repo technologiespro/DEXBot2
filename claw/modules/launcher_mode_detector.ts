@@ -1,7 +1,9 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('../../modules/storage');
+const storage = getStorage();
+const { PATHS } = require('../../modules/paths');
 const { loadSettingsFile, resolveRawBotEntries } = require('../../modules/bot_settings');
 const { normalizeProfileDir } = require('./launcher_paths');
 const { ensureDir, readJSON, writeJSON } = require('../../modules/utils/fs_utils');
@@ -40,7 +42,7 @@ function loadConfig(options: Record<string, any> = {}) {
   const configPath = getConfigPath(options);
 
   try {
-    if (fs.existsSync(configPath)) {
+    if (storage.exists(configPath)) {
       return readJSON(configPath);
     }
   } catch (err: any) {
@@ -64,7 +66,7 @@ function saveConfig(config: Record<string, any>, options: Record<string, any> = 
   const PROFILES_DIR = path.dirname(configPath);
 
   // Ensure directory exists
-  if (!fs.existsSync(PROFILES_DIR)) {
+  if (!storage.exists(PROFILES_DIR)) {
     ensureDir(PROFILES_DIR);
   }
 
@@ -77,11 +79,10 @@ function saveConfig(config: Record<string, any>, options: Record<string, any> = 
  * @returns {boolean} True if at least one active bot exists
  */
 function hasActiveBots(options: Record<string, any> = {}) {
-  const PROFILES_DIR = normalizeProfileDir(options);
-  const BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
+  const BOTS_FILE = PATHS.PROFILES.BOTS_JSON;
 
   try {
-    if (!fs.existsSync(BOTS_FILE)) {
+    if (!storage.exists(BOTS_FILE)) {
       // No bots.json file yet — user hasn't configured any bots
       return false;
     }

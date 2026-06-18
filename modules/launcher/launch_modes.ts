@@ -1,3 +1,4 @@
+const { Config } = require('../config');
 const CONTROL_COMMANDS = new Set(['status', 'stat', 'stop', 'delete', 'restart', 'stop-all', 'restart-all', 'shutdown']);
 
 function findFirstPositionalArg(args: string[]): string | null {
@@ -70,7 +71,7 @@ function parseUnlockArgs(argv = process.argv) {
     }
 
     return {
-        botName: clawOnly ? null : findFirstPositionalArg(positionalArgs) || process.env.BOT_NAME || null,
+        botName: clawOnly ? null : findFirstPositionalArg(positionalArgs) || Config.BOT_NAME || null,
         clawOnly,
         isolated,
         dryrun,

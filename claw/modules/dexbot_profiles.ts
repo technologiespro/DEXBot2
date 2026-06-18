@@ -1,9 +1,12 @@
 const crypto = require('crypto');
-const fs = require('fs');
 const fsPromises = require('fs/promises');
 const path = require('path');
+const { getStorage } = require('../../modules/storage');
+const storage = getStorage();
 const { DEFAULT_CONFIG, GRID_LIMITS, INCREMENT_BOUNDS } = require('../../modules/constants');
 const { resolveRelativePrice } = require('../../modules/order/utils/math');
+const { Config } = require('../../modules/config');
+const { PATHS, getRecalculateTriggerFile } = require('../../modules/paths');
 const { acquireFileLock } = require('../../market_adapter/utils/file_lock');
 
 import type { BotSettings, ProfileOptions, Logger, ClawProfileBundle } from './types';
@@ -672,7 +675,7 @@ const { clone } = require('./utils');
 
 function isFileLike(targetPath: any) {
   try {
-    return fs.existsSync(targetPath) && fs.statSync(targetPath).isFile();
+    return storage.exists(targetPath) && storage.stat(targetPath).isFile();
   } catch {
     return false;
   }
@@ -680,7 +683,7 @@ function isFileLike(targetPath: any) {
 
 function isDirectoryLike(targetPath: any) {
   try {
-    return fs.existsSync(targetPath) && fs.statSync(targetPath).isDirectory();
+    return storage.exists(targetPath) && storage.stat(targetPath).isDirectory();
   } catch {
     return false;
   }
@@ -698,8 +701,8 @@ function resolveProfilesDir(profileRoot: any) {
     }
   }
 
-  if (process.env.DEXBOT_PROFILE_ROOT) {
-    const envRoot = path.resolve(process.env.DEXBOT_PROFILE_ROOT);
+  if (Config.DEXBOT_PROFILE_ROOT) {
+    const envRoot = path.resolve(Config.DEXBOT_PROFILE_ROOT);
     candidates.push(envRoot);
     candidates.push(path.join(envRoot, 'profiles'));
   }
@@ -721,10 +724,10 @@ function resolveProfilesDir(profileRoot: any) {
     const marketProfilesFile = path.join(candidate, DEFAULT_MARKET_PROFILES_FILE);
 
     if (
-      fs.existsSync(manifestFile) ||
-      fs.existsSync(botsFile) ||
-      fs.existsSync(generalSettingsFile) ||
-      fs.existsSync(marketProfilesFile)
+      storage.exists(manifestFile) ||
+      storage.exists(botsFile) ||
+      storage.exists(generalSettingsFile) ||
+      storage.exists(marketProfilesFile)
     ) {
       return candidate;
     }
@@ -936,7 +939,7 @@ function buildClawProfileContext(bundle: Record<string, any>, options: Partial<P
       gridPriceSnapshot: selectedGridPriceSnapshot,
       orderSnapshot: selectedOrderSnapshot,
       selectedAmaProfile,
-      triggerExists: selectedTriggerPath ? fs.existsSync(selectedTriggerPath) : false,
+      triggerExists: selectedTriggerPath ? storage.exists(selectedTriggerPath) : false,
       triggerPayload: options.triggerPayload !== undefined ? options.triggerPayload : null
     } : null,
     summary: {
@@ -1029,7 +1032,7 @@ function createDexbotProfileAdapter(profileRoot: string, options: Partial<Profil
 
     const orderSnapshotPath = path.join(bundle.ordersDir, `${bot.botKey}.json`);
     const gridPriceSnapshotPath = path.join(bundle.ordersDir, `${bot.botKey}.dynamicgrid.json`);
-    const triggerPath = path.join(bundle.profilesDir, `recalculate.${bot.botKey}.trigger`);
+    const triggerPath = path.join(getProfilesDir(), `recalculate.${bot.botKey}.trigger`);
 
     const [orderSnapshot, gridPriceSnapshot, trigger] = await Promise.all([
       readJsonFile(orderSnapshotPath),
@@ -1139,7 +1142,7 @@ function createDexbotProfileAdapter(profileRoot: string, options: Partial<Profil
           || validation.patchKeys.some((key) => BOT_SETTINGS_TRIGGER_KEYS.has(key))
         ));
       if (shouldWriteTrigger) {
-        triggerPath = path.join(bundle.profilesDir, `recalculate.${bot.botKey}.trigger`);
+        triggerPath = path.join(getProfilesDir(), `recalculate.${bot.botKey}.trigger`);
         triggerPayload = options.triggerPayload !== undefined
           ? options.triggerPayload
           : {

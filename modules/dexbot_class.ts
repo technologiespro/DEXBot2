@@ -53,11 +53,12 @@
  * ===============================================================================
  */
 
-const fs = require('fs');
 const path = require('path');
 const { BitShares, waitForConnected, onReconnect: registerReconnectHook } = require('./bitshares_client');
+const { getStorage } = require('./storage');
+const storage = getStorage();
 const chainKeys = require('./chain_keys');
-const credentialPolicy = require('./credential_policy');
+const { getKeyStore } = require('./key_store');
 const chainOrders = require('./chain_orders');
 const fundRegistry = require('./fund_registry');
 const { BroadcastUncertainError } = require('./dexbot_credential_client');
@@ -65,7 +66,6 @@ const { OrderManager, grid: Grid } = require('./order');
 const {
     retryPersistenceIfNeeded,
     initializeFeeCache,
-    applyGridDivergenceCorrections
 } = require('./order/utils/system');
 const {
     hasExecutableActions,
@@ -100,7 +100,7 @@ const {
     GRID_LIMITS,
     FILL_PROCESSING,
 } = require('./constants');
-const { resolveProjectRoot } = require('./launcher/runtime_entry');
+const { PATHS, getRecalculateTriggerFile } = require('./paths');
 const { attemptResumePersistedGridByPriceMatch, decideStartupGridAction, reconcileGridOrders } = require('./order/grid_reconcile');
 const { AccountOrders } = require('./account_orders');
 const { parseJsonWithComments } = require('./order/utils/system');
@@ -108,10 +108,8 @@ const { cloneWeightDistribution } = require('./order/utils/math');
 const { normalizeBotEntry } = require('./bot_settings');
 const Format = require('./order/format');
 
-const MODULE_DIR$1 = path.dirname(__dirname);
-const PROJECT_ROOT$1 = resolveProjectRoot(MODULE_DIR$1);
-const PROFILES_BOTS_FILE = path.join(PROJECT_ROOT$1, 'profiles', 'bots.json');
-const PROFILES_DIR = path.join(PROJECT_ROOT$1, 'profiles');
+const PROFILES_BOTS_FILE = PATHS.PROFILES.BOTS_JSON;
+const PROFILES_DIR = PATHS.PROFILES_DIR;
 
 class DEXBot {
     config: any;
@@ -190,7 +188,7 @@ class DEXBot {
         this.privateKey = null;
         this.manager = null;
         this.accountOrders = null;  // Will be initialized in start()
-        this.triggerFile = path.join(PROFILES_DIR, `recalculate.${config.botKey}.trigger`);
+        this.triggerFile = getRecalculateTriggerFile(config.botKey);
         this._recentlyQueuedFills = new Map();
         this._fillCleanupCounter = 0;  // Deterministic cleanup tracking
 
@@ -704,7 +702,8 @@ class DEXBot {
         }
 
         // Ensure bot metadata is properly initialized in storage BEFORE any Grid operations
-        const allBotsConfig = parseJsonWithComments(fs.readFileSync(PROFILES_BOTS_FILE, 'utf8')).bots || [];
+        const raw = storage.readFile(PROFILES_BOTS_FILE);
+        const allBotsConfig = parseJsonWithComments(raw).bots || [];
         const allActiveBots = allBotsConfig
             .map((b, originalIdx) => b.active !== false ? normalizeBotEntry(b, originalIdx) : null)
             .filter(b => b !== null);
@@ -712,7 +711,7 @@ class DEXBot {
         await this.accountOrders.ensureBotEntries(allActiveBots);
 
         if (!this.manager) {
-            const mgrLogFile = this.config?.name ? path.join(PROFILES_DIR, 'logs', `${this.config.name}.log`) : undefined;
+            const mgrLogFile = this.config?.name ? path.join(PATHS.LOGS_DIR, `${this.config.name}.log`) : undefined;
             this.manager = new OrderManager({ ...this.config, logFile: mgrLogFile });
             this.manager.account = this.account;
             this.manager.accountId = this.accountId;
@@ -2219,34 +2218,26 @@ class DEXBot {
             try {
                 let privateKey = null;
 
-                if (vaultSecret) {
-                    privateKey = await chainKeys.resolvePrivateKey(this.config.preferredAccount, vaultSecret, BitShares);
-                } else if (await chainKeys.isDaemonResponsive()) {
-                    try {
-                        const sessionId = await chainKeys.probeAccountInDaemon(this.config.preferredAccount);
-                        const botHmacSecret = credentialPolicy.loadBotHmacSecret(
-                            this.config.preferredAccount,
-                            path.join(PROJECT_ROOT$1, 'profiles', 'daemon-policies.json'),
-                            { quiet: true }
-                        );
-                        privateKey = chainKeys.createDaemonSigningToken(this.config.preferredAccount, {
-                            sessionId,
-                            botHmacSecret,
-                        });
-                    } catch (err: any) {
-                        this._warn(`Credential daemon probe failed: ${err.message}. Falling back to interactive authentication.`);
-                    }
+                try {
+                    privateKey = await getKeyStore().resolveSigningKey(
+                        this.config.preferredAccount,
+                        vaultSecret,
+                        BitShares
+                    );
+                } catch (err: any) {
+                    if (vaultSecret) throw err;
+                    this._warn(`Credential daemon probe failed: ${err.message}. Falling back to interactive authentication.`);
                 }
 
                 if (!privateKey) {
-                    const unlockSecret = await chainKeys.authenticate();
-                    privateKey = await chainKeys.resolvePrivateKey(this.config.preferredAccount, unlockSecret, BitShares);
+                    const unlockSecret = await getKeyStore().authenticate();
+                    privateKey = await getKeyStore().resolvePrivateKey(this.config.preferredAccount, unlockSecret, BitShares);
                 }
 
                 this.privateKey = privateKey;
                 await this._setupAccountContext(this.config.preferredAccount);
             } catch (err: any) {
-                if (chainKeys.isMasterPasswordFailure(err)) {
+                if (getKeyStore().isMasterPasswordFailure(err)) {
                     throw err;
                 }
                 this._warn(`Auto-selection of preferredAccount failed: ${err.message}`);
@@ -2270,7 +2261,7 @@ class DEXBot {
      */
     async placeInitialOrders() {
         if (!this.manager) {
-            const mgrLogFile = this.config?.name ? path.join(PROFILES_DIR, 'logs', `${this.config.name}.log`) : undefined;
+            const mgrLogFile = this.config?.name ? path.join(PATHS.LOGS_DIR, `${this.config.name}.log`) : undefined;
             this.manager = new OrderManager({ ...this.config, logFile: mgrLogFile });
             this.manager.accountOrders = this.accountOrders;
         }
@@ -3387,7 +3378,7 @@ class DEXBot {
      * @returns {boolean}
      */
     _isCredentialDaemonWriteRequired() {
-        return chainKeys.isDaemonSigningToken(this.privateKey);
+        return getKeyStore().isDaemonSigningKey(this.privateKey);
     }
 
     /**
@@ -3423,13 +3414,14 @@ class DEXBot {
             return;
         }
 
-        const token = this.privateKey;
         try {
-            await chainKeys.pingDaemon(
-                token.accountName,
-                Math.min(TIMING.DAEMON_PING_TIMEOUT_MS, TIMING.DAEMON_STARTUP_TIMEOUT_MS),
-                { socketPath: token.socketPath }
-            );
+            if (this.privateKey && getKeyStore().isDaemonSigningKey(this.privateKey)) {
+                await chainKeys.pingDaemon(
+                    this.privateKey.accountName,
+                    Math.min(TIMING.DAEMON_PING_TIMEOUT_MS, TIMING.DAEMON_STARTUP_TIMEOUT_MS),
+                    { socketPath: this.privateKey.socketPath }
+                );
+            }
         } catch (err: any) {
             const message = `Credential daemon unavailable before ${contextLabel}: ${err.message}`;
             this._credentialDaemonDown = true;
@@ -3536,11 +3528,13 @@ class DEXBot {
             try {
                 const token = this.privateKey;
                 try {
-                    await chainKeys.pingDaemon(
-                        token.accountName,
-                        2000,
-                        { socketPath: token.socketPath }
-                    );
+                    if (getKeyStore().isDaemonSigningKey(token)) {
+                        await chainKeys.pingDaemon(
+                            token.accountName,
+                            2000,
+                            { socketPath: token.socketPath }
+                        );
+                    }
                     if (this._credentialDaemonDown) {
                         this.manager?.logger?.log?.('[CREDENTIAL] Credential daemon responsive again.', 'info');
                     }
@@ -4756,7 +4750,7 @@ class DEXBot {
         }
         if (!this._creditRuntime) {
             this._creditRuntime = new CreditRuntime(this, {
-                stateDir: path.join(PROFILES_DIR, 'credit_runtime'),
+                stateDir: PATHS.CREDIT_RUNTIME_DIR,
             });
         }
         return this._creditRuntime;
@@ -5258,7 +5252,7 @@ class DEXBot {
 
         // Drop botHmacSecret reference from the signing token (V8 string cannot
         // be zeroed in place, but dropping the reference allows GC to reclaim it).
-        if (this.privateKey && chainKeys.isDaemonSigningToken(this.privateKey)) {
+        if (this.privateKey && getKeyStore().isDaemonSigningKey(this.privateKey)) {
             this.privateKey.botHmacSecret = null;
         }
 

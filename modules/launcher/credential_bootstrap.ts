@@ -1,10 +1,11 @@
-const fs = require('fs');
 const net = require('net');
 const os = require('os');
 const path = require('path');
 const { TIMING } = require('../constants');
 const { safeUnlink } = require('../utils/fs_utils');
 const { assertPrivatePathSecurity } = require('../credential_runtime');
+const { getStorage } = require('../storage');
+const storage = getStorage();
 
 const BOOTSTRAP_SOCKET_PREFIX = 'dexbot-cred-bootstrap-';
 const DEFAULT_TIMEOUT_MS = TIMING.DAEMON_STARTUP_TIMEOUT_MS;
@@ -19,7 +20,7 @@ function cleanupBootstrapArtifacts(socketPath, socketDir) {
         safeUnlink(socketPath)
     }
     if (socketDir) {
-        try { fs.rmdirSync(socketDir); } catch (err: any) { }
+        try { storage.rmdir(socketDir); } catch (err: any) { }
     }
 }
 
@@ -45,7 +46,7 @@ async function cleanupStaleBootstrapDirs() {
     const tmpDir = os.tmpdir();
     let entries;
     try {
-        entries = fs.readdirSync(tmpDir);
+        entries = storage.readdir(tmpDir);
     } catch (err: any) {
         return;
     }
@@ -55,7 +56,7 @@ async function cleanupStaleBootstrapDirs() {
         if (!entry.startsWith(BOOTSTRAP_SOCKET_PREFIX)) continue;
         const dirPath = path.join(tmpDir, entry);
         let stat;
-        try { stat = fs.statSync(dirPath); } catch (err: any) { continue; }
+        try { stat = storage.stat(dirPath); } catch (err: any) { continue; }
         if (!stat.isDirectory()) continue;
         // Only delete if the dir is older than the threshold AND there is no
         // live Unix socket inside.  A stale regular file named `bootstrap.sock`
@@ -63,7 +64,7 @@ async function cleanupStaleBootstrapDirs() {
         // sockets we attempt a short connection to distinguish live from stale.
         const socketPath = path.join(dirPath, 'bootstrap.sock');
         try {
-            const socketStat = fs.statSync(socketPath);
+            const socketStat = storage.stat(socketPath);
             if (socketStat.isSocket()) {
                 // Probe the socket with a short connect.  If it succeeds the
                 // server is (or was very recently) listening — do not delete.
@@ -76,15 +77,15 @@ async function cleanupStaleBootstrapDirs() {
             // proceed to mtime check.
         }
         if (now - stat.mtimeMs <= staleThresholdMs) continue;
-        try { fs.rmSync(dirPath, { recursive: true, force: true }); } catch (err: any) { }
+        try { storage.rm(dirPath, { recursive: true, force: true }); } catch (err: any) { }
     }
 }
 
 async function createBootstrapSocketDir() {
     await cleanupStaleBootstrapDirs();
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), BOOTSTRAP_SOCKET_PREFIX));
+    const dir = storage.mkdtemp(path.join(os.tmpdir(), BOOTSTRAP_SOCKET_PREFIX));
     try {
-        fs.chmodSync(dir, 0o700);
+        storage.chmod(dir, 0o700);
         assertPrivatePathSecurity(dir, { expectedType: 'dir', requiredMode: 0o700 });
     } catch (err: any) {
         debugLog(`Unable to secure bootstrap dir ${dir}`, err);
@@ -289,7 +290,7 @@ async function createPasswordBootstrapServer({
 
         server.listen(socketPath, () => {
             try {
-                fs.chmodSync(socketPath, 0o600);
+                storage.chmod(socketPath, 0o600);
             } catch (err: any) {
                 debugLog(`Unable to chmod bootstrap socket ${socketPath}`, err);
             }

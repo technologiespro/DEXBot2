@@ -1,9 +1,10 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('../storage');
+const storage = getStorage();
 const { spawn } = require('child_process');
-const { resolveProjectRoot } = require('./runtime_entry');
+const { PATHS } = require('../paths');
 const {
     isPidAlive,
     parseCronExpression,
@@ -20,18 +21,16 @@ const { getCredentialReadyFilePath, getCredentialSocketPath } = require('../cred
 const { resolveRawBotEntries, loadSettingsFile } = require('../bot_settings');
 
 const CODE_ROOT = path.resolve(__dirname, '..', '..');
-const ROOT = resolveProjectRoot(CODE_ROOT);
-const LOGS_DIR = path.join(ROOT, 'profiles', 'logs');
 
-const MONOLITHIC_PID_FILE = path.join(ROOT, 'profiles', 'monolithic.pid');
-const MONOLITHIC_BOT_PID_FILE = path.join(ROOT, 'profiles', 'monolithic-bot.pid');
-const MONOLITHIC_BOT_INFO_FILE = path.join(ROOT, 'profiles', 'monolithic-bot.json');
-const MONOLITHIC_CRED_PID_FILE = path.join(ROOT, 'profiles', 'monolithic-cred.pid');
-const MONOLITHIC_OUT_LOG = path.join(LOGS_DIR, 'dexbot.log');
-const MONOLITHIC_ERROR_LOG = path.join(LOGS_DIR, 'dexbot-error.log');
-const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
-const CREDENTIAL_SOCKET_FILE = getCredentialSocketPath({ root: ROOT });
-const CREDENTIAL_READY_FILE = getCredentialReadyFilePath({ root: ROOT });
+const MONOLITHIC_PID_FILE = PATHS.PROFILES.MONOLITHIC_PID;
+const MONOLITHIC_BOT_PID_FILE = PATHS.PROFILES.MONOLITHIC_BOT_PID;
+const MONOLITHIC_BOT_INFO_FILE = PATHS.PROFILES.MONOLITHIC_BOT_INFO;
+const MONOLITHIC_CRED_PID_FILE = PATHS.PROFILES.MONOLITHIC_CRED_PID;
+const MONOLITHIC_OUT_LOG = path.join(PATHS.LOGS_DIR, 'dexbot.log');
+const MONOLITHIC_ERROR_LOG = path.join(PATHS.LOGS_DIR, 'dexbot-error.log');
+const BOTS_FILE = PATHS.PROFILES.BOTS_JSON;
+const CREDENTIAL_SOCKET_FILE = getCredentialSocketPath({ root: PATHS.PROJECT_ROOT });
+const CREDENTIAL_READY_FILE = getCredentialReadyFilePath({ root: PATHS.PROJECT_ROOT });
 
 function formatBotCount(count) {
     return `${count} ${count === 1 ? 'bot' : 'bots'}`;
@@ -46,11 +45,11 @@ function cleanupStateFiles() {
 }
 
 function readLiveMonolithicPid() {
-    if (!fs.existsSync(MONOLITHIC_PID_FILE)) return { pid: 0, stale: false };
+    if (!storage.exists(MONOLITHIC_PID_FILE)) return { pid: 0, stale: false };
 
     let pid = 0;
     try {
-        const raw = fs.readFileSync(MONOLITHIC_PID_FILE, 'utf8').trim();
+        const raw = storage.readFile(MONOLITHIC_PID_FILE).trim();
         pid = Number(raw);
         if (!Number.isInteger(pid) || pid <= 0) pid = 0;
     } catch (_) {
@@ -70,7 +69,7 @@ function readLiveMonolithicPid() {
 
 function readMonolithicBotInfo() {
     try {
-        const infoRaw = fs.readFileSync(MONOLITHIC_BOT_INFO_FILE, 'utf8');
+        const infoRaw = storage.readFile(MONOLITHIC_BOT_INFO_FILE);
         const info = JSON.parse(infoRaw);
         return info && typeof info === 'object' ? info : null;
     } catch (_) {
@@ -185,7 +184,7 @@ function cleanupCredentialRuntimeFiles() {
 async function stopCredentialDaemon() {
     let pidRaw = null;
     try {
-        pidRaw = fs.readFileSync(MONOLITHIC_CRED_PID_FILE, 'utf8').trim();
+        pidRaw = storage.readFile(MONOLITHIC_CRED_PID_FILE).trim();
     } catch (_) {}
 
     const daemonPid = Number(pidRaw);
@@ -240,9 +239,7 @@ async function readCredentialDaemonStatus(pid: number | null): Promise<{ alive: 
 // ── Monolithic daemonization ───────────────────────────────────────
 
 function ensureLogDir() {
-    if (!fs.existsSync(LOGS_DIR)) {
-        fs.mkdirSync(LOGS_DIR, { recursive: true });
-    }
+    storage.ensureDir(PATHS.LOGS_DIR);
 }
 
 function buildDexbotStartArgs(botName, dryrun = false) {
@@ -298,7 +295,7 @@ function createUpdateScheduler({ botProcessRef, log = console.log, warn = consol
                     scriptArgs: [],
                 });
                 const updateChild = spawn(process.execPath, updateArgs, {
-                    cwd: ROOT,
+                    cwd: PATHS.PROJECT_ROOT,
                     stdio: 'inherit',
                     env: buildScopedChildEnv({ extra: { DEXBOT_UPDATE_SKIP_RELOAD: '1' } }),
                 });

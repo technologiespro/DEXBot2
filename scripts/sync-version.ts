@@ -8,12 +8,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
+const { PATHS } = require('../modules/paths');
 const { readJSON } = require('../modules/utils/fs_utils');
 
-const PARENT = path.dirname(__dirname);
-const rootDir = resolveProjectRoot(PARENT);
-const rootPackagePath = path.join(rootDir, 'package.json');
+const rootPackagePath = path.join(PATHS.PROJECT_ROOT, 'package.json');
 const rootPackage = readJson(rootPackagePath);
 const targetVersion = rootPackage.version;
 const checkOnly = process.argv.includes('--check');
@@ -55,7 +53,7 @@ const targets = [
 const mismatches: any[] = [];
 
 for (const target of targets) {
-    const filePath = path.join(rootDir, target.file);
+    const filePath = path.join(PATHS.PROJECT_ROOT, target.file);
     const beforeText = fs.readFileSync(filePath, 'utf8');
     const json = JSON.parse(beforeText);
     target.update(json);

@@ -25,8 +25,10 @@ function requireNonNegativeNumber(value: any, fieldName: string) {
   return numericValue;
 }
 
+const { Config } = require('../../modules/config');
+
 function resolveAccountName(options: Record<string, any> = {}, { required = true }: Record<string, any> = {}) {
-  const accountName = options.accountName || process.env.BITSHARES_ACCOUNT || null;
+  const accountName = options.accountName || Config.BITSHARES_ACCOUNT || null;
   if (required && !accountName) {
     throw new Error('accountName is required');
   }

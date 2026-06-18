@@ -27,8 +27,9 @@
 
 'use strict';
 
-const fs   = require('fs');
 const path = require('path');
+const { getStorage } = require('../../modules/storage');
+const storage = getStorage();
 const kibanaSource = require('./kibana_source');
 const { mergeCandles } = require('../candle_utils');
 const { toIntervalLabel } = require('../interval_utils');
@@ -58,8 +59,9 @@ const FETCH_TIMEOUT_MS = MARKET_ADAPTER.KIBANA_REQUEST_TIMEOUT_MS;
 const FETCH_MAX_ATTEMPTS = MARKET_ADAPTER.RUNTIME_DEFAULTS.sourceRetries;
 const FETCH_MANIFEST_VERSION = 1;
 
-const { PROJECT_ROOT } = require('../utils/paths');
-const BOTS_JSON = path.join(PROJECT_ROOT, 'profiles', 'bots.json');
+const { PATHS } = require('../../modules/paths');
+const PROJECT_ROOT = PATHS.PROJECT_ROOT;
+const BOTS_JSON = PATHS.PROFILES.BOTS_JSON;
 
 // ─── CLI ──────────────────────────────────────────────────────────────────────
 
@@ -214,7 +216,7 @@ function buildFetchWindowsFromRange(timeRange, chunkMonths) {
 }
 
 function loadManifest(manifestPath) {
-    if (!fs.existsSync(manifestPath)) return null;
+    if (!storage.exists(manifestPath)) return null;
     try {
         return readJSON(manifestPath);
     } catch (_: any) {
@@ -224,10 +226,10 @@ function loadManifest(manifestPath) {
 
 function loadCachedFetchContext(bot, intervalSeconds) {
     const dir = pairFolderPath(bot.assetA, bot.assetB);
-    if (!fs.existsSync(dir)) return null;
+    if (!storage.exists(dir)) return null;
 
     const label = toIntervalLabel(intervalSeconds);
-    const manifestFiles = fs.readdirSync(dir)
+    const manifestFiles = storage.readdir(dir)
         .filter((name) => name.endsWith(`${label}.json.fetch_manifest.json`))
         .sort();
 
@@ -249,7 +251,7 @@ function loadCachedFetchContext(bot, intervalSeconds) {
         };
     }
 
-    const dataFiles = fs.readdirSync(dir)
+    const dataFiles = storage.readdir(dir)
         .filter((name) => name.endsWith(`${label}.json`) && !name.includes('.chunk_') && !name.endsWith('.fetch_manifest.json'))
         .sort();
 
@@ -322,7 +324,7 @@ function saveManifest(manifestPath, manifest) {
 }
 
 function validateChunkFile(chunkFile, requestKey, windowEntry) {
-    if (!fs.existsSync(chunkFile)) return null;
+    if (!storage.exists(chunkFile)) return null;
     try {
         const parsed = readJSON(chunkFile);
         const meta = parsed?.meta || {};
@@ -524,10 +526,10 @@ async function fetchCandlesSequentially(fullPoolId, assetA, assetB, config, outP
 // ─── bots.json helper ─────────────────────────────────────────────────────────
 
 function loadBotsJson() {
-    if (!fs.existsSync(BOTS_JSON)) {
-        throw new Error(`bots.json not found: ${BOTS_JSON}`);
+    if (!storage.exists(BOTS_JSON)) {
+        throw new Error(`bots.json not found at ${BOTS_JSON}`);
     }
-    return parseBotsConfig(fs.readFileSync(BOTS_JSON, 'utf8'), BOTS_JSON);
+    return parseBotsConfig(storage.readFile(BOTS_JSON), BOTS_JSON);
 }
 
 function parseBotsConfig(raw, sourceLabel = BOTS_JSON) {
@@ -763,7 +765,7 @@ async function run() {
     };
 
     writeJsonAtomic(outPath, output);
-    const kb = (fs.statSync(outPath).size / 1024).toFixed(1);
+    const kb = (storage.stat(outPath).size / 1024).toFixed(1);
     console.log(`  Saved: ${path.relative(process.cwd(), outPath)}  (${kb} KB)`);
 
     console.log('\nNext — chart it:');

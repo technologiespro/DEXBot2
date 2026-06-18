@@ -163,7 +163,7 @@ async function runTests() {
             return { executed: false, hadRotation: false };
         };
 
-        bot._performPeriodicGridChecks = async () => {
+        bot._runGridMaintenance = async () => {
             maintenanceCalls++;
         };
 

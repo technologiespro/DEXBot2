@@ -73,31 +73,30 @@
  * ===============================================================================
  */
 
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('./storage');
+const storage = getStorage();
 const { ensureProfilesDirectory, readInput } = require('./order/utils/system');
 const { DEFAULT_CONFIG, GRID_LIMITS, TIMING, LOG_LEVEL, UPDATER, MARKET_ADAPTER, NODE_MANAGEMENT, FILL_PROCESSING, PIPELINE_TIMING, CREDENTIAL_PROMPTS, MAINTENANCE, COW_PERFORMANCE, INCREMENT_BOUNDS, FEE_PARAMETERS, API_LIMITS, LOGGING_CONFIG, NATIVE_CLIENT, LAUNCHER } = require('./constants');
-const { resolveProjectRoot } = require('./launcher/runtime_entry');
+const { PATHS } = require('./paths');
 const { SETTINGS_FILE, readGeneralSettings, writeGeneralSettings } = require('./general_settings');
 
 const { parseJsonWithComments } = require('./order/utils/system');
 const { writeJSON } = require('./utils/fs_utils');
 
-const MODULE_DIR$1 = path.dirname(__dirname);
-const PROJECT_ROOT$1 = resolveProjectRoot(MODULE_DIR$1);
-const BOTS_FILE = path.join(PROJECT_ROOT$1, 'profiles', 'bots.json');
-const PROFILES_DIR = path.join(PROJECT_ROOT$1, 'profiles');
+const BOTS_FILE = PATHS.PROFILES.BOTS_JSON;
+const PROFILES_DIR = PATHS.PROFILES_DIR;
 
 /**
  * Loads the bots configuration from profiles/bots.json.
  * @returns {Object} An object containing the config and the file path.
  */
 function loadBotsConfig() {
-    if (!fs.existsSync(BOTS_FILE)) {
+    if (!storage.exists(BOTS_FILE)) {
         return { config: { bots: [] }, filePath: BOTS_FILE };
     }
     try {
-        const content = fs.readFileSync(BOTS_FILE, 'utf8');
+        const content = storage.readFile(BOTS_FILE);
         if (!content || !content.trim()) return { config: { bots: [] }, filePath: BOTS_FILE };
         const parsed = parseJsonWithComments(content);
         if (!Array.isArray(parsed.bots)) parsed.bots = [];

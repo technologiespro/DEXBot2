@@ -1,6 +1,7 @@
 const assert = require('assert');
 const path = require('path');
 const { BUILD_DIR } = require('../modules/constants');
+const { Config } = require('../modules/config');
 
 console.log('Running launcher export tests');
 
@@ -54,7 +55,9 @@ assert.deepStrictEqual(
     'unlock parser should combine dryrun and isolated flags'
 );
 const originalBotName = process.env.BOT_NAME;
+const originalConfigBotName = Config.BOT_NAME;
 process.env.BOT_NAME = 'ENV-BOT';
+Config.BOT_NAME = 'ENV-BOT';
 assert.deepStrictEqual(
     parseUnlockArgs(['node', 'unlock']),
     { botName: 'ENV-BOT', clawOnly: false, isolated: false, dryrun: false, ...UNLOCK_BASE },
@@ -70,6 +73,7 @@ if (originalBotName === undefined) {
 } else {
     process.env.BOT_NAME = originalBotName;
 }
+Config.BOT_NAME = originalConfigBotName;
 // Headless mode tests
 assert.deepStrictEqual(
     parseUnlockArgs(['node', 'unlock', '--headless']),

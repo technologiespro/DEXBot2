@@ -22,6 +22,7 @@
 'use strict';
 
 const path = require('path');
+const { PATHS } = require('../modules/paths');
 const { DerivativeAnalyzer } = require('./trend_detection/derivative_analyzer');
 const { generateHTML }        = require('./derivative_chart_generator');
 const { createSource }        = require('./price_sources');
@@ -302,7 +303,7 @@ async function main(): Promise<void> {
     try {
         const srcConfig = config.source.config;
         if (config.source.type === 'market_adapter' && !srcConfig.stateDir) {
-            srcConfig.stateDir = path.join(__dirname, '..', 'market_adapter', 'state');
+            srcConfig.stateDir = PATHS.MARKET_ADAPTER.STATE_DIR;
         }
         if (config.source.type === 'json' && !srcConfig.filePath) {
             const autoFile = findLatestLpData();

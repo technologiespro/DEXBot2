@@ -1,22 +1,22 @@
 const { spawn } = require('child_process');
 const path = require('path');
-const fs = require('fs');
-const { resolveProjectRoot } = require('../../modules/launcher/runtime_entry');
+const { getStorage } = require('../../modules/storage');
+const storage = getStorage();
+const { PATHS } = require('../../modules/paths');
 const { ensureDir, safeUnlink } = require('../../modules/utils/fs_utils');
 
-const MB_PARENT_DIR = path.dirname(path.dirname(__dirname));
-const MB_PROJECT_ROOT = resolveProjectRoot(MB_PARENT_DIR);
-const DEFAULT_MEMU_DIR = path.join(MB_PROJECT_ROOT, 'claw', 'data', 'memu');
-const DEFAULT_PYTHON = process.env.MEMU_PYTHON || 'python3';
+const DEFAULT_MEMU_DIR = PATHS.CLAW.MEMU_DIR;
+const { Config } = require('../../modules/config');
+const DEFAULT_PYTHON = Config.MEMU_PYTHON;
 
 function resolveMemuScript() {
   const candidates = [
-    path.join(MB_PROJECT_ROOT, 'claw', 'scripts', 'memu_runner.py'),
-    path.join(MB_PROJECT_ROOT, 'claw', 'scripts', 'memu_runner.py'),
+    PATHS.CLAW.MEMU_RUNNER_SCRIPT,
+    PATHS.CLAW.MEMU_RUNNER_SCRIPT,
   ];
 
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
+    if (storage.exists(candidate)) {
       return candidate;
     }
   }
@@ -25,7 +25,7 @@ function resolveMemuScript() {
 }
 
 function ensureMemuDir(dir: any) {
-  if (!fs.existsSync(dir)) {
+  if (!storage.exists(dir)) {
     ensureDir(dir);
   }
   return dir;
@@ -323,11 +323,11 @@ function createMemuBridge(options: Record<string, any> = {}) {
       }).join('\n');
 
       const tmpDir = path.join(memuDir, 'tmp');
-      if (!fs.existsSync(tmpDir)) {
+      if (!storage.exists(tmpDir)) {
         ensureDir(tmpDir);
       }
       const tmpFile = path.join(tmpDir, `conv_${Date.now()}.txt`);
-      fs.writeFileSync(tmpFile, formatted, 'utf8');
+      storage.writeFile(tmpFile, formatted);
 
       try {
         return await this.memorize(tmpFile, 'conversation', user);
@@ -342,11 +342,11 @@ function createMemuBridge(options: Record<string, any> = {}) {
         : JSON.stringify(context, null, 2);
 
       const tmpDir = path.join(memuDir, 'tmp');
-      if (!fs.existsSync(tmpDir)) {
+      if (!storage.exists(tmpDir)) {
         ensureDir(tmpDir);
       }
       const tmpFile = path.join(tmpDir, `trading_${Date.now()}.json`);
-      fs.writeFileSync(tmpFile, formatted, 'utf8');
+      storage.writeFile(tmpFile, formatted);
 
       try {
         return await this.memorize(tmpFile, 'document', user);

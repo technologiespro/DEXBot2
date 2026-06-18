@@ -689,7 +689,7 @@ async function testExecuteBatchRetriesExpiredDaemonSessionOnly() {
     const transport = installFakeCredentialDaemonTransport((request, socket) => {
         requestCount++;
         if (requestCount === 1) {
-            socket.endLine({ success: false, error: 'invalid or expired session' });
+            socket.endLine({ success: false, error: 'SESSION_EXPIRED' });
         } else {
             assert.strictEqual(request.sessionId, 'session-2', 'retry should use renegotiated session');
             socket.endLine({ success: true, raw: { ok: true }, operation_results: [['1', '1.7.1']] });
@@ -726,7 +726,7 @@ async function testExecuteBatchRetryPreservesUncertainBroadcastHandling() {
     const transport = installFakeCredentialDaemonTransport((request, socket) => {
         requestCount++;
         if (requestCount === 1) {
-            socket.endLine({ success: false, error: 'invalid or expired session' });
+            socket.endLine({ success: false, error: 'SESSION_EXPIRED' });
         } else {
             assert.strictEqual(request.sessionId, 'session-2', 'retry should use renegotiated session');
             socket.endLine({ success: false, code: 'BROADCAST_DEADLINE', error: 'inner broadcast deadline exceeded on retry' });

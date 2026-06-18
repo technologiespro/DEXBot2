@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { fillCandleGaps } = require('../market_adapter/candle_utils');
 const { getCandleClose, getCandleTimestamp, loadCandleFile } = require('./math_utils');
+const { PATHS } = require('../modules/paths');
 const { readJSON } = require('../modules/utils/fs_utils');
 
 interface JsonFileConfig {
@@ -70,7 +71,7 @@ class MarketAdapterSource {
     name: string;
 
     constructor(config: MarketAdapterConfig) {
-        this.stateDir = config.stateDir || path.join(__dirname, '..', 'market_adapter', 'state');
+        this.stateDir = config.stateDir || PATHS.MARKET_ADAPTER.STATE_DIR;
         this.botKey = config.botKey;
         this.name = `market_adapter:${this.botKey}`;
     }

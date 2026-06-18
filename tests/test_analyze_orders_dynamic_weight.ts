@@ -4,6 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { Config } = require('../modules/config');
 
 const { ensureDir, writeJSON } = require('../modules/utils/fs_utils');
 const ORDERS_DIR = path.join(__dirname, '..', 'profiles', 'orders');
@@ -39,8 +40,10 @@ function removeSnapshot(botKey) {
 
 function withWhitelist(entries, fn) {
   const originalEnv = process.env.DEXBOT_TEST_MARKET_ADAPTER_WHITELIST_FILE;
+  const originalConfigWhitelist = Config.DEXBOT_TEST_MARKET_ADAPTER_WHITELIST_FILE;
   writeJSON(TEST_WHITELIST_PATH, { whitelist: entries });
   process.env.DEXBOT_TEST_MARKET_ADAPTER_WHITELIST_FILE = TEST_WHITELIST_PATH;
+  Config.DEXBOT_TEST_MARKET_ADAPTER_WHITELIST_FILE = TEST_WHITELIST_PATH;
   delete require.cache[WHITELIST_MODULE_PATH];
   delete require.cache[ANALYZER_PATH];
   try {
@@ -51,6 +54,7 @@ function withWhitelist(entries, fn) {
     } else {
       process.env.DEXBOT_TEST_MARKET_ADAPTER_WHITELIST_FILE = originalEnv;
     }
+    Config.DEXBOT_TEST_MARKET_ADAPTER_WHITELIST_FILE = originalConfigWhitelist;
     if (fs.existsSync(TEST_WHITELIST_PATH)) {
       fs.unlinkSync(TEST_WHITELIST_PATH);
     }

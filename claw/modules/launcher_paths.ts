@@ -1,15 +1,16 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
+const { getStorage } = require('../../modules/storage');
+const storage = getStorage();
 const { BUILD_DIR } = require('../../modules/constants');
-const { resolveProjectRoot } = require('../../modules/launcher/runtime_entry');
+const { PATHS } = require('../../modules/paths');
 
 function isDexbot2Root(candidate: string) {
   return !!candidate && (
-    fs.existsSync(path.join(candidate, BUILD_DIR, 'dexbot.js')) ||
-    fs.existsSync(path.join(candidate, 'dexbot.js')) ||
-    fs.existsSync(path.join(candidate, 'dexbot.ts'))
+    storage.exists(path.join(candidate, BUILD_DIR, 'dexbot.js')) ||
+    storage.exists(path.join(candidate, 'dexbot.js')) ||
+    storage.exists(path.join(candidate, 'dexbot.ts'))
   );
 }
 
@@ -28,9 +29,7 @@ function findDexbot2Root(startDir?: string) {
   return path.resolve(startDir || __dirname);
 }
 
-const LP_PARENT_DIR = path.dirname(path.dirname(__dirname));
-const LP_PROJECT_ROOT = resolveProjectRoot(LP_PARENT_DIR);
-const DEFAULT_ROOT = findDexbot2Root(LP_PROJECT_ROOT);
+const DEFAULT_ROOT = findDexbot2Root(PATHS.PROJECT_ROOT);
 
 function normalizeRoot(options: Record<string, any> = {}) {
   if (options.profileRoot) {
@@ -59,7 +58,7 @@ function normalizeProfileDir(options: Record<string, any> = {}) {
 
 function resolveRuntimeScript(root: string, ...segments: string[]) {
   const sourcePath = path.join(root, ...segments);
-  if (fs.existsSync(sourcePath)) {
+  if (storage.exists(sourcePath)) {
     return sourcePath;
   }
   return path.join(root, BUILD_DIR, ...segments);

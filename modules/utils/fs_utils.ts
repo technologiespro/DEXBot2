@@ -1,27 +1,33 @@
-const fs = require('fs');
+/**
+ * Backward-compatibility re-exports from the unified StorageAdapter.
+ *
+ * All new code should import directly from `modules/storage`:
+ *   const storage = require('../storage').getStorage();
+ *   storage.readJSON(...) / storage.writeJSON(...) / storage.exists(...)
+ */
+
+const { getStorage } = require('../storage');
+
+const storage = getStorage();
 
 function readJSON<T = any>(filePath: string): T {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return storage.readJSON(filePath);
 }
 
 function writeJSON(filePath: string, data: any, options?: { mode?: number }): void {
-    let content = JSON.stringify(data, null, 2) + '\n';
-    const opts: any = { encoding: 'utf8' };
-    if (options?.mode !== undefined) opts.mode = options.mode;
-    const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
-    fs.writeFileSync(tmpPath, content, opts);
-    fs.renameSync(tmpPath, filePath);
+    storage.writeJSON(filePath, data, options);
 }
 
 function ensureDir(dirPath: string, options?: { mode?: number }): void {
-    const opts: any = { recursive: true };
-    if (options?.mode !== undefined) opts.mode = options.mode;
-    fs.mkdirSync(dirPath, opts);
+    storage.ensureDir(dirPath, options);
 }
 
 function safeUnlink(filePath: string): void {
-    if (!filePath) return;
-    try { fs.unlinkSync(filePath); } catch (_) {}
+    storage.unlink(filePath);
 }
 
-export = { readJSON, writeJSON, ensureDir, safeUnlink };
+function exists(filePath: string): boolean {
+    return storage.exists(filePath);
+}
+
+export = { readJSON, writeJSON, ensureDir, safeUnlink, exists };

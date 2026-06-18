@@ -3,20 +3,21 @@
 const fs = require('fs');
 const path = require('path');
 import net = require('net');
+const { getStorage } = require('../storage');
+const storage = getStorage();
 const { spawn, execSync } = require('child_process');
 const { buildScopedChildEnv } = require('./child_env');
-const { buildRuntimeScriptPath, isDistCodeRoot, resolveProjectRoot } = require('./runtime_entry');
+const { buildRuntimeScriptPath, isDistCodeRoot } = require('./runtime_entry');
+const { PATHS } = require('../paths');
 const { normalizeBotEntries, resolveRawBotEntries, loadSettingsFile } = require('../bot_settings');
 const { UPDATER, BUILD_DIR, LAUNCHER } = require('../constants');
 const { ensureDir, readJSON, safeUnlink } = require('../utils/fs_utils');
+const { Config } = require('../config');
+const { getProcessDiscovery } = require('../process_discovery');
 
 const CODE_ROOT = path.resolve(__dirname, '..', '..');
-const ROOT = resolveProjectRoot(CODE_ROOT);
-const LOGS_DIR = path.join(ROOT, 'profiles', 'logs');
 const BOT_SCRIPT = buildRuntimeScriptPath(CODE_ROOT, ['bot']);
-const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
-const SOCKET_PATH = process.env.DEXBOT_SUPERVISOR_SOCKET || path.join(ROOT, 'profiles', 'supervisor.sock');
-const MARKET_ADAPTER_LOCK_FILE = path.join(ROOT, 'market_adapter', 'state', 'market_adapter.lock');
+const SOCKET_PATH = Config.DEXBOT_SUPERVISOR_SOCKET || PATHS.PROFILES.SUPERVISOR_SOCK;
 
 const {
     MAX_RESTARTS,
@@ -48,14 +49,14 @@ function isServiceApp(app) {
 }
 
 function ensureLogDir() {
-    if (!fs.existsSync(LOGS_DIR)) {
-        ensureDir(LOGS_DIR);
+    if (!storage.exists(PATHS.LOGS_DIR)) {
+        ensureDir(PATHS.LOGS_DIR);
     }
 }
 
 function loadActiveBots(explicitBots) {
     if (explicitBots) return explicitBots;
-    const { config } = loadSettingsFile(BOTS_FILE);
+    const { config } = loadSettingsFile(PATHS.PROFILES.BOTS_JSON);
     const raw = resolveRawBotEntries(config);
     return normalizeBotEntries(raw).filter((b) => b.active !== false);
 }
@@ -68,10 +69,10 @@ function buildSupervisedApps(bots) {
             name: botName,
             script: BOT_SCRIPT,
             args: botName,
-            cwd: ROOT,
+            cwd: PATHS.PROJECT_ROOT,
             max_memory_restart: '250M',
-            error_file: path.join(LOGS_DIR, `${botName}-error.log`),
-            out_file: path.join(LOGS_DIR, `${botName}.log`),
+            error_file: path.join(PATHS.LOGS_DIR, `${botName}-error.log`),
+            out_file: path.join(PATHS.LOGS_DIR, `${botName}.log`),
             max_restarts: 13,
             min_uptime: 86400000,
             restart_delay: 3000,
@@ -83,10 +84,10 @@ function buildSupervisedApps(bots) {
             kind: 'service',
             name: 'dexbot-adapter',
             script: buildRuntimeScriptPath(CODE_ROOT, ['market_adapter', 'market_adapter']),
-            cwd: ROOT,
+            cwd: PATHS.PROJECT_ROOT,
             max_memory_restart: '150M',
-            error_file: path.join(LOGS_DIR, 'dexbot-adapter-error.log'),
-            out_file: path.join(LOGS_DIR, 'dexbot-adapter.log'),
+            error_file: path.join(PATHS.LOGS_DIR, 'dexbot-adapter-error.log'),
+            out_file: path.join(PATHS.LOGS_DIR, 'dexbot-adapter.log'),
             max_restarts: 13,
             min_uptime: 60000,
             restart_delay: 3000,
@@ -98,9 +99,9 @@ function buildSupervisedApps(bots) {
             kind: 'job',
             name: 'dexbot-update',
             script: buildRuntimeScriptPath(CODE_ROOT, ['scripts', 'update']),
-            cwd: ROOT,
-            error_file: path.join(LOGS_DIR, 'dexbot-update-error.log'),
-            out_file: path.join(LOGS_DIR, 'dexbot-update.log'),
+            cwd: PATHS.PROJECT_ROOT,
+            error_file: path.join(PATHS.LOGS_DIR, 'dexbot-update-error.log'),
+            out_file: path.join(PATHS.LOGS_DIR, 'dexbot-update.log'),
             autorestart: false,
             bulk_control: false,
             cron_schedule: UPDATER.SCHEDULE,
@@ -259,20 +260,11 @@ async function waitForPidExit(pid, timeoutMs) {
 }
 
 function readProcArgs(pid) {
-    if (!isPidAlive(pid)) return [];
-    try {
-        return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
-    } catch (_: any) {
-        return [];
-    }
+    return getProcessDiscovery().readArgs(pid);
 }
 
 function readProcCwd(pid) {
-    try {
-        return fs.realpathSync(`/proc/${pid}/cwd`);
-    } catch (_: any) {
-        return '';
-    }
+    return getProcessDiscovery().readCwd(pid);
 }
 
 function normalizeProcScriptArg(arg, cwd) {
@@ -280,7 +272,7 @@ function normalizeProcScriptArg(arg, cwd) {
     if (!/\.(?:[cm]?js|ts)$/i.test(String(arg))) return '';
     return path.isAbsolute(arg)
         ? path.normalize(arg)
-        : path.resolve(cwd || ROOT, arg);
+        : path.resolve(cwd || PATHS.PROJECT_ROOT, arg);
 }
 
 function scriptPathForRoot(root, scriptSegments, ext) {
@@ -293,19 +285,19 @@ function scriptPathForRoot(root, scriptSegments, ext) {
 function candidateRuntimeScriptPaths(scriptSegments) {
     const candidates = new Set([
         buildRuntimeScriptPath(CODE_ROOT, scriptSegments),
-        scriptPathForRoot(ROOT, scriptSegments, '.ts'),
-        scriptPathForRoot(path.join(ROOT, BUILD_DIR), scriptSegments, '.js'),
+        scriptPathForRoot(PATHS.PROJECT_ROOT, scriptSegments, '.ts'),
+        scriptPathForRoot(path.join(PATHS.PROJECT_ROOT, BUILD_DIR), scriptSegments, '.js'),
     ]);
 
     if (scriptSegments.length === 1) {
-        candidates.add(scriptPathForRoot(ROOT, scriptSegments, '.js'));
+        candidates.add(scriptPathForRoot(PATHS.PROJECT_ROOT, scriptSegments, '.js'));
     }
 
     // Compatibility for wrappers already running from before the unlock-start -> unlock rename.
     if (scriptSegments.length === 1 && scriptSegments[0] === 'unlock') {
-        candidates.add(scriptPathForRoot(ROOT, ['unlock-start'], '.js'));
-        candidates.add(scriptPathForRoot(ROOT, ['unlock-start'], '.ts'));
-        candidates.add(scriptPathForRoot(path.join(ROOT, BUILD_DIR), ['unlock-start'], '.js'));
+        candidates.add(scriptPathForRoot(PATHS.PROJECT_ROOT, ['unlock-start'], '.js'));
+        candidates.add(scriptPathForRoot(PATHS.PROJECT_ROOT, ['unlock-start'], '.ts'));
+        candidates.add(scriptPathForRoot(path.join(PATHS.PROJECT_ROOT, BUILD_DIR), ['unlock-start'], '.js'));
     }
 
     return candidates;
@@ -335,7 +327,7 @@ function isNodeProcessWithExactScript(pid, scriptSegments) {
 
 function readMarketAdapterLockPid() {
     try {
-        const info = readJSON(MARKET_ADAPTER_LOCK_FILE);
+        const info = readJSON(PATHS.MARKET_ADAPTER.LOCK_FILE);
         const pid = Number(info.pid);
         return Number.isInteger(pid) && pid > 0 ? pid : null;
     } catch (_: any) {
@@ -369,11 +361,8 @@ function getChildRSS(child) {
     if (!child || !child.pid) return -1;
     try {
         if (process.platform === 'linux') {
-            const statm = fs.readFileSync(`/proc/${child.pid}/statm`, 'utf8');
-            const parts = statm.trim().split(/\s+/);
-            if (parts.length >= 2) {
-                return parseInt(parts[1], 10) * 4096;
-            }
+            const bytes = getProcessDiscovery().readRSSBytes(child.pid);
+            if (bytes > 0) return bytes;
         } else if (process.platform === 'darwin') {
             const out = execSync(`ps -o rss= -p ${child.pid}`, { encoding: 'utf8', timeout: 3000 });
             const rssKB = parseInt(out.trim(), 10);
@@ -424,7 +413,7 @@ function createBotSupervisor({
     spawnFn = spawn,
     log = (...args) => console.log(SUPERVISOR_PREFIX, ...args),
     logError = (...args) => console.error(SUPERVISOR_PREFIX, ...args),
-    controlSocket = process.env.DEXBOT_DISABLE_SUPERVISOR_SOCKET !== '1',
+    controlSocket = !Config.DEXBOT_DISABLE_SUPERVISOR_SOCKET,
     getChildRss = getChildRSS,
     memoryCheckIntervalMs = MEMORY_CHECK_INTERVAL_MS,
     statusLogIntervalMs = STATUS_LOG_INTERVAL_MS,
@@ -562,8 +551,8 @@ function createBotSupervisor({
         }
 
         ensureLogDir();
-        const outFile = app.out_file || path.join(LOGS_DIR, `${appName}.log`);
-        const errorFile = app.error_file || path.join(LOGS_DIR, `${appName}-error.log`);
+        const outFile = app.out_file || path.join(PATHS.LOGS_DIR, `${appName}.log`);
+        const errorFile = app.error_file || path.join(PATHS.LOGS_DIR, `${appName}-error.log`);
         const outStream = fs.createWriteStream(outFile, { flags: 'a' });
         const errStream = fs.createWriteStream(errorFile, { flags: 'a' });
         const isBot = !isServiceApp(app);
@@ -577,7 +566,7 @@ function createBotSupervisor({
             ? [app.script || BOT_SCRIPT, ...normalizeAppArgs(app.args)]
             : ['--import', 'tsx', app.script || BOT_SCRIPT, ...normalizeAppArgs(app.args)];
         const child = spawnFn(process.execPath, runtimeArgs, {
-            cwd: app.cwd || ROOT,
+            cwd: app.cwd || PATHS.PROJECT_ROOT,
             env: buildEnv({ extra: extraEnv }),
             stdio: ['inherit', 'pipe', 'pipe'],
         });
@@ -853,7 +842,7 @@ function createBotSupervisor({
                 socketServer.on('error', (err) => {
                     logError(`Socket server error: ${err.message}`);
                 });
-                try { fs.chmodSync(SOCKET_PATH, 0o600); } catch (_: any) {}
+                try { storage.chmod(SOCKET_PATH, 0o600); } catch (_: any) {}
                 log(`Control socket: ${SOCKET_PATH}`);
                 resolve(undefined);
             });

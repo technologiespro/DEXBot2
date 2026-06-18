@@ -30,14 +30,11 @@ const { sendControlCommand } = require('../modules/launcher/supervisor_control')
 // Import update configuration from constants
 // Contains: REPOSITORY_URL, BRANCH, BUILD_DIR settings
 const { UPDATER, BUILD_DIR } = require('../modules/constants');
-const { resolveProjectRoot } = require('../modules/launcher/runtime_entry');
+const { PATHS } = require('../modules/paths');
+const { Config } = require('../modules/config');
 const { readJSON } = require('../modules/utils/fs_utils');
 
-// Project root directory — handles running from scripts/ or dist/scripts/
-const ROOT = resolveProjectRoot(path.dirname(__dirname));
-const MONOLITHIC_PID_FILE = path.join(ROOT, 'profiles', 'monolithic.pid');
-const MONOLITHIC_BOT_PID_FILE = path.join(ROOT, 'profiles', 'monolithic-bot.pid');
-const MONOLITHIC_BOT_INFO_FILE = path.join(ROOT, 'profiles', 'monolithic-bot.json');
+
 const UPDATE_COLORS = {
     reset: '\x1b[0m',
     ok: '\x1b[1;92m',
@@ -45,7 +42,7 @@ const UPDATE_COLORS = {
 };
 
 function colorUpdateOutput(text: string, color: string, stream: NodeJS.WriteStream = process.stdout) {
-    return stream.isTTY && !process.env.NO_COLOR
+    return stream.isTTY && !Config.NO_COLOR
         ? `${color}${text}${UPDATE_COLORS.reset}`
         : text;
 }
@@ -81,7 +78,7 @@ function updateError(msg) {
 function run(cmd) {
     log(`Executing: ${cmd}`);
     try {
-        execSync(cmd, { stdio: 'inherit', cwd: ROOT });
+        execSync(cmd, { stdio: 'inherit', cwd: PATHS.PROJECT_ROOT });
     } catch (err) {
         console.error(updateError(`[ERROR] Command failed: ${cmd}`));
         throw err;
@@ -102,12 +99,12 @@ function readLivePidFile(filePath) {
 }
 
 function detectMonolithicRuntime() {
-    const wrapperPid = readLivePidFile(MONOLITHIC_PID_FILE);
+    const wrapperPid = readLivePidFile(PATHS.PROFILES.MONOLITHIC_PID);
     if (!wrapperPid) return null;
 
-    const detected = { wrapperPid, botPid: readLivePidFile(MONOLITHIC_BOT_PID_FILE), botNames: [] };
+    const detected = { wrapperPid, botPid: readLivePidFile(PATHS.PROFILES.MONOLITHIC_BOT_PID), botNames: [] };
     try {
-        const info = readJSON(MONOLITHIC_BOT_INFO_FILE);
+        const info = readJSON(PATHS.PROFILES.MONOLITHIC_BOT_INFO);
         if (Array.isArray(info.botNames)) {
             detected.botNames = info.botNames.map((name) => String(name));
         } else if (info.botName) {
@@ -125,9 +122,9 @@ function restartMonolithicRuntime(monolithic) {
     ].filter(Boolean).join('; ');
 
     log(`Monolithic runtime detected (${details}). Restarting via unlock control...`);
-    const unlockPath = fs.existsSync(path.join(ROOT, BUILD_DIR, 'unlock.js'))
-        ? path.join(ROOT, BUILD_DIR, 'unlock.js')
-        : path.join(ROOT, 'unlock.js');
+    const unlockPath = fs.existsSync(path.join(PATHS.PROJECT_ROOT, BUILD_DIR, 'unlock.js'))
+        ? path.join(PATHS.PROJECT_ROOT, BUILD_DIR, 'unlock.js')
+        : path.join(PATHS.PROJECT_ROOT, 'unlock.js');
     run(`node "${unlockPath}" restart all`);
 }
 
@@ -163,7 +160,7 @@ async function restartActiveIsolatedProcesses() {
 (async () => {
 try {
     // Change to project root for all git operations
-    process.chdir(ROOT);
+    process.chdir(PATHS.PROJECT_ROOT);
     log('Starting DEXBot2 update process...');
 
     // Get configured repository URL and target branch
@@ -174,7 +171,7 @@ try {
      * STEP 1: Validate Git Repository
      * Ensures .git directory exists so we can perform git operations
      */
-    if (!fs.existsSync(path.join(ROOT, '.git'))) {
+    if (!fs.existsSync(path.join(PATHS.PROJECT_ROOT, '.git'))) {
         throw new Error('Not a git repository. Manual update required.');
     }
 
@@ -271,7 +268,7 @@ try {
     console.log('\n----------------------------------------------------------------');
     console.log('Incoming Changes:');
     try {
-        execSync(`git log --oneline --graph --decorate HEAD..origin/${branch}`, { stdio: 'inherit', cwd: ROOT });
+        execSync(`git log --oneline --graph --decorate HEAD..origin/${branch}`, { stdio: 'inherit', cwd: PATHS.PROJECT_ROOT });
     } catch (e) {
         log('Warning: Could not list changes.');
     }
@@ -326,8 +323,8 @@ try {
     log('Building TypeScript sources (npm run build)...');
     run('npm run build');
 
-    const SOURCE_MARKER = path.join(ROOT, 'modules', 'dexbot_class.ts');
-    const DIST_MARKER = path.join(ROOT, BUILD_DIR, 'modules', 'dexbot_class.js');
+    const SOURCE_MARKER = path.join(PATHS.PROJECT_ROOT, 'modules', 'dexbot_class.ts');
+    const DIST_MARKER = path.join(PATHS.PROJECT_ROOT, BUILD_DIR, 'modules', 'dexbot_class.js');
     if (fs.existsSync(SOURCE_MARKER)) {
         if (!fs.existsSync(DIST_MARKER)) {
             throw new Error(
@@ -362,9 +359,9 @@ try {
         // Try loading from compiled dist/ first, then fall back to source dir
         let generateEcosystemConfig;
         try {
-            ({ generateEcosystemConfig } = require(path.join(ROOT, BUILD_DIR, 'pm2')));
+            ({ generateEcosystemConfig } = require(path.join(PATHS.PROJECT_ROOT, BUILD_DIR, 'pm2')));
         } catch (_) {
-            ({ generateEcosystemConfig } = require(path.join(ROOT, 'pm2')));
+            ({ generateEcosystemConfig } = require(path.join(PATHS.PROJECT_ROOT, 'pm2')));
         }
         generateEcosystemConfig({ clawOnly: false, exitOnError: false });
         logSuccess('Ecosystem config regenerated successfully.');
@@ -383,7 +380,7 @@ try {
      */
     log('Restarting active runtime processes...');
     try {
-        if (process.env.DEXBOT_UPDATE_SKIP_RELOAD === '1') {
+        if (Config.DEXBOT_UPDATE_SKIP_RELOAD) {
             log('Restart skipped (managed by launcher).');
         } else {
             const monolithic = detectMonolithicRuntime();
@@ -392,7 +389,7 @@ try {
             } else if (await restartActiveIsolatedProcesses()) {
                 log('Isolated supervisor runtime restarted.');
             } else {
-                const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
+                const BOTS_FILE = PATHS.PROFILES.BOTS_JSON;
                 if (fs.existsSync(BOTS_FILE)) {
                     const raw = fs.readFileSync(BOTS_FILE, 'utf8');
                     const stripped = raw.replace(/\/\*(?:.|[\r\n])*?\*\//g, '').replace(/(^|\s*)\/\/.*$/gm, '');
@@ -425,9 +422,9 @@ try {
                         const runningActiveBots = activeBots.filter(b => runningProcesses.includes(b.name));
                         let needsMarketAdapter;
                         try {
-                            ({ needsMarketAdapter } = require(path.join(ROOT, BUILD_DIR, 'pm2')));
+                            ({ needsMarketAdapter } = require(path.join(PATHS.PROJECT_ROOT, BUILD_DIR, 'pm2')));
                         } catch (_) {
-                            ({ needsMarketAdapter } = require(path.join(ROOT, 'pm2')));
+                            ({ needsMarketAdapter } = require(path.join(PATHS.PROJECT_ROOT, 'pm2')));
                         }
                         const marketAdapterRequired = needsMarketAdapter(runningActiveBots);
 
