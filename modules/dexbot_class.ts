@@ -53,7 +53,7 @@
  * ===============================================================================
  */
 
-const path = require('path');
+const { path } = require('./path_api');
 const { BitShares, waitForConnected, onReconnect: registerReconnectHook } = require('./bitshares_client');
 const { getStorage } = require('./storage');
 const storage = getStorage();

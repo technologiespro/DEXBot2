@@ -1,6 +1,6 @@
 'use strict';
 
-const path = require('path');
+const { path } = require('../../modules/path_api');
 const CreditRuntime = require('../../modules/credit_runtime');
 
 const DEFAULT_CREDIT_RUNTIME_DIR = 'profiles/credit_runtime';

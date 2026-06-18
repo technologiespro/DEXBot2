@@ -84,7 +84,7 @@
 
 const crypto = require('crypto');
 const net = require('net');
-const path = require('path');
+const { path } = require('./path_api');
 const { readInput, readPassword } = require('./order/utils/system');
 const { TIMING, CREDENTIAL_PROMPTS } = require('./constants');
 const { PATHS } = require('./paths');

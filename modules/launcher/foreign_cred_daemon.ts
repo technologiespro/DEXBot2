@@ -1,4 +1,4 @@
-const path = require('path');
+const { path } = require('../path_api');
 const { getStorage } = require('../storage');
 const storage = getStorage();
 const { safeUnlink } = require('../utils/fs_utils');

@@ -53,7 +53,7 @@
  * ===============================================================================
  */
 
-const path = require('path');
+const { path } = require('./path_api');
 const { getStorage } = require('./storage');
 const storage = getStorage();
 const { ORDER_TYPES, ORDER_STATES } = require('./constants');

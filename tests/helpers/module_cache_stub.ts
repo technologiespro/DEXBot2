@@ -1,4 +1,4 @@
-const path = require('path');
+const { path } = require('../../modules/path_api');
 const { BUILD_DIR } = require('../../modules/constants');
 
 const MODULES_SEG = path.sep + 'modules' + path.sep;

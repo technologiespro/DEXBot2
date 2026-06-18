@@ -73,11 +73,17 @@ assert(joined.includes('TEST/PAIR'), 'should include market name in grid');
 assert(joined.includes('funds.available') || joined.includes('Available'), 'should include available funds label');
 assert(joined.includes('total.chain') || joined.includes('total.grid'), 'should include total funds labels');
 
+const { Config } = require('../modules/config');
 const originalPmExecPath = process.env.pm_exec_path;
 const originalPmOutLogPath = process.env.pm_out_log_path;
 const originalPmErrLogPath = process.env.pm_err_log_path;
+const origConfigPmExec = Config.pm_exec_path;
+const origConfigPmOut = Config.pm_out_log_path;
+const origConfigPmErr = Config.pm_err_log_path;
 process.env.pm_exec_path = 'pm2';
 process.env.pm_out_log_path = '/tmp/dexbot-test.log';
+Config.pm_exec_path = 'pm2';
+Config.pm_out_log_path = '/tmp/dexbot-test.log';
 assert.strictEqual(createPm2AwareLogger('default').quiet, true, 'PM2-aware logger should auto-quiet when PM2 log paths are configured');
 assert.strictEqual(createPm2AwareLogger('verbose', { quietUnderPm2: false }).quiet, false, 'PM2 quieting can be disabled with quietUnderPm2=false');
 
@@ -92,6 +98,9 @@ assert(pm2Captured.some((line) => line.includes('pm2 stdout should remain visibl
 assert(!pm2Captured.some((line) => /\d{4}-\d{2}-\d{2}T/.test(line)), 'PM2 logger should not add its own timestamp');
 assert.strictEqual(fs.existsSync(pm2DirectLogFile), false, 'direct logger file writes should be suppressed when PM2 log paths are active');
 
+Config.pm_exec_path = origConfigPmExec;
+Config.pm_out_log_path = origConfigPmOut;
+Config.pm_err_log_path = origConfigPmErr;
 if (originalPmExecPath === undefined) delete process.env.pm_exec_path;
 else process.env.pm_exec_path = originalPmExecPath;
 if (originalPmOutLogPath === undefined) delete process.env.pm_out_log_path;

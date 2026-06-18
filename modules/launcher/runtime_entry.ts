@@ -1,4 +1,4 @@
-const path = require('path');
+const { path } = require('../path_api');
 const { isDistRuntime: isDistCodeRoot } = require('../utils/build_dir');
 
 /**

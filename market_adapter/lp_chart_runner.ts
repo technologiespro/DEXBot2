@@ -21,7 +21,7 @@
  * - fetch/export of LP data (`market_adapter/inputs/fetch_lp_data.js`)
  */
 
-const path = require('path');
+const { path } = require('../modules/path_api');
 const { getStorage } = require('../modules/storage');
 const storage = getStorage();
 const { exec } = require('child_process');

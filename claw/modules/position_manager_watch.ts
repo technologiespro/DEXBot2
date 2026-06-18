@@ -1,5 +1,5 @@
 const fsPromises = require('fs/promises');
-const path = require('path');
+const { path } = require('../../modules/path_api');
 const { PATHS } = require('../../modules/paths');
 const { PositionManager, DEFAULT_STATE_PATH } = require('./position_manager');
 const { waitForConnected } = require('./bitshares_client');
@@ -45,7 +45,7 @@ function parsePositionManagerWatchArgs(argv: string[] = [], env = process.env) {
   return options;
 }
 
-async function main(argv = process.argv.slice(2), env = process.env, logger: Record<string, any> = console) {
+async function main(argv = Config.ARGS, env = process.env, logger: Record<string, any> = console) {
   const options = parsePositionManagerWatchArgs(argv, env);
   const watcher = await runPositionManagerWatch({
     ...options,

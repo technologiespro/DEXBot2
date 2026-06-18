@@ -1,7 +1,7 @@
 /** Maintenance runtime - periodic sync loops, grid health checks, rebalance */
 const crypto = require('crypto');
 const fs = require('fs');
-const path = require('path');
+const { path } = require('./path_api');
 const { spawn } = require('child_process');
 const { BitShares } = require('./bitshares_client');
 const chainOrders = require('./chain_orders');
@@ -311,7 +311,7 @@ function runPm2Command(args): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
         const child = spawn('pm2', args, {
             stdio: 'pipe',
-            shell: process.platform === 'win32',
+            shell: Config.PLATFORM === 'win32',
         });
 
         let stdout = '';

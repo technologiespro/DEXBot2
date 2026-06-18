@@ -7,7 +7,7 @@
  * Default-deny on errors: validation failures, executable timeouts, etc.
  */
 
-const path = require('path');
+const { path } = require('./path_api');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { BitShares } = require('./bitshares_client');

@@ -1,4 +1,4 @@
-const path = require('path');
+const { path } = require('./path_api');
 const { getStorage } = require('./storage');
 const storage = getStorage();
 const { resolveProjectRoot } = require('./launcher/runtime_entry');
@@ -104,7 +104,7 @@ function assertPrivatePathSecurity(filePath: string, options: PrivatePathOptions
     const requiredMode = options.requiredMode;
     const requireOwner = options.requireOwner !== false;
 
-    if (process.platform === 'win32' && expectedType === 'socket') {
+    if (Config.PLATFORM === 'win32' && expectedType === 'socket') {
         if (!storage.exists(filePath)) {
             throw new Error(`Missing socket path: ${filePath}`);
         }
@@ -136,7 +136,7 @@ function assertPrivatePathSecurity(filePath: string, options: PrivatePathOptions
         && typeof stat.uid === 'number' && stat.uid !== currentUid) {
         throw new Error(`Unexpected owner for ${filePath}; expected uid ${currentUid}, found ${stat.uid}`);
     }
-    if (Number.isInteger(requiredMode) && process.platform !== 'win32') {
+    if (Number.isInteger(requiredMode) && Config.PLATFORM !== 'win32') {
         const mode = stat.mode & 0o777;
         if (mode !== requiredMode) {
             throw new Error(`Unexpected permissions for ${filePath}; expected ${requiredMode.toString(8)}, found ${mode.toString(8)}`);

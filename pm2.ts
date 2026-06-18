@@ -65,10 +65,11 @@
  *    - Bots request private keys from credential daemon via Unix socket
  */
 
-process.umask(0o077);
+const { setUmask } = require('./modules/config');
+setUmask(0o077);
 
 const fs = require('fs');
-const path = require('path');
+const { path } = require('./modules/path_api');
 const { spawn, exec } = require('child_process');
 const { promisify } = require('util');
 const { parseJsonWithComments } = require('./modules/order/utils/system');
@@ -992,7 +993,7 @@ if (isPm2DirectRun) {
                 process.exit(0);
             } else if (command === 'update') {
                 const { spawn } = require('child_process');
-                const update = spawn(process.execPath, [runtimeScript('scripts', 'update.js')], { stdio: 'inherit' });
+                const update = spawn(Config.EXEC_PATH, [runtimeScript('scripts', 'update.js')], { stdio: 'inherit' });
                 update.on('close', (code: any) => process.exit(code));
             } else if (command === 'stop') {
                 if (!target) {

@@ -1,4 +1,4 @@
-const path = require('path');
+const { path } = require('./path_api');
 const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const { Config } = require('./config');
 

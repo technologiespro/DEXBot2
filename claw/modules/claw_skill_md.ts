@@ -1,5 +1,5 @@
 const fs = require('fs/promises');
-const path = require('path');
+const { path } = require('../../modules/path_api');
 const { getClawToolCatalog } = require('./claw_catalog');
 const { getSupportedClawRuntime } = require('./claw_runtime_matrix');
 const { buildBridgeCommand, buildSkillTomlLines, createTool, normalizeRepoRoot, normalizeProfileRoot } = require('./skill_utils');

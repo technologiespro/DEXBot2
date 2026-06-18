@@ -1,5 +1,5 @@
 const fs = require('fs/promises');
-const path = require('path');
+const { path } = require('../../modules/path_api');
 const { PATHS } = require('../../modules/paths');
 const { Config } = require('../../modules/config');
 
@@ -42,7 +42,7 @@ function createRuntimeContext(options: RuntimeContextOptions = {}) {
     config: clone(options.config) || {},
     createdAt: new Date().toISOString(),
     dataDir,
-    cwd: process.cwd(),
+    cwd: Config.CWD,
     logger: options.logger || console,
     name: options.name || 'claw-runtime',
     profileRoot: options.profileRoot || Config.DEXBOT_PROFILE_ROOT || null,

@@ -21,7 +21,7 @@
  *     --out market_adapter/data/lp/<pair>/lp_pool_<poolShort>_1h.json
  */
 
-const path = require('path');
+const { path } = require('../modules/path_api');
 const { getStorage } = require('../modules/storage');
 const storage = getStorage();
 const { mergeCandles } = require('./candle_utils');

@@ -1,5 +1,5 @@
 const { spawn } = require('child_process');
-const path = require('path');
+const { path } = require('../../modules/path_api');
 const { getStorage } = require('../../modules/storage');
 const storage = getStorage();
 const { PATHS } = require('../../modules/paths');

@@ -1,6 +1,6 @@
 'use strict';
 
-const path = require('path');
+const { path } = require('../../modules/path_api');
 const { getStorage } = require('../../modules/storage');
 const storage = getStorage();
 const { BUILD_DIR } = require('../../modules/constants');

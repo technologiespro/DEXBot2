@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const fsPromises = require('fs/promises');
-const path = require('path');
+const { path } = require('../../modules/path_api');
 const { getStorage } = require('../../modules/storage');
 const storage = getStorage();
 const { DEFAULT_CONFIG, GRID_LIMITS, INCREMENT_BOUNDS } = require('../../modules/constants');
@@ -707,7 +707,7 @@ function resolveProfilesDir(profileRoot: any) {
     candidates.push(path.join(envRoot, 'profiles'));
   }
 
-  candidates.push(path.resolve(process.cwd(), 'profiles'));
+  if (Config.CWD) candidates.push(path.resolve(Config.CWD, 'profiles'));
 
   for (const candidate of candidates) {
     if (isFileLike(candidate)) {
@@ -737,7 +737,7 @@ function resolveProfilesDir(profileRoot: any) {
     return root;
   }
 
-  return path.resolve(process.cwd(), 'profiles');
+  return Config.CWD ? path.resolve(Config.CWD, 'profiles') : PATHS.PROFILES_DIR;
 }
 
 async function readJsonFile(filePath: any) {

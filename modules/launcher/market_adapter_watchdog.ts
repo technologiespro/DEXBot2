@@ -1,7 +1,7 @@
 'use strict';
 
 const fs = require('fs');
-const path = require('path');
+const { path } = require('../path_api');
 const { spawn } = require('child_process');
 const { MARKET_ADAPTER } = require('../constants');
 const { buildRuntimeScriptArgs } = require('./runtime_entry');

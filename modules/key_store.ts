@@ -8,7 +8,7 @@ const {
     BroadcastUncertainError,
 } = require('./dexbot_credential_client');
 const { TIMING } = require('./constants');
-const path = require('path');
+const { path } = require('./path_api');
 const { PATHS } = require('./paths');
 const { getStorage } = require('./storage');
 const storage = getStorage();

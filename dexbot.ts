@@ -86,10 +86,11 @@
 // Restrict default file permissions: files created by this process default to
 // 0o600 (owner-only) unless explicitly opened with a wider mode.  Protects
 // keys.json and daemon-policies.json from world-readable exposure.
-process.umask(0o077);
+const { setUmask } = require('./modules/config');
+setUmask(0o077);
 
 const { BitShares, waitForConnected, setSuppressConnectionLog, disconnectClient } = require('./modules/bitshares_client');
-const path = require('path');
+const { path } = require('./modules/path_api');
 const { getStorage } = require('./modules/storage');
 const storage = getStorage();
 const chainKeys = require('./modules/chain_keys');
@@ -916,7 +917,7 @@ async function handleCLICommands() {
                 scriptSegments: ['scripts', 'analyze-orders'],
                 scriptArgs: [],
             });
-            const result = spawnSync(process.execPath, scriptArgs, {
+            const result = spawnSync(Config.EXEC_PATH, scriptArgs, {
                 cwd: PATHS.PROJECT_ROOT,
                 stdio: 'inherit',
             });
@@ -931,7 +932,7 @@ async function handleCLICommands() {
             const { spawnSync } = require('child_process');
             const unlockScript = path.join(PATHS.PROJECT_ROOT, 'unlock.js');
             const unlockArgs = [unlockScript, ...cliArgs.slice(1)];
-            const result = spawnSync(process.execPath, unlockArgs, {
+            const result = spawnSync(Config.EXEC_PATH, unlockArgs, {
                 cwd: PATHS.PROJECT_ROOT,
                 stdio: 'inherit',
             });
@@ -980,7 +981,7 @@ async function handleCLICommands() {
 
             if (unlockRunning) {
                 const unlockScript = path.join(PATHS.PROJECT_ROOT, 'unlock.js');
-                const result = spawnSync(process.execPath, [unlockScript, 'status'], {
+                const result = spawnSync(Config.EXEC_PATH, [unlockScript, 'status'], {
                     cwd: PATHS.PROJECT_ROOT,
                     stdio: 'inherit',
                 });

@@ -31,6 +31,10 @@ function hasOwn(key: string): boolean {
     return Object.prototype.hasOwnProperty.call(process.env, key);
 }
 
+function hasProcess(): boolean {
+    return typeof process !== 'undefined' && typeof process.execPath === 'string';
+}
+
 const Config: {
     // ── Bot identity ────────────────────────────────────────────────
     BOT_NAME: string | undefined;
@@ -87,6 +91,12 @@ const Config: {
     pm_exec_path: string | undefined;
     pm_out_log_path: string | undefined;
     pm_err_log_path: string | undefined;
+
+    // ── Runtime environment (populated at load, safe defaults for browser) ──
+    EXEC_PATH: string;
+    CWD: string;
+    PLATFORM: string;
+    ARGS: string[];
 } = {
     // ── Bot identity ────────────────────────────────────────────────
     BOT_NAME: str('BOT_NAME'),
@@ -142,6 +152,12 @@ const Config: {
     pm_exec_path: str('pm_exec_path'),
     pm_out_log_path: str('pm_out_log_path'),
     pm_err_log_path: str('pm_err_log_path'),
+
+    // ── Runtime environment (safe defaults for browser) ──
+    EXEC_PATH: hasProcess() ? process.execPath : '',
+    CWD: hasProcess() ? process.cwd() : '',
+    PLATFORM: hasProcess() ? process.platform : '',
+    ARGS: hasProcess() ? process.argv.slice(2) : [],
 };
 
 function hasOpenOrdersSyncLoopMsSet(): boolean {
@@ -154,8 +170,13 @@ function getOpenOrdersSyncLoopMs(): number | undefined {
         : undefined;
 }
 
+function setUmask(mode: number): void {
+    try { process.umask(mode); } catch { /* browser: no-op */ }
+}
+
 export = {
     Config,
     hasOpenOrdersSyncLoopMsSet,
     getOpenOrdersSyncLoopMs,
+    setUmask,
 };

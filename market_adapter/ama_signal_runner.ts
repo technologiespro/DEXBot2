@@ -106,7 +106,7 @@ function printHelp(): void {
 }
 
 function parseArgs(): CliArgs {
-    const args = process.argv.slice(2);
+    const args = Config.ARGS;
     const out: CliArgs = {
         bot: null,
         compact: false,

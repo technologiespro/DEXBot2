@@ -29,10 +29,11 @@
  *   DEXBOT_MASTER_PASSWORD       Master password for --headless mode (less secure than file)
  */
 
-process.umask(0o077);
+const { setUmask } = require('./modules/config');
+setUmask(0o077);
 
 const fs = require('fs');
-const path = require('path');
+const { path } = require('./modules/path_api');
 const { getStorage } = require('./modules/storage');
 const storage = getStorage();
 const { spawn } = require('child_process');
@@ -304,7 +305,7 @@ async function launchDetachedSupervisor({ botName = null, credentialDaemonPid = 
     let child = null;
 
     try {
-        child = spawn(process.execPath, args, {
+        child = spawn(Config.EXEC_PATH, args, {
             cwd: PATHS.PROJECT_ROOT,
             detached: true,
             env: buildScopedChildEnv({
@@ -511,7 +512,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
                 throw _e;
             }
 
-            const child = spawn(process.execPath, [__filename, ...argv.slice(2)], {
+            const child = spawn(Config.EXEC_PATH, [__filename, ...argv.slice(2)], {
                 cwd: PATHS.PROJECT_ROOT,
                 detached: true,
                 env: {
@@ -586,7 +587,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
             do {
                 const dexbotArgs = buildDexbotStartArgs(botName, dryrun);
 
-                const botProcess = spawn(process.execPath, dexbotArgs, {
+                const botProcess = spawn(Config.EXEC_PATH, dexbotArgs, {
                     cwd: PATHS.PROJECT_ROOT,
                     env: process.env,
                     stdio: isMonolithicBgChild ? 'pipe' : 'inherit',

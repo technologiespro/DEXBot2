@@ -61,7 +61,7 @@
 
 const fs = require('fs');
 const fsPromises = require('fs').promises;
-const path = require('path');
+const { path } = require('../path_api');
 const readline = require('readline');
 const Format = require('./format');
 const { TIMING, DEFAULT_CONFIG } = require('../constants');

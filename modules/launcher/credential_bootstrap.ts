@@ -1,6 +1,6 @@
 const net = require('net');
 const os = require('os');
-const path = require('path');
+const { path } = require('../path_api');
 const { TIMING } = require('../constants');
 const { safeUnlink } = require('../utils/fs_utils');
 const { assertPrivatePathSecurity } = require('../credential_runtime');

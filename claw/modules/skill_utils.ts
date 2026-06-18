@@ -1,4 +1,4 @@
-const path = require('path');
+const { path } = require('../../modules/path_api');
 const fs = require('fs/promises');
 const { PATHS } = require('../../modules/paths');
 

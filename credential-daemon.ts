@@ -61,11 +61,12 @@
  * ===============================================================================
  */
 
-process.umask(0o077);
+const { setUmask } = require('./modules/config');
+setUmask(0o077);
 
 const net = require('net');
 const fs = require('fs');
-const path = require('path');
+const { path } = require('./modules/path_api');
 const os = require('os');
 const crypto = require('crypto');
 const chainKeys = require('./modules/chain_keys');

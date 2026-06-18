@@ -1,7 +1,7 @@
 'use strict';
 
 const fs = require('fs');
-const path = require('path');
+const { path } = require('../path_api');
 import net = require('net');
 const { getStorage } = require('../storage');
 const storage = getStorage();
@@ -360,10 +360,10 @@ async function stopMarketAdapterFromLock(timeoutMs = 5000) {
 function getChildRSS(child) {
     if (!child || !child.pid) return -1;
     try {
-        if (process.platform === 'linux') {
+        if (Config.PLATFORM === 'linux') {
             const bytes = getProcessDiscovery().readRSSBytes(child.pid);
             if (bytes > 0) return bytes;
-        } else if (process.platform === 'darwin') {
+        } else if (Config.PLATFORM === 'darwin') {
             const out = execSync(`ps -o rss= -p ${child.pid}`, { encoding: 'utf8', timeout: 3000 });
             const rssKB = parseInt(out.trim(), 10);
             if (rssKB > 0) return rssKB * 1024;
@@ -565,7 +565,7 @@ function createBotSupervisor({
         const runtimeArgs = isDistCodeRoot(CODE_ROOT)
             ? [app.script || BOT_SCRIPT, ...normalizeAppArgs(app.args)]
             : ['--import', 'tsx', app.script || BOT_SCRIPT, ...normalizeAppArgs(app.args)];
-        const child = spawnFn(process.execPath, runtimeArgs, {
+        const child = spawnFn(Config.EXEC_PATH, runtimeArgs, {
             cwd: app.cwd || PATHS.PROJECT_ROOT,
             env: buildEnv({ extra: extraEnv }),
             stdio: ['inherit', 'pipe', 'pipe'],

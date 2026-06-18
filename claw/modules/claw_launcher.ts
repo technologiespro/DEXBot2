@@ -2,7 +2,7 @@
 
 const { getStorage } = require('../../modules/storage');
 const storage = getStorage();
-const path = require('path');
+const { path } = require('../../modules/path_api');
 const { spawn } = require('child_process');
 const { PATHS, getRecalculateTriggerFile } = require('../../modules/paths');
 const chainKeys = require('../../modules/chain_keys');

@@ -58,7 +58,7 @@
  */
 
 const fs = require('fs');
-const path = require('path');
+const { path } = require('../path_api');
 const { OrderManager } = require('./manager');
 const { PATHS } = require('../paths');
 const Grid = require('./grid');

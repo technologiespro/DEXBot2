@@ -1,7 +1,7 @@
 'use strict';
 
 const fs = require('fs');
-const path = require('path');
+const { path } = require('../modules/path_api');
 
 function rawToHuman(rawAmount: any, precision: any) {
     if (precision === undefined || precision === null || !Number.isFinite(Number(precision))) {

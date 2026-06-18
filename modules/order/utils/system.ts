@@ -45,7 +45,7 @@
  * ===============================================================================
  */
 
-const path = require('path');
+const { path } = require('../../path_api');
 const { getStorage } = require('../../storage');
 const storage = getStorage();
 const { API_LIMITS, TIMING, ORDER_TYPES, ORDER_STATES, COW_ACTIONS, FEE_PARAMETERS, BTS_PRECISION, PIPELINE_TIMING } = require('../../constants');

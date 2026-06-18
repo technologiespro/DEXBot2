@@ -49,7 +49,8 @@
 // Restrict default file permissions: files created by this process default to
 // 0o600 (owner-only) unless explicitly opened with a wider mode.  Protects
 // keys.json and daemon-policies.json from world-readable exposure.
-process.umask(0o077);
+const { setUmask } = require('./modules/config');
+setUmask(0o077);
 
 const { getStorage } = require('./modules/storage');
 const storage = getStorage();

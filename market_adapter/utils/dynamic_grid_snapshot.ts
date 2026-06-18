@@ -1,7 +1,7 @@
 'use strict';
 
 const fs = require('fs');
-const path = require('path');
+const { path } = require('../../modules/path_api');
 const { writeJsonAtomic } = require('./atomic_write');
 const { acquirePathLockSync, releaseFileLockSync } = require('./file_lock');
 const { ensureDir, readJSON } = require('../../modules/utils/fs_utils');

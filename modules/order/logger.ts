@@ -1,11 +1,21 @@
 'use strict';
 
 const fs = require('fs');
-const path = require('path');
+const { path } = require('../path_api');
 const Format = require('./format');
 const LoggerState = require('./logger_state');
 const { LOGGING_CONFIG, ORDER_STATES } = require('../constants');
 const { Config } = require('../config');
+
+function pmExecPath(): string | undefined {
+    return Config.pm_exec_path || process.env.pm_exec_path;
+}
+function pmOutLogPath(): string | undefined {
+    return Config.pm_out_log_path || process.env.pm_out_log_path;
+}
+function pmErrLogPath(): string | undefined {
+    return Config.pm_err_log_path || process.env.pm_err_log_path;
+}
 
 /**
  * Color-coded console logger with structured output, optional file logging,
@@ -56,8 +66,8 @@ class Logger {
     constructor(category = 'DEXBot', options: { quiet?: boolean; quietUnderPm2?: boolean; logFile?: string; level?: string; configOverride?: any; correlationId?: string } = {}) {
         this.category = category;
 
-        const isUnderPm2 = !!process.env.pm_exec_path;
-        const hasPm2Logging = !!(process.env.pm_out_log_path || process.env.pm_err_log_path);
+        const isUnderPm2 = !!pmExecPath();
+        const hasPm2Logging = !!(pmOutLogPath() || pmErrLogPath());
         const pm2AutoQuiet = isUnderPm2 && hasPm2Logging;
         const quietUnderPm2 = options.quietUnderPm2 !== false;
 
@@ -105,7 +115,7 @@ class Logger {
 
     _enqueueWrite(text: string) {
         if (!this.logFile) return;
-        if (isPm2LoggingEnabled()) return;
+        if (pmOutLogPath() || pmErrLogPath()) return;
         this._writeQueue.push(text);
         if (this._writeQueue.length >= this._maxQueueSize) {
             this._drainQueue();
@@ -204,7 +214,7 @@ class Logger {
     log(message: string, level = 'info') {
         if (this.levels[level] >= this.levels[this.level]) {
             const color = this.colors[level] || '';
-            const isUnderPm2 = !!process.env.pm_exec_path;
+            const isUnderPm2 = !!pmExecPath();
             const timestamp = isUnderPm2 ? '' : new Date().toISOString();
             const timestampPart = timestamp ? `[${timestamp}] ` : '';
             const output = `${color}${timestampPart}[${level.toUpperCase()}] [${this.category}] ${message}${this.colors.reset}`;
@@ -624,11 +634,11 @@ class Logger {
 }
 
 function isPm2Runtime() {
-    return !!process.env.pm_exec_path;
+    return !!pmExecPath();
 }
 
 function isPm2LoggingEnabled() {
-    return !!(process.env.pm_out_log_path || process.env.pm_err_log_path);
+    return !!(pmOutLogPath() || pmErrLogPath());
 }
 
 function createPm2AwareLogger(category: string, options = {}) {
