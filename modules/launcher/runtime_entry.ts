@@ -15,6 +15,12 @@ function resolveProjectRoot(dirPath: string): string {
     return isDistCodeRoot(dirPath) ? path.dirname(dirPath) : dirPath;
 }
 
+// Centralised scripts root: the directory containing the entry-point scripts.
+// At this module depth (modules/launcher/), it resolves to <root> (source)
+// or <root>/dist (compiled).  All launcher modules should import this rather
+// than computing it themselves with fragile __dirname arithmetic.
+const SCRIPTS_ROOT = path.resolve(__dirname, '..', '..');
+
 function stripKnownExtension(fileName: string) {
     return fileName.replace(/\.(?:[cm]?js|ts)$/i, '');
 }
@@ -52,4 +58,5 @@ export = {
     buildRuntimeScriptPath,
     isDistCodeRoot,
     resolveProjectRoot,
+    SCRIPTS_ROOT,
 };

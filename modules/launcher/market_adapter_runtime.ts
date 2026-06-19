@@ -7,12 +7,11 @@ const { spawn } = require('child_process');
 const { buildScopedChildEnv } = require('./child_env');
 const { Config } = require('../config');
 const { MARKET_ADAPTER } = require('../constants');
-const { buildRuntimeScriptPath } = require('./runtime_entry');
+const { buildRuntimeScriptPath, SCRIPTS_ROOT: DEFAULT_CODE_ROOT } = require('./runtime_entry');
 const { PATHS } = require('../paths');
 const { readJSON, safeUnlink } = require('../utils/fs_utils');
 const { getProcessDiscovery } = require('../process_discovery');
 
-const DEFAULT_CODE_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_SCRIPT = buildRuntimeScriptPath(DEFAULT_CODE_ROOT, ['market_adapter', 'market_adapter']);
 const DEFAULT_STALE_LOCK_MS = (
     MARKET_ADAPTER.RUNTIME_DEFAULTS.pollSeconds * 1000 +

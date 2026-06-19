@@ -366,7 +366,7 @@ async function startMarketAdapterPm2() {
         '--name',
         MARKET_ADAPTER_APP_NAME,
         '--cwd',
-        path.join(__dirname, '..'),
+        PATHS.PROJECT_ROOT,
         '--output',
         MARKET_ADAPTER_OUT_FILE,
         '--error',

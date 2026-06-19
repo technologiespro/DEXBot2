@@ -13,13 +13,12 @@ const {
 } = require('../credential_runtime');
 const { createPasswordBootstrapServer } = require('./credential_bootstrap');
 const { buildScopedChildEnv } = require('./child_env');
-const { buildRuntimeScriptArgs } = require('./runtime_entry');
+const { buildRuntimeScriptArgs, SCRIPTS_ROOT: DEFAULT_CODE_ROOT } = require('./runtime_entry');
 const { Config } = require('../config');
 const { PATHS } = require('../paths');
 const { safeUnlink } = require('../utils/fs_utils');
 const { readHeadlessPassword } = require('./headless_password');
 
-const DEFAULT_CODE_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_POLL_INTERVAL_MS = 1000;
 
 function waitForExit(child: any): Promise<any> {

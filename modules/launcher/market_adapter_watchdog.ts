@@ -4,15 +4,13 @@ const fs = require('fs');
 const { path } = require('../path_api');
 const { spawn } = require('child_process');
 const { MARKET_ADAPTER } = require('../constants');
-const { buildRuntimeScriptArgs } = require('./runtime_entry');
+const { buildRuntimeScriptArgs, SCRIPTS_ROOT: DEFAULT_CODE_ROOT } = require('./runtime_entry');
 const { Config } = require('../config');
 const { PATHS } = require('../paths');
 const { isLikelyMarketAdapterProcess, isLockStale } = require('./market_adapter_runtime');
 const { readJSON, safeUnlink } = require('../utils/fs_utils');
 const { readProcMemMB, readProcUptime } = require('./status_reporting');
 const { listConfiguredBots, getActiveAmaBotFingerprint } = require('./monolithic_runtime');
-
-const DEFAULT_CODE_ROOT = path.resolve(__dirname, '..', '..');
 
 function createMarketAdapterWatchdog({
     codeRoot = DEFAULT_CODE_ROOT,

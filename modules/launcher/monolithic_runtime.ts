@@ -12,7 +12,7 @@ const {
     isNodeProcessWithExactScript,
 } = require('./bot_supervisor');
 const { buildScopedChildEnv } = require('./child_env');
-const { buildRuntimeScriptArgs } = require('./runtime_entry');
+const { buildRuntimeScriptArgs, SCRIPTS_ROOT: CODE_ROOT } = require('./runtime_entry');
 const { UPDATER, LAUNCHER } = require('../constants');
 const { safeUnlink } = require('../utils/fs_utils');
 const { readProcStat } = require('./status_reporting');
@@ -21,8 +21,6 @@ const { Config } = require('../config');
 const { runtime } = require('../runtime');
 const { getCredentialReadyFilePath, getCredentialSocketPath } = require('../credential_runtime');
 const { resolveRawBotEntries, loadSettingsFile } = require('../bot_settings');
-
-const CODE_ROOT = path.resolve(__dirname, '..', '..');
 
 const MONOLITHIC_PID_FILE = PATHS.PROFILES.MONOLITHIC_PID;
 const MONOLITHIC_BOT_PID_FILE = PATHS.PROFILES.MONOLITHIC_BOT_PID;

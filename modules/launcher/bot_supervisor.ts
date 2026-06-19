@@ -7,7 +7,7 @@ const { getStorage } = require('../storage');
 const storage = getStorage();
 const { spawn, execSync } = require('child_process');
 const { buildScopedChildEnv } = require('./child_env');
-const { buildRuntimeScriptPath, isDistCodeRoot } = require('./runtime_entry');
+const { buildRuntimeScriptPath, isDistCodeRoot, SCRIPTS_ROOT: CODE_ROOT } = require('./runtime_entry');
 const { PATHS } = require('../paths');
 const { normalizeBotEntries, resolveRawBotEntries, loadSettingsFile } = require('../bot_settings');
 const { UPDATER, BUILD_DIR, LAUNCHER } = require('../constants');
@@ -16,7 +16,6 @@ const { Config } = require('../config');
 const { getProcessDiscovery } = require('../process_discovery');
 const { runtime } = require('../runtime');
 
-const CODE_ROOT = path.resolve(__dirname, '..', '..');
 const BOT_SCRIPT = buildRuntimeScriptPath(CODE_ROOT, ['bot']);
 const SOCKET_PATH = Config.DEXBOT_SUPERVISOR_SOCKET || PATHS.PROFILES.SUPERVISOR_SOCK;
 

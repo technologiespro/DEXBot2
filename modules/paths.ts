@@ -2,10 +2,12 @@ const { path } = require('./path_api');
 const { Config } = require('./config');
 
 const MODULE_DIR = typeof __dirname !== 'undefined' ? path.dirname(__dirname) : '';
-function isDistCodeRoot(dirPath: string): boolean {
-    return dirPath.endsWith('/modules') || dirPath.endsWith(`${path.sep}modules`);
-}
-const PROJECT_ROOT = isDistCodeRoot(MODULE_DIR) ? path.dirname(MODULE_DIR) : MODULE_DIR;
+// Detect dist build: __dirname = <root>/dist/modules, MODULE_DIR = <root>/dist
+// In source:         __dirname = <root>/modules,       MODULE_DIR = <root>
+// When MODULE_DIR is a build-layer directory (dist/), go up one more level.
+const PROJECT_ROOT = (typeof __dirname !== 'undefined' && path.basename(__dirname) === 'modules' && path.basename(MODULE_DIR) === 'dist')
+    ? path.dirname(MODULE_DIR)
+    : MODULE_DIR;
 const PROFILES_DIR = path.join(PROJECT_ROOT, 'profiles');
 
 const PATHS = {
