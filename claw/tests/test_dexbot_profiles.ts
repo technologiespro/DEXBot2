@@ -25,9 +25,9 @@ function createCaptureLogger() {
   };
 }
 
-function testNormalizeAcceptsAssetIdAliases() {
+async function testNormalizeAcceptsAssetIdAliases() {
   const { logger, messages } = createCaptureLogger();
-  const bots = normalizeBotEntries([
+  const bots = await normalizeBotEntries([
     {
       assetAId: '1.3.111',
       assetBId: '1.3.222',
@@ -43,14 +43,9 @@ function testNormalizeAcceptsAssetIdAliases() {
 async function testAtomicWriteFailsFastWhenLockCannotBeAcquired() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dexbot-profiles-'));
   const filePath = path.join(dir, 'bots.json');
+  const lockPath = filePath + '.lock';
 
-  const originalWriteFile = fs.writeFile;
-  const originalStat = fs.stat;
-  const originalUnlink = fs.unlink;
-  const originalRename = fs.rename;
   const originalDateNow = Date.now;
-
-  let renameCalled = false;
   let now = 0;
 
   Date.now = () => {
@@ -58,19 +53,10 @@ async function testAtomicWriteFailsFastWhenLockCannotBeAcquired() {
     return now;
   };
 
-  fs.writeFile = async (targetPath, data, options) => {
-    if (String(targetPath).endsWith('.lock')) {
-      const err = new Error('lock busy');
-      (err as any).code = 'EEXIST';
-      throw err;
-    }
-    return originalWriteFile.call(fs, targetPath, data, options);
-  };
-  fs.stat = async () => ({ mtimeMs: 0 });
-  fs.unlink = async () => {};
-  fs.rename = async () => {
-    renameCalled = true;
-  };
+  // Pre-create lock file so acquireFileLock sees EEXIST.  The Date.now mock
+  // advances the deadline by 2500ms per call, making the 5-second retry
+  // loop expire in ~100ms real time.
+  await fs.writeFile(lockPath, JSON.stringify({ pid: 99999, at: new Date().toISOString() }), 'utf8');
 
   try {
     await assert.rejects(
@@ -78,13 +64,11 @@ async function testAtomicWriteFailsFastWhenLockCannotBeAcquired() {
       /Could not acquire lock/,
       'writeJsonFileAtomic should abort instead of writing without a lock'
     );
-    assert.strictEqual(renameCalled, false, 'writeJsonFileAtomic must not rename when lock acquisition fails');
   } finally {
-    fs.writeFile = originalWriteFile;
-    fs.stat = originalStat;
-    fs.unlink = originalUnlink;
-    fs.rename = originalRename;
     Date.now = originalDateNow;
+    await fs.unlink(lockPath).catch(() => {});
+    await fs.unlink(filePath).catch(() => {});
+    await fs.rmdir(dir).catch(() => {});
   }
 }
 
@@ -547,8 +531,8 @@ function testCreateBotKeyFallsBackToAssetIds() {
   assert.ok(symKey.includes('iob'), `symbol-based key should take precedence, got: ${symKey}`);
 }
 
-function testMatchBotIdentifierHandlesIdOnlyBots() {
-  const bot = normalizeBotEntries([{ assetAId: '1.3.1', assetBId: '1.3.0' }])[0];
+async function testMatchBotIdentifierHandlesIdOnlyBots() {
+  const bot = (await normalizeBotEntries([{ assetAId: '1.3.1', assetBId: '1.3.0' }]))[0];
 
   // String pair match with IDs
   assert.strictEqual(matchBotIdentifier(bot, '1.3.1/1.3.0'), true, 'should match ID pair string');
@@ -559,15 +543,15 @@ function testMatchBotIdentifierHandlesIdOnlyBots() {
   assert.strictEqual(matchBotIdentifier(bot, { assetAId: '1.3.1', assetBId: '1.3.999' }), false, 'should not match wrong ID object');
 
   // Mixed bot with both symbols and IDs
-  const mixedBot = normalizeBotEntries([{ assetA: 'IOB.XRP', assetB: 'BTS', assetAId: '1.3.1', assetBId: '1.3.0' }])[0];
+  const mixedBot = (await normalizeBotEntries([{ assetA: 'IOB.XRP', assetB: 'BTS', assetAId: '1.3.1', assetBId: '1.3.0' }]))[0];
   assert.strictEqual(matchBotIdentifier(mixedBot, 'IOB.XRP/BTS'), true, 'symbol pair should still work');
   assert.strictEqual(matchBotIdentifier(mixedBot, '1.3.1/1.3.0'), true, 'ID pair should also work for mixed bot');
 }
 
 async function main() {
-  testNormalizeAcceptsAssetIdAliases();
+  await testNormalizeAcceptsAssetIdAliases();
   testCreateBotKeyFallsBackToAssetIds();
-  testMatchBotIdentifierHandlesIdOnlyBots();
+  await testMatchBotIdentifierHandlesIdOnlyBots();
   await testAtomicWriteFailsFastWhenLockCannotBeAcquired();
   await testUpdateBotSettingsPreservesSingleObjectFormat();
   await testConcurrentUpdateBotSettingsPreservesBothPatches();

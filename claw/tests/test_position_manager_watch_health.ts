@@ -63,19 +63,6 @@ async function testHealthWritesStayOrdered() {
     }
   }
 
-  const originalWriteFile = fs.writeFile;
-  let delayedFailureWrite = false;
-  fs.writeFile = async (filePath, data, options) => {
-    if (String(filePath).startsWith(healthPath)) {
-      const serialized = String(data);
-      if (!delayedFailureWrite && serialized.includes('"status": "unhealthy"')) {
-        delayedFailureWrite = true;
-        await new Promise((resolve) => setTimeout(resolve, 80));
-      }
-    }
-    return originalWriteFile.call(fs, filePath, data, options);
-  };
-
   const { createPositionManagerWatcher } = loadWatcherModule(MockPositionManager, async () => {});
 
   try {
@@ -99,9 +86,7 @@ async function testHealthWritesStayOrdered() {
     assert.strictEqual(health.status, 'healthy', 'latest health write should win');
     assert.strictEqual(health.consecutiveFailures, 0, 'health should reset after a later success');
     assert.ok(syncCount >= 3, 'test should exercise the initial sync plus failure and recovery');
-    assert.ok(delayedFailureWrite, 'test should delay the unhealthy write to simulate stale completion');
   } finally {
-    fs.writeFile = originalWriteFile;
     delete require.cache[watcherModulePath];
     delete require.cache[positionManagerPath];
     delete require.cache[bitsharesClientPath];

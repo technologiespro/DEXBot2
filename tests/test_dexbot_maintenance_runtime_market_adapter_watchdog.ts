@@ -1,6 +1,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
+const { Config } = require('../modules/config');
 
 console.log('Running dexbot maintenance runtime market adapter watchdog tests');
 
@@ -95,7 +96,7 @@ async function testSnapshotReaderDetectsAMAConfig() {
 }
 
 async function testWatchdogStartsAdapterWhenMissing() {
-    process.env.pm_exec_path = '/usr/bin/pm2';
+    Config.pm_exec_path = '/usr/bin/pm2';
     const { syncMarketAdapterOnPeriodicConfigCheck } = loadRuntimeWithStubs();
     let started = false;
     let queried = false;
@@ -134,7 +135,7 @@ async function testWatchdogStartsAdapterWhenMissing() {
 }
 
 async function testWatchdogSkipsLaunchWhenAdapterNotNeeded() {
-    process.env.pm_exec_path = '/usr/bin/pm2';
+    Config.pm_exec_path = '/usr/bin/pm2';
     const { syncMarketAdapterOnPeriodicConfigCheck } = loadRuntimeWithStubs();
     let queried = false;
     let started = false;
@@ -173,7 +174,7 @@ async function testWatchdogSkipsLaunchWhenAdapterNotNeeded() {
 }
 
 async function testWatchdogLeavesAdapterStoppedWhenAlreadyAbsent() {
-    process.env.pm_exec_path = '/usr/bin/pm2';
+    Config.pm_exec_path = '/usr/bin/pm2';
     const { syncMarketAdapterOnPeriodicConfigCheck } = loadRuntimeWithStubs();
     let stopped = false;
 
@@ -201,7 +202,7 @@ async function testWatchdogLeavesAdapterStoppedWhenAlreadyAbsent() {
 }
 
 async function testWatchdogUsesDirectRuntimeWithoutPm2() {
-    delete process.env.pm_exec_path;
+    Config.pm_exec_path = undefined;
 
     const syncCalls = [];
     const releaseCalls = [];
@@ -257,7 +258,7 @@ async function testWatchdogUsesDirectRuntimeWithoutPm2() {
 }
 
 async function testWatchdogDoesNotRegisterNonAmaBotInDirectRuntime() {
-    delete process.env.pm_exec_path;
+    Config.pm_exec_path = undefined;
 
     const syncCalls = [];
     const fakeRuntime = {
@@ -305,7 +306,7 @@ async function testWatchdogDoesNotRegisterNonAmaBotInDirectRuntime() {
 }
 
 async function testWatchdogUsesSnapshotEntryWhenRuntimeConfigIsStale() {
-    delete process.env.pm_exec_path;
+    Config.pm_exec_path = undefined;
 
     const syncCalls = [];
     const fakeRuntime = {
@@ -349,7 +350,7 @@ async function testWatchdogUsesSnapshotEntryWhenRuntimeConfigIsStale() {
 }
 
 async function testWatchdogReleasesDirectRuntimeWithoutPm2() {
-    delete process.env.pm_exec_path;
+    Config.pm_exec_path = undefined;
 
     const syncCalls = [];
     const releaseCalls = [];
@@ -402,7 +403,7 @@ async function testWatchdogReleasesDirectRuntimeWithoutPm2() {
 }
 
 async function testSetupBlockchainFetchIntervalRunsWatchdogBeforeDisabledReturn() {
-    delete process.env.pm_exec_path;
+    Config.pm_exec_path = undefined;
     const { setupBlockchainFetchInterval } = loadRuntimeWithStubs();
     let snapshotChecks = 0;
     const logs = [];
@@ -453,7 +454,7 @@ async function main() {
         await testSetupBlockchainFetchIntervalRunsWatchdogBeforeDisabledReturn();
         console.log('dexbot maintenance runtime market adapter watchdog tests passed');
     } finally {
-        delete process.env.pm_exec_path;
+        Config.pm_exec_path = undefined;
         fs.existsSync = originalExistsSync;
         fs.readFileSync = originalReadFileSync;
         for (const [modulePath, original] of originals.entries()) {
