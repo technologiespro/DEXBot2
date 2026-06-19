@@ -81,6 +81,31 @@ This release marks the project's first stable milestone. Includes 54 commits on 
 - **Feat**: vendor uPlot v1.6.32 as internal library under `lib/uplot/` — replaces CDN-based uPlot loading in all 7 chart generators with local files, removing a runtime network dependency for offline analysis (`62efc53`).
 - **Fix**: migrate `analyze-git` charts from Chart.js to uPlot — replaces CDN-dependent Chart.js with vendored `lib/uplot/` for all 5 charts (bar chart, daily, cumulative, net core, net repo). Implements horizontal stacked bars via `uPlot.paths.bars()` with `stack()` + `bands`, swapped orientation (`x.ori=1`, `dir=-1`), dark theme styling, wheel-zoom support, and responsive resize (`b8b7b5f`).
 
+### 2026-06-18
+
+- **Feat**: six portable abstractions for browser-portable core — `StorageAdapter` (in-memory Map for browser, `fs.*Sync` for Node via lazy adapter), `CryptoProvider` (Web Crypto vs Node crypto lazily selected), `Config` (load-time `process.env` snapshot), `PATHS` (guarded path resolution without `__dirname`), `ProcessDiscovery` (abstracted `/proc/` reads), and `KeyStore` portal interface (`03506ea`).
+- **Feat**: `modules/env.ts` — `isBrowser()` / `hasProcess()` canonical environment detection, replacing 6+ inline `typeof window` / `typeof process` ternaries (`1dbeb75`).
+- **Feat**: `modules/path_api.ts` — portable `path` abstraction guarded for ESM/browser; replaces direct `require('path')` in browser-safe modules (`68a68b6`).
+- **Feat**: `modules/runtime.ts` — `Runtime` singleton abstracting `process.exit`, `process.kill`, `process.cwd`, `process.env`, `os.hostname`, `os.userInfo`; all Node calls route through this (`68a68b6`).
+- **Feat**: `modules/crypto/pure_scrypt.ts`, `pure_ripemd160.ts`, `pure_secp256k1.ts` — pure-JS fallbacks for browser contexts where Web Crypto or native bindings are unavailable (`1dbeb75`).
+- **Feat**: `modules/bitshares-native/crypto/ecc_selector.ts` — `getEcc()` lazy loader picking `ecc.browser.ts` (pure-JS) vs `ecc.ts` (Node native) based on environment (`1dbeb75`).
+- **Feat**: `modules/bitshares-native/crypto/ecc.browser.ts` — pure-JS browser ECC implementation (458 lines), no native `secp256k1` bindings (`1dbeb75`).
+- **Refactor**: wire `Runtime`, `Transport` (lazy `require('ws')`), and `CryptoProvider` into all production code — 140+ files updated to use the new abstractions (`5e73446`).
+- **Refactor**: centralize `process.*` and `path` into portable abstractions — `process.exit()` → `runtime.exit()`, `process.env.X` → `Config.X`, `path.join(__dirname, ...)` → `PATHS.*`, `os.*` → `runtime.*`, `require('crypto')` → `getCrypto()` (`68a68b6`).
+
+### 2026-06-19
+
+- **Feat**: complete browser-safe surface across claw graph and config core — all `claw/modules/` and `modules/config.ts` paths now route through portable abstractions; no static Node imports reachable from browser bundles (`ffd5d03`).
+- **Feat**: `modules/storage/browser_adapter.ts` — in-memory Map-based `StorageAdapter` for browser; `node_adapter.ts` loaded lazily via try/catch guard (`1dbeb75`).
+- **Feat**: `scripts/verify-browser-bundle.ts` — new script that builds the browser bundle and checks for Node-only leaks (`1dbeb75`).
+- **Fix**: close browser-safety gaps — `require('pm2')` and `require('ws')` made lazy (resolved at call time, not load time); `transport.requireWebSocket()` replaces top-level require; `runtime.*` routing covers all process.exit/kill/cwd calls; browser abstractions test covers all 19 sections (`14e869b`).
+- **Fix**: close 3 browser-safety gaps from review — `runtime.getuid()` for root-owner check, `isBrowser()` gates in 4 remaining conditional paths, `ecc.browser.ts` `brainKeyToPrivateKey` missing pure-JS implementation (`33b51b6`).
+- **Fix**: browser-compat — eliminate all static Node imports from browser-safe surface — remaining `require('fs')` / `require('os')` / `require('crypto')` top-level imports switched to lazy accessors; `modules/order/utils/system.ts` converted to use `getStorage()`/`getCrypto()` (`ac00b61`).
+- **Fix**: align 3 tests with browser-compat abstractions — `test_launcher_exports.ts`, `test_dexbot_startup_output.ts`, `test_unlock_output.ts` updated for new runtime/storage signatures (`72c8f55`).
+- **Fix**: hoist `DEXBOT_SKIP_PROFILE_VALIDATION` guard above `module_cache_stub` require in 5 startup tests to prevent premature profile validation at import time (`51c227c`).
+- **Fix**: correct `PROJECT_ROOT` resolution for dist builds and centralise scripts-root arithmetic — ensures `resolveProjectRoot()` returns the correct path when running from compiled `dist/` output (`0ad6ba1`).
+- **Test**: comprehensive browser abstraction tests — 1288-line `tests/test_browser_abstractions.ts` covering all 19 abstraction sections: `env.ts`, `config.ts`, `runtime.ts`, `paths.ts`, `path_api.ts`, `process_discovery.ts`, `storage/*`, `crypto/*`, `ecc_selector.ts`, `ecc.browser.ts`, `base58check.ts`, `transport.ts`, `sync.ts` (`607b6ae`).
+
 ## [0.7.18] - 2026-06-11 - @ts-nocheck Removal, Type Annotations, Race-Condition Batch 1 & DRY Refactoring
 
 This release removes all remaining `@ts-nocheck` directives across production and analysis code (89 files), adds type annotations to 67 files resolving 1783 TS2339 errors, applies a comprehensive race-condition fix batch (atomic JSON writes, per-context in-flight flags, snapshot persist), tightens timeouts across the board, plugs a subscribe orphan-callback leak, and DRYs duplicated code across claw modules, tests, and unlock into shared utilities (~460 lines removed).
