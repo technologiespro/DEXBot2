@@ -1,8 +1,8 @@
 const { path } = require('./path_api');
 const { getStorage } = require('./storage');
 const storage = getStorage();
-const { hasProcess } = require('./env');
 const { Config } = require('./config');
+const { runtime } = require('./runtime');
 const { ensureDir } = require('./utils/fs_utils');
 
 interface RuntimeDirOptions {
@@ -107,7 +107,7 @@ function ensureCredentialRuntimeDirSync(options: RuntimeDirOptions = {}) {
 }
 
 function getCurrentUid() {
-    return hasProcess() && typeof process.getuid === 'function' ? process.getuid() : null;
+    return runtime.getuid();
 }
 
 function assertPrivatePathSecurity(filePath: string, options: PrivatePathOptions = {}) {

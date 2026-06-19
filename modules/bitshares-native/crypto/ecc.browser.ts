@@ -402,8 +402,11 @@ async function normalizeBrainKey(name: string, role: string, password: string): 
 }
 
 async function brainKeyToPrivateKey(brainKey: Uint8Array | string, sequence = 0): Promise<Uint8Array> {
-    const data = typeof brainKey === 'string' ? new TextEncoder().encode(`${brainKey} ${sequence}`) : concatBuf(brainKey, new Uint8Array([0x20]), new TextEncoder().encode(String(sequence)));
-    return sha256(await sha512(data));
+    const seq = ` ${sequence}`;
+    const combined = typeof brainKey === 'string'
+        ? brainKey + seq
+        : new TextDecoder().decode(brainKey) + seq;
+    return sha256(await sha512(new TextEncoder().encode(combined)));
 }
 
 // ── Address formatting ──────────────────────────────────────────────

@@ -2,6 +2,7 @@ const { path } = require('../../modules/path_api');
 const { getStorage } = require('../../modules/storage');
 const storage = getStorage();
 const { PATHS } = require('../../modules/paths');
+const { runtime } = require('../../modules/runtime');
 const { ensureDir, safeUnlink } = require('../../modules/utils/fs_utils');
 
 let _spawn: any;
@@ -66,7 +67,7 @@ function runMemuPython(args: string[], options: Record<string, any> = {}) {
 
     const child = getSpawn()(python, [script, ...args], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, ...options.env },
+      env: { ...runtime.env, ...options.env },
       cwd: options.cwd
     });
 

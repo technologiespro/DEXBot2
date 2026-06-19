@@ -1,5 +1,7 @@
 'use strict';
 
+import { isBrowser } from './env';
+
 export interface PathApi {
   join(...paths: string[]): string;
   resolve(...paths: string[]): string;
@@ -143,12 +145,7 @@ export function resetPathApi(): void {
 
 export function getPathApi(): PathApi {
   if (!_instance) {
-    try {
-      require('path');
-      _instance = new NodePathApi();
-    } catch {
-      _instance = new BrowserPathApi();
-    }
+    _instance = isBrowser() ? new BrowserPathApi() : new NodePathApi();
   }
   return _instance;
 }

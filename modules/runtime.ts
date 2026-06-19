@@ -19,6 +19,7 @@ export interface Runtime {
   cwd(): string;
   env: Record<string, string | undefined>;
   umask(mask?: number): number;
+  getuid(): number | null;
 }
 
 class NodeRuntime implements Runtime {
@@ -38,6 +39,7 @@ class NodeRuntime implements Runtime {
   }
   onSignal(signal: string, handler: (...args: any[]) => void): void { process.on(signal as any, handler); }
   offSignal(signal: string, handler: (...args: any[]) => void): void { process.off(signal as any, handler); }
+  getuid(): number | null { return typeof process.getuid === 'function' ? process.getuid() : null; }
   get pid(): number { return process.pid; }
   get platform(): string { return process.platform; }
   get stdout(): any { return process.stdout; }
@@ -71,6 +73,7 @@ class BrowserRuntime implements Runtime {
       }
     }
   }
+  getuid(): number | null { return null; }
   get pid(): number { return 0; }
   get platform(): string { return 'browser'; }
   get stdout(): any { return { isTTY: false, write() { return true; } }; }
@@ -86,12 +89,7 @@ let _instance: Runtime | null = null;
 
 export function getRuntime(): Runtime {
   if (!_instance) {
-    try {
-      require('path');
-      _instance = new NodeRuntime();
-    } catch {
-      _instance = new BrowserRuntime();
-    }
+    _instance = isBrowser() ? new BrowserRuntime() : new NodeRuntime();
   }
   return _instance;
 }
