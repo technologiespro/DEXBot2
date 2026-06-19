@@ -1,3 +1,4 @@
+process.env.DEXBOT_SKIP_PROFILE_VALIDATION = '1';
 const assert = require('assert');
 const fs = require('fs');
 const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
@@ -44,7 +45,6 @@ function setStdoutTTY(value) {
 }
 
 function installStubs() {
-    process.env.DEXBOT_SKIP_PROFILE_VALIDATION = '1';
     delete require.cache[dexbotPath];
 
     fs.existsSync = (filePath) => {

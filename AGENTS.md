@@ -298,3 +298,7 @@ in the browser bundle.
 import { isBrowser, hasProcess } from './env';
 ```
 Do not inline `typeof window` / `typeof globalThis.window` / `typeof process` checks. The 6+ inline ternaries that used to exist in `bitshares-native/*` and `runtime.ts` were consolidated into the helpers above.
+
+## Config Caching Trap (Tests)
+
+`modules/config.ts` snapshots `process.env` values **at module-load time**. Any test setting `process.env.X` after a `require()` that transitively loads `config.ts` will have no effect. Fix: set env var at line 1 before any `require()`, or mutate `Config.X` directly after loading it.
