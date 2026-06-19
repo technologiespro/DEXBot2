@@ -238,7 +238,7 @@ in the browser bundle.
 - `modules/order/utils/math.ts` — pure math functions
 - `modules/order/utils/order.ts` — pure order logic
 - `modules/order/utils/validate.ts` — pure validation
-- `modules/order/utils/system.ts` — browser-safe (uses storage/runtime abstractions, no raw Node imports)
+- `modules/order/utils/system.ts` — browser-safe (uses storage/runtime abstractions; grid/working_grid requires guarded by `isBrowser()`)
 - `modules/order/format.ts` — pure formatting functions
 - `modules/order/async_lock.ts` — pure async locking
 - `modules/order/logger_state.ts` — pure state tracking
@@ -247,7 +247,7 @@ in the browser bundle.
 - `modules/utils/base58check.ts` — browser-safe (uses sync.ts)
 - `modules/fund_registry.ts` — browser-safe (uses storage abstraction)
 - `modules/authority_resolver.ts` — browser-safe (uses ecc, no fs/process)
-- `modules/validate_profiles.ts` — browser-safe (pure validation logic, uses storage abstraction)
+- `modules/validate_profiles.ts` — browser-safe (pure validation logic, uses storage abstraction; `account_orders` require is lazy inside `validateCrossFileConsistency`)
 - `modules/market_adapter_whitelist.ts` — browser-safe (uses storage abstraction)
 
 **Node-only** (must not be reached from a browser bundle):

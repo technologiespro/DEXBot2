@@ -47,7 +47,7 @@
 
 const { path } = require('../../path_api');
 const { getStorage } = require('../../storage');
-const { hasProcess } = require('../../env');
+const { hasProcess, isBrowser } = require('../../env');
 const storage = getStorage();
 const { API_LIMITS, TIMING, ORDER_TYPES, ORDER_STATES, COW_ACTIONS, FEE_PARAMETERS, BTS_PRECISION, PIPELINE_TIMING } = require('../../constants');
 const { PATHS } = require('../../paths');
@@ -724,6 +724,7 @@ async function retryPersistenceIfNeeded(manager: any): Promise<boolean> {
  * @returns {Promise<void>}
  */
 async function applyGridDivergenceCorrections(manager: any, accountOrders: any, botKey: string, updateOrdersOnChainBatchFn: Function): Promise<void> {
+    if (isBrowser()) throw new Error('applyGridDivergenceCorrections is not available in browser');
     if (!manager._gridLock) return;
     const Grid = require('../grid');
     const { WorkingGrid } = require('../working_grid');
@@ -975,6 +976,7 @@ async function applyGridDivergenceCorrections(manager: any, accountOrders: any, 
  * @returns {{ changed: boolean, newIdx?: number }}
  */
 function syncBoundaryToFunds(manager: any): { changed: boolean; newIdx?: number } {
+    if (isBrowser()) throw new Error('syncBoundaryToFunds is not available in browser');
     const availA = (manager.funds?.available?.sell || 0);
     const availB = (manager.funds?.available?.buy || 0);
     const allSlots = (Array.from(manager.orders.values()) as any[]).sort((a, b) => a.price - b.price);

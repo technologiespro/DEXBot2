@@ -1,6 +1,5 @@
 'use strict';
 
-const { createBotKey } = require('./account_orders');
 const { readJSON } = require('./utils/fs_utils');
 const { PATHS } = require('./paths');
 
@@ -247,6 +246,7 @@ function validateGeneralSettings(data: any, filePath: string, problems: ProblemL
 
 // --- Cross-file consistency ---
 function validateCrossFileConsistency(problems: ProblemList) {
+    const { createBotKey } = require('./account_orders');
     const botKeysInWhitelist = new Set<string>();
     const botKeysInWhitelistEnabledAma = new Set<string>();
 
