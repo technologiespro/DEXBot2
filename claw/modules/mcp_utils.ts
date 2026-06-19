@@ -1,23 +1,17 @@
 const { hasProcess } = require('../../modules/env');
 const { Config } = require('../../modules/config');
+const { runtime } = require('../../modules/runtime');
 
 export function writeMessage(message: any) {
   if (!hasProcess()) {
     return Promise.reject(new Error('MCP stdio transport not available in this environment'));
   }
-  return new Promise<void>((resolve, reject) => {
-    try {
-      process.stdout.write(`${JSON.stringify(message)}\n`, (error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve();
-      });
-    } catch (error) {
-      reject(error);
-    }
-  });
+  try {
+    runtime.stdout.write(`${JSON.stringify(message)}\n`);
+    return Promise.resolve();
+  } catch (error) {
+    return Promise.reject(error);
+  }
 }
 
 export function success(id: any, result: any) {
@@ -70,7 +64,7 @@ export function createMessageParser(onMessage: any) {
       }
 
       queue = queue.then(() => onMessage(message)).catch((error) => {
-        process.stderr.write(`${error && error.stack ? error.stack : String(error)}\n`);
+        runtime.stderr.write(`${error && error.stack ? error.stack : String(error)}\n`);
       });
     }
   }
@@ -100,13 +94,13 @@ export async function runMcpServer(parseArgs: (argv: string[]) => Record<string,
   const parser = createMessageParser((message: any) => handleRequest(message, defaults));
   let lastQueue = Promise.resolve();
 
-  process.stdin.on('data', (chunk) => {
+  runtime.stdin!.on('data', (chunk) => {
     lastQueue = parser.push(chunk);
   });
-  process.stdin.resume();
+  runtime.stdin!.resume();
 
   await new Promise<void>((resolve) => {
-    process.stdin.on('end', () => resolve());
+    runtime.stdin!.on('end', () => resolve());
   });
   await lastQueue;
 }

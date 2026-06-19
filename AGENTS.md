@@ -220,14 +220,20 @@ in the browser bundle.
 **Browser-safe** (may be imported from any context):
 - `modules/crypto/` — `BrowserCryptoProvider` + `NodeCryptoProvider` selected by `getCryptoProvider()`
 - `modules/storage/` — use `getStorage()`; the adapter swap is automatic
-- `modules/bitshares-native/` — chain client, transport, signing, ecc (uses `getEcc()` selector)
-- `modules/claw/` — JSON bridge for AI agents
+- `modules/claw/` — JSON bridge for AI agents (all top-level requires are lazy or browser-safe)
 - `modules/env.ts` — `isBrowser()` / `hasProcess()` are the canonical environment checks
+- `modules/runtime.ts` — `getRuntime()` / `runtime` singleton (use this, not inline `process.*`)
+- `modules/config.ts` — `Config` object (use this, not inline `process.env.*`)
+- `modules/paths.ts` — `PATHS` (use this, not inline `path.join(__dirname, …)`)
+- `modules/path_api.ts` — `path` (use this, not inline `require('path')`)
+- `modules/crypto/sync.ts` — `createHash`/`createHmac`/`randomBytes` etc.
 - `modules/bitshares-native/crypto/ecc_selector.ts` — `getEcc()` is the canonical ecc loader
+- `modules/bitshares-native/` — chain client, transport, signing, ecc. **Caveat:** `transport.ts` lazily requires `ws` (resolved at call time, not load time); bundlers that eagerly resolve all `require()` calls may require `ws` in `optionalDependencies`.
 
 **Node-only** (must not be reached from a browser bundle):
 - `modules/launcher/*` — credential daemon, bot supervisor, market adapter runtime, monolithic runtime
 - `modules/storage/node_adapter.ts` — `fs.*Sync` direct calls
+- `modules/key_store.ts` — no `BrowserKeyStore` implementation exists
 - `modules/dexbot_maintenance_runtime.ts`, `modules/order/logger.ts`, `modules/order/export.ts`, `modules/order/runner.ts` — direct `fs` / `child_process` / `os` use
 - `unlock.ts`, `bot.ts`, `dexbot.ts`, `pm2.ts`, `credential-daemon.ts` — CLI entry points (also listed in `package.json` `browser` field as `false`)
 

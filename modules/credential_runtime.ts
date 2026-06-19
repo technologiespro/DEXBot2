@@ -2,7 +2,6 @@ const { path } = require('./path_api');
 const { getStorage } = require('./storage');
 const storage = getStorage();
 const { hasProcess } = require('./env');
-const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const { Config } = require('./config');
 const { ensureDir } = require('./utils/fs_utils');
 
@@ -30,9 +29,24 @@ const DEFAULT_RUNTIME_DIR_NAME = 'dexbot2';
 const DEFAULT_SOCKET_BASENAME = 'dexbot-cred-daemon.sock';
 const DEFAULT_READY_BASENAME = 'dexbot-cred-daemon.ready';
 
+let _resolveProjectRoot: any;
+function getResolveProjectRoot() {
+    if (_resolveProjectRoot === undefined) {
+        try {
+            _resolveProjectRoot = require('./launcher/runtime_entry').resolveProjectRoot;
+        } catch {
+            _resolveProjectRoot = null;
+        }
+    }
+    if (!_resolveProjectRoot) {
+        throw new Error('runtime_entry module not available in this environment');
+    }
+    return _resolveProjectRoot;
+}
+
 function getDexbotRoot() {
     const MODULE_DIR = typeof __dirname !== 'undefined' ? path.dirname(__dirname) : '';
-    return resolveProjectRoot(MODULE_DIR);
+    return getResolveProjectRoot()(MODULE_DIR);
 }
 
 function isUsableRuntimeBaseDir(dirPath) {

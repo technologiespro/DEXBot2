@@ -38,14 +38,20 @@ const { loadSettingsFile, resolveRawBotEntries, saveSettingsFile, normalizeBotEn
 const { normalizeMode, detectMode, setPreferredMode, describeModeChoice } = require('./launcher_mode_detector');
 const { normalizeRoot, resolveRuntimeScript } = require('./launcher_paths');
 
-const {
-  stopPM2Processes,
-  deletePM2Processes,
-  restartPM2Processes,
-  generateEcosystemConfig,
-  startManagedRuntimePM2,
-  buildEcosystemApps,
-} = require('../../pm2');
+let _pm2: any;
+function getPM2Module(): any {
+    if (_pm2 === undefined) {
+        try {
+            _pm2 = require('../../pm2');
+        } catch {
+            _pm2 = null;
+        }
+    }
+    if (!_pm2) {
+        throw new Error('pm2 module not available in this environment');
+    }
+    return _pm2;
+}
 
 /**
  * Start a bot directly (background, spawned as detached child process).
@@ -230,8 +236,8 @@ async function launcherPm2Start(botName: string | null, options: Record<string, 
   }
 
   // Generate ecosystem config and get apps array
-  generateEcosystemConfig({ clawOnly: false, exitOnError: false });
-  const apps = buildEcosystemApps({ clawOnly: false });
+  getPM2Module().generateEcosystemConfig({ clawOnly: false, exitOnError: false });
+  const apps = getPM2Module().buildEcosystemApps({ clawOnly: false });
 
   // Filter apps if specific bot requested
   let appsToStart = apps;
@@ -243,7 +249,7 @@ async function launcherPm2Start(botName: string | null, options: Record<string, 
   }
 
   // Start via pm2 without bootstrap (daemon already running)
-  await startManagedRuntimePM2({ apps: appsToStart });
+  await getPM2Module().startManagedRuntimePM2({ apps: appsToStart });
 
   return {
     started: true,
@@ -258,7 +264,7 @@ async function launcherPm2Start(botName: string | null, options: Record<string, 
  * @returns {Promise<Object>} { stopped: true, target }
  */
 async function launcherPm2Stop(target: string, options: Record<string, any> = {}) {
-  await stopPM2Processes(target || 'all');
+  await getPM2Module().stopPM2Processes(target || 'all');
   return {
     stopped: true,
     target: target || 'all',
@@ -272,7 +278,7 @@ async function launcherPm2Stop(target: string, options: Record<string, any> = {}
  * @returns {Promise<Object>} { deleted: true, target }
  */
 async function launcherPm2Delete(target: string, options: Record<string, any> = {}) {
-  await deletePM2Processes(target || 'all');
+  await getPM2Module().deletePM2Processes(target || 'all');
   return {
     deleted: true,
     target: target || 'all',
@@ -286,7 +292,7 @@ async function launcherPm2Delete(target: string, options: Record<string, any> = 
  * @returns {Promise<Object>} { restarted: true, target }
  */
 async function launcherPm2Restart(target: string, options: Record<string, any> = {}) {
-  await restartPM2Processes(target || 'all');
+  await getPM2Module().restartPM2Processes(target || 'all');
   return {
     restarted: true,
     target: target || 'all',

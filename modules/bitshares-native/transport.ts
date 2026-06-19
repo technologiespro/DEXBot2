@@ -14,8 +14,18 @@ declare class _WebSocket {
 
 type WebSocketLike = _WebSocket;
 
-const WebSocketConstructor: new (url: string) => WebSocketLike =
-    (globalThis as any).WebSocket || require('ws');
+let _WebSocketCtor: (new (url: string) => WebSocketLike) | null = null;
+function getWebSocketConstructor(): new (url: string) => WebSocketLike {
+    if (!_WebSocketCtor) {
+        const ws = (globalThis as any).WebSocket;
+        if (ws) {
+            _WebSocketCtor = ws;
+        } else {
+            _WebSocketCtor = require('ws');
+        }
+    }
+    return _WebSocketCtor;
+}
 
 const { NATIVE_CLIENT } = require('../constants');
 const { TRANSPORT } = NATIVE_CLIENT;
@@ -207,7 +217,7 @@ function createTransport(config: TransportConfig = {}) {
     function connectOne(url: string): Promise<WebSocketLike> {
         return new Promise((resolve, reject) => {
             try {
-                const socket = new WebSocketConstructor(url);
+                const socket = new (getWebSocketConstructor())(url);
                 const timer = setTimeout(() => {
                     try { socket.close(); } catch (_: any) {}
                     reject(new ConnectionError(`handshake timeout ${connectTimeoutMs}ms for ${url}`));

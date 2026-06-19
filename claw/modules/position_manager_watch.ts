@@ -6,13 +6,14 @@ const { PositionManager, DEFAULT_STATE_PATH } = require('./position_manager');
 const { waitForConnected } = require('./bitshares_client');
 const { PIPELINE_TIMING } = require('../../modules/constants');
 const { Config } = require('../../modules/config');
+const { runtime } = require('../../modules/runtime');
 
 const DEFAULT_HEALTH_PATH = PATHS.CLAW.WATCHER_HEALTH_FILE;
 const DEFAULT_MAX_CONSECUTIVE_FAILURES = 5;
 
 const { clone } = require('./utils');
 
-function parsePositionManagerWatchArgs(argv: string[] = [], env = process.env) {
+function parsePositionManagerWatchArgs(argv: string[] = [], env = runtime.env) {
   const options = {
     accountName: env.BITSHARES_ACCOUNT || null,
     healthPath: DEFAULT_HEALTH_PATH,
@@ -46,7 +47,7 @@ function parsePositionManagerWatchArgs(argv: string[] = [], env = process.env) {
   return options;
 }
 
-async function main(argv = Config.ARGS, env = process.env, logger: Record<string, any> = console) {
+async function main(argv = Config.ARGS, env = runtime.env, logger: Record<string, any> = console) {
   const options = parsePositionManagerWatchArgs(argv, env);
   const watcher = await runPositionManagerWatch({
     ...options,
@@ -54,11 +55,11 @@ async function main(argv = Config.ARGS, env = process.env, logger: Record<string
   });
 
   const handleSignal = () => {
-    watcher.stop().finally(() => process.exit(0));
+    watcher.stop().finally(() => runtime.exit(0));
   };
 
-  process.on('SIGINT', handleSignal);
-  process.on('SIGTERM', handleSignal);
+  runtime.onSignal('SIGINT', handleSignal);
+  runtime.onSignal('SIGTERM', handleSignal);
 }
 
 function resolveLogger(logger: any) {
@@ -248,6 +249,6 @@ export = {
 if (typeof require !== 'undefined' && require.main === module) {
   main().catch((err) => {
     console.error(err.message);
-    process.exit(1);
+    runtime.exit(1);
   });
 }

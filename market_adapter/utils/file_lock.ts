@@ -4,10 +4,11 @@ const { getStorage } = require('../../modules/storage');
 const storage = getStorage();
 const { readJSON, safeUnlink } = require('../../modules/utils/fs_utils');
 const { getProcessDiscovery } = require('../../modules/process_discovery');
+const { runtime } = require('../../modules/runtime');
 
 function _lockOwnerId(): number | string {
-    if (typeof process !== 'undefined' && typeof process.pid === 'number') {
-        return process.pid;
+    if (runtime.pid > 0) {
+        return runtime.pid;
     }
     if (typeof globalThis !== 'undefined' && globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
         return globalThis.crypto.randomUUID();

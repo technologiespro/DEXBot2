@@ -83,7 +83,7 @@ function createStateStore(options: StateStoreOptions = {}) {
     storage.writeFile(filePath, `${serialized}\n`, 'utf8');
   }
 
-  function withFileLock<T>(operation: () => Promise<T>): Promise<T> {
+  async function withFileLock<T>(operation: () => Promise<T>): Promise<T> {
     storage.ensureDir(path.dirname(filePath));
     const release = await acquireFileLock(filePath);
     try {

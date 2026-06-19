@@ -20,6 +20,7 @@
 const fs = require('fs');
 const { path } = require('../path_api');
 const { randomBytes } = require('../crypto/sync');
+const { runtime } = require('../runtime');
 
 class NodeStorageAdapter {
   readJSON(filePath) {
@@ -48,7 +49,7 @@ class NodeStorageAdapter {
       return;
     }
 
-    const suffix = options.tmpPrefix || `.${process.pid}.${Date.now()}.${randomBytes(8).toString('hex')}.tmp`;
+    const suffix = options.tmpPrefix || `.${runtime.pid}.${Date.now()}.${randomBytes(8).toString('hex')}.tmp`;
     const tmpPath = `${filePath}${suffix}`;
 
     try {

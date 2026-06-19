@@ -155,8 +155,17 @@ function createBrowserStorageAdapter() {
       };
     },
 
-    readdir(_path) {
-      return [];
+    readdir(dirPath) {
+      const normalized = dirPath.endsWith('/') ? dirPath : dirPath + '/';
+      const entries = new Set<string>();
+      for (const key of store.keys()) {
+        if (key.startsWith(normalized)) {
+          const rest = key.slice(normalized.length);
+          const idx = rest.indexOf('/');
+          entries.add(idx === -1 ? rest : rest.slice(0, idx));
+        }
+      }
+      return Array.from(entries);
     },
 
     open(_path, _flags, _mode) {
@@ -196,11 +205,11 @@ function createBrowserStorageAdapter() {
     },
 
     mkdtemp(prefix) {
-      return `${prefix}${Date.now()}`;
+      return `${prefix}${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
     },
 
-    readlink(_path) {
-      throw new Error('readlink() not supported in browser adapter');
+    readlink(path) {
+      return path;
     },
 
     flush,

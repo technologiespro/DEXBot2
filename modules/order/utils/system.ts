@@ -1055,7 +1055,7 @@ function readInput(prompt: string, options: { hideEchoBack?: boolean; mask?: str
         return Promise.reject(new Error('Interactive input not available in this environment'));
     }
     return new Promise((resolve) => {
-        const stdin = process.stdin; const stdout = process.stdout;
+        const stdin = runtime.stdin!; const stdout = runtime.stdout;
         const ESC_SEQUENCE_TIMEOUT_MS = 150;
         let input = '';
         let cursorPos = 0;
