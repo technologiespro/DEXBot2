@@ -1,5 +1,10 @@
 /** Credential client module - connects to credential daemon for key operations */
-const net = require('net');
+let net;
+try {
+    net = require('net');
+} catch {
+    // Browser: Unix socket IPC unavailable; methods will throw when called
+}
 const { getStorage } = require('./storage');
 const storage = getStorage();
 const { createHmac } = require('./crypto/sync');

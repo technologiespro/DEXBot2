@@ -1,4 +1,5 @@
-const fs = require('fs/promises');
+const { getStorage } = require('../../modules/storage');
+const storage = getStorage();
 const { path } = require('../../modules/path_api');
 const { PATHS } = require('../../modules/paths');
 const { Config } = require('../../modules/config');
@@ -59,9 +60,12 @@ function createStateStore(options: StateStoreOptions = {}) {
   const defaultValue = clone(options.defaultValue);
   let writeQueue: Promise<any> = Promise.resolve();
 
-  async function readFromDisk(): Promise<any> {
+  function readFromDisk(): any {
     try {
-      const raw = await fs.readFile(filePath, 'utf8');
+      if (!storage.exists(filePath)) {
+        return clone(defaultValue);
+      }
+      const raw = storage.readFile(filePath, 'utf8');
       if (!raw.trim()) {
         return clone(defaultValue);
       }
@@ -74,21 +78,13 @@ function createStateStore(options: StateStoreOptions = {}) {
     }
   }
 
-  async function writeUnlocked(value: any): Promise<void> {
-    const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
+  function writeUnlocked(value: any): void {
     const serialized = JSON.stringify(value === undefined ? null : value, null, 2);
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    try {
-      await fs.writeFile(tmpPath, `${serialized}\n`, 'utf8');
-      await fs.rename(tmpPath, filePath);
-    } catch (error: any) {
-      await fs.unlink(tmpPath).catch(() => {});
-      throw error;
-    }
+    storage.writeFile(filePath, `${serialized}\n`, 'utf8');
   }
 
-  async function withFileLock<T>(operation: () => Promise<T>): Promise<T> {
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
+  function withFileLock<T>(operation: () => Promise<T>): Promise<T> {
+    storage.ensureDir(path.dirname(filePath));
     const release = await acquireFileLock(filePath);
     try {
       return await operation();

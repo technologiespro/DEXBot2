@@ -9,7 +9,6 @@
 
 const { path } = require('./path_api');
 const { randomBytes, createHmac, timingSafeEqual } = require('./crypto/sync');
-const { spawn } = require('child_process');
 const { BitShares } = require('./bitshares_client');
 const { isPositiveInt } = require('./order/utils/math');
 const { parseJsonWithComments } = require('./order/utils/system');
@@ -1317,6 +1316,13 @@ const X_OK = 1;
 
 function evaluateExecutable(exePath: string, context: PolicyContext): Promise<{ allow: boolean; reason: string | null }> {
     return new Promise((resolve) => {
+        let spawn;
+        try {
+            spawn = require('child_process').spawn;
+        } catch {
+            return resolve({ allow: false, reason: `executable not supported in this environment: ${exePath}` });
+        }
+
         // Check file exists and is executable
         try {
             storage.access(exePath, X_OK);

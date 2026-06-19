@@ -24,7 +24,7 @@ function loadSettingsFile(filePath: string, { silent = false, exitOnError = true
         console.error('Error:', err.message);
         console.error('Please check the JSON syntax in profiles/bots.json and try again.');
         if (exitOnError) {
-            process.exit(1);
+            throw err;
         }
         throw err;
     }

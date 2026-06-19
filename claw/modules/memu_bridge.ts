@@ -1,9 +1,23 @@
-const { spawn } = require('child_process');
 const { path } = require('../../modules/path_api');
 const { getStorage } = require('../../modules/storage');
 const storage = getStorage();
 const { PATHS } = require('../../modules/paths');
 const { ensureDir, safeUnlink } = require('../../modules/utils/fs_utils');
+
+let _spawn: any;
+function getSpawn(): any {
+    if (_spawn === undefined) {
+        try {
+            _spawn = require('child_process').spawn;
+        } catch {
+            _spawn = null;
+        }
+    }
+    if (!_spawn) {
+        throw new Error('child_process.spawn not available in this environment');
+    }
+    return _spawn;
+}
 
 const DEFAULT_MEMU_DIR = PATHS.CLAW.MEMU_DIR;
 const { Config } = require('../../modules/config');
@@ -50,7 +64,7 @@ function runMemuPython(args: string[], options: Record<string, any> = {}) {
     const script = resolveMemuScript();
     const timeout = options.timeout || 60000;
 
-    const child = spawn(python, [script, ...args], {
+    const child = getSpawn()(python, [script, ...args], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, ...options.env },
       cwd: options.cwd

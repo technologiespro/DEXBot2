@@ -1,10 +1,19 @@
 'use strict';
 
-const fsPromises = require('fs/promises');
 const { getStorage } = require('../../modules/storage');
 const storage = getStorage();
 const { readJSON, safeUnlink } = require('../../modules/utils/fs_utils');
 const { getProcessDiscovery } = require('../../modules/process_discovery');
+
+function _lockOwnerId(): number | string {
+    if (typeof process !== 'undefined' && typeof process.pid === 'number') {
+        return process.pid;
+    }
+    if (typeof globalThis !== 'undefined' && globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
+        return globalThis.crypto.randomUUID();
+    }
+    return `lock-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 function loadLockInfo(lockPath: any) {
     try {
@@ -35,7 +44,7 @@ function acquireFileLockSync(lockPath: any, opts: any = {}) {
         try {
             fd = storage.open(lockPath, 'wx');
             const payload = {
-                pid: process.pid,
+                pid: _lockOwnerId(),
                 createdAt: new Date(now).toISOString(),
             };
             storage.writeFile(fd, `${JSON.stringify(payload, null, 2)}\n`);
@@ -101,7 +110,7 @@ function acquirePathLockSync(filePath: any, opts: any = {}) {
         let fd: number | null = null;
         try {
             fd = storage.open(lockPath, 'wx');
-            storage.writeFile(fd, `${JSON.stringify({ pid: process.pid, at: Date.now() })}\n`);
+            storage.writeFile(fd, `${JSON.stringify({ pid: _lockOwnerId(), at: Date.now() })}\n`);
             return { fd, lockPath };
         } catch (err: any) {
             if (fd !== null) {
@@ -131,20 +140,20 @@ async function acquireFileLock(filePath: any, opts: any = {}) {
 
     while (Date.now() < deadline) {
         try {
-            await fsPromises.writeFile(lockPath, JSON.stringify({ pid: process.pid, at: Date.now() }), { flag: 'wx' });
-            return async () => {
-                await fsPromises.unlink(lockPath).catch(() => {});
+            storage.writeJSON(lockPath, { pid: _lockOwnerId(), at: Date.now() }, { flag: 'wx' });
+            return () => {
+                storage.unlink(lockPath);
             };
         } catch (err: any) {
             if (err.code !== 'EEXIST') throw err;
             try {
-                const stat = await fsPromises.stat(lockPath);
+                const stat = storage.stat(lockPath);
                 if (Date.now() - stat.mtimeMs > staleMs) {
                     try {
-                        await fsPromises.unlink(lockPath);
-                        await fsPromises.writeFile(lockPath, JSON.stringify({ pid: process.pid, at: Date.now() }), { flag: 'wx' });
-                        return async () => {
-                            await fsPromises.unlink(lockPath).catch(() => {});
+                        storage.unlink(lockPath);
+                        storage.writeJSON(lockPath, { pid: _lockOwnerId(), at: Date.now() }, { flag: 'wx' });
+                        return () => {
+                            storage.unlink(lockPath);
                         };
                     } catch {
                         // Another writer beat us — fall through and retry

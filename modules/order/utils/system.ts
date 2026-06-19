@@ -47,6 +47,7 @@
 
 const { path } = require('../../path_api');
 const { getStorage } = require('../../storage');
+const { hasProcess } = require('../../env');
 const storage = getStorage();
 const { API_LIMITS, TIMING, ORDER_TYPES, ORDER_STATES, COW_ACTIONS, FEE_PARAMETERS, BTS_PRECISION, PIPELINE_TIMING } = require('../../constants');
 const { PATHS } = require('../../paths');
@@ -1050,6 +1051,9 @@ function sleep(ms: number): Promise<void> {
  * @returns {Promise<string>} Trimmed user input
  */
 function readInput(prompt: string, options: { hideEchoBack?: boolean; mask?: string } = {}): Promise<string> {
+    if (!hasProcess()) {
+        return Promise.reject(new Error('Interactive input not available in this environment'));
+    }
     return new Promise((resolve) => {
         const stdin = process.stdin; const stdout = process.stdout;
         const ESC_SEQUENCE_TIMEOUT_MS = 150;

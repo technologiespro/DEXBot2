@@ -1,5 +1,4 @@
-const { createHash } = require('../../modules/crypto/sync');
-const fsPromises = require('fs/promises');
+const { getCrypto } = require('../../modules/crypto');
 const { path } = require('../../modules/path_api');
 const { getStorage } = require('../../modules/storage');
 const storage = getStorage();
@@ -647,28 +646,32 @@ function validateBotEntry(entry: any, index: any, logger: any) {
   return warnings;
 }
 
-function _stableBotId(entry: any): string {
+async function _stableBotId(entry: any): Promise<string> {
   const stable = {
     name: entry.name || '',
     preferredAccount: entry.preferredAccount || '',
     assetA: entry.assetA || entry.assetAId || '',
     assetB: entry.assetB || entry.assetBId || '',
   };
-  return createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 8);
+  const encoder = new TextEncoder();
+  const hash = await getCrypto().sha256(encoder.encode(JSON.stringify(stable)));
+  return Array.from(hash).map((b: number) => b.toString(16).padStart(2, '0')).join('').slice(0, 8);
 }
 
-function normalizeBotEntries(rawEntries: Record<string, any>[], options: Partial<ProfileOptions> = {}) {
+async function normalizeBotEntries(rawEntries: Record<string, any>[], options: Partial<ProfileOptions> = {}) {
   const logger = options.logger || null;
-  return rawEntries.map((entry: any, index: number) => {
+  const results: any[] = [];
+  for (const [index, entry] of rawEntries.entries()) {
     if (logger) {
       validateBotEntry(entry, index, logger);
     }
     const normalized = { active: entry.active === undefined ? true : !!entry.active, ...entry };
     if (!normalized.id) {
-      normalized.id = _stableBotId(normalized);
+      normalized.id = await _stableBotId(normalized);
     }
-    return { ...normalized, botIndex: index, botKey: createBotKey(normalized, index) };
-  }) as any[];
+    results.push({ ...normalized, botIndex: index, botKey: createBotKey(normalized, index) });
+  }
+  return results;
 }
 
 const { clone } = require('./utils');
@@ -740,13 +743,9 @@ function resolveProfilesDir(profileRoot: any) {
   return Config.CWD ? path.resolve(Config.CWD, 'profiles') : PATHS.PROFILES_DIR;
 }
 
-async function readJsonFile(filePath: any) {
+function readJsonFile(filePath: any) {
   try {
-    const raw = await fsPromises.readFile(filePath, 'utf8');
-    if (!raw.trim()) {
-      return null;
-    }
-    return JSON.parse(raw);
+    return storage.readJSON(filePath);
   } catch (error: any) {
     if (error && error.code === 'ENOENT') {
       return null;
@@ -755,26 +754,12 @@ async function readJsonFile(filePath: any) {
   }
 }
 
-async function writeJsonPayload(filePath: any, data: any) {
-  const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
-  try {
-    await fsPromises.writeFile(tmpPath, JSON.stringify(data, null, 2) + '\n', 'utf8');
-    await fsPromises.rename(tmpPath, filePath);
-  } catch (err: any) {
-    await fsPromises.unlink(tmpPath).catch(() => {});
-    throw err;
-  }
+function writeJsonPayload(filePath: any, data: any) {
+  storage.writeJSON(filePath, data);
 }
 
-async function writeTextPayload(filePath: any, content: any) {
-  const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
-  try {
-    await fsPromises.writeFile(tmpPath, `${content}\n`, 'utf8');
-    await fsPromises.rename(tmpPath, filePath);
-  } catch (err: any) {
-    await fsPromises.unlink(tmpPath).catch(() => {});
-    throw err;
-  }
+function writeTextPayload(filePath: any, content: any) {
+  storage.writeFile(filePath, `${content}\n`, 'utf8');
 }
 
 async function writeJsonFileAtomic(filePath: any, data: any) {
@@ -786,9 +771,9 @@ async function writeJsonFileAtomic(filePath: any, data: any) {
   }
 }
 
-async function readTriggerFile(triggerPath: any) {
+function readTriggerFile(triggerPath: any) {
   try {
-    const raw = await fsPromises.readFile(triggerPath, 'utf8');
+    const raw = storage.readFile(triggerPath, 'utf8');
     const trimmed = raw.trim();
     if (!trimmed) return { exists: true, payload: null };
     try {
@@ -802,10 +787,12 @@ async function readTriggerFile(triggerPath: any) {
   }
 }
 
-async function listFiles(dirPath: any) {
+function listFiles(dirPath: any) {
   try {
-    const entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
-    return entries.filter((entry: any) => entry.isFile()).map((entry: any) => entry.name).sort();
+    return storage.readdir(dirPath).filter((name: string) => {
+      const stat = storage.stat(path.join(dirPath, name));
+      return stat.isFile();
+    }).sort();
   } catch (error: any) {
     if (error && error.code === 'ENOENT') {
       return [];
@@ -970,7 +957,7 @@ async function loadDexbotProfileBundle(profileRoot: string, options: Partial<Pro
     listFiles(ordersDir)
   ]);
 
-  const bots = normalizeBotEntries(resolveRawBotEntries(botsConfig), { logger: options.logger });
+  const bots = await normalizeBotEntries(resolveRawBotEntries(botsConfig), { logger: options.logger });
   const activeBots = bots.filter((bot) => bot.active !== false);
   const botsByKey = Object.fromEntries(bots.map((bot) => [bot.botKey, bot]));
   const botsByName = Object.fromEntries(bots.filter((bot) => bot.name).map((bot) => [bot.name, bot]));
@@ -1102,7 +1089,7 @@ function createDexbotProfileAdapter(profileRoot: string, options: Partial<Profil
     try {
       const currentBotsConfig = await readJsonFile(bundle.files.bots);
       const currentRawEntries = resolveRawBotEntries(currentBotsConfig);
-      const currentBots = normalizeBotEntries(currentRawEntries, { logger: options.logger });
+      const currentBots = await normalizeBotEntries(currentRawEntries, { logger: options.logger });
       const bot = identifier
         ? currentBots.find((entry: any) => matchBotIdentifier(entry, identifier))
         : currentBots.find((entry: any) => entry.active !== false) || currentBots[0] || null;
@@ -1152,8 +1139,8 @@ function createDexbotProfileAdapter(profileRoot: string, options: Partial<Profil
               updatedAt: new Date().toISOString()
             };
         const content = triggerPayload ? JSON.stringify(triggerPayload, null, 2) : '';
-        await fsPromises.mkdir(path.dirname(triggerPath), { recursive: true });
-        await writeTextPayload(triggerPath, content);
+        storage.ensureDir(path.dirname(triggerPath));
+        writeTextPayload(triggerPath, content);
       }
 
       cachedBundle = null;
@@ -1205,21 +1192,21 @@ function createDexbotProfileAdapter(profileRoot: string, options: Partial<Profil
     }));
   }
 
-  async function consumeTrigger(botKey: any) {
+  function consumeTrigger(botKey: any) {
     const triggerPath = path.join(getProfilesDir(), `recalculate.${botKey}.trigger`);
-    const trigger = await readTriggerFile(triggerPath);
+    const trigger = readTriggerFile(triggerPath);
     if (!trigger.exists) {
       return { consumed: false, payload: null };
     }
-    await fsPromises.unlink(triggerPath).catch(() => {});
+    storage.unlink(triggerPath);
     return { consumed: true, payload: trigger.payload };
   }
 
-  async function writeTrigger(botKey: any, payload: any = null) {
+  function writeTrigger(botKey: any, payload: any = null) {
     const triggerPath = path.join(getProfilesDir(), `recalculate.${botKey}.trigger`);
     const content = payload ? JSON.stringify(payload, null, 2) : '';
-    await fsPromises.mkdir(path.dirname(triggerPath), { recursive: true });
-    await writeTextPayload(triggerPath, content);
+    storage.ensureDir(path.dirname(triggerPath));
+    writeTextPayload(triggerPath, content);
   }
 
   async function updateBotSettings(identifier: any, patch: any) {
@@ -1234,7 +1221,7 @@ function createDexbotProfileAdapter(profileRoot: string, options: Partial<Profil
     try {
       const currentBotsConfig = await readJsonFile(bundle.files.bots);
       const currentRawEntries = resolveRawBotEntries(currentBotsConfig);
-      const currentBots = normalizeBotEntries(currentRawEntries, { logger: options.logger });
+      const currentBots = await normalizeBotEntries(currentRawEntries, { logger: options.logger });
       const bot = identifier
         ? currentBots.find((entry: any) => matchBotIdentifier(entry, identifier))
         : currentBots.find((entry: any) => entry.active !== false) || currentBots[0] || null;

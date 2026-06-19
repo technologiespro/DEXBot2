@@ -1,4 +1,5 @@
-const fs = require('fs/promises');
+const { getStorage } = require('../../modules/storage');
+const storage = getStorage();
 const { path } = require('../../modules/path_api');
 const { PATHS } = require('../../modules/paths');
 const { Config } = require('../../modules/config');
@@ -340,7 +341,7 @@ class PositionManager {
     }
 
     try {
-      const raw = await fs.readFile(this.statePath, 'utf8');
+      const raw = storage.readFile(this.statePath, 'utf8');
       const parsed = JSON.parse(raw);
       this.state = {
         positions: Array.isArray(parsed?.positions) ? parsed.positions : [],
@@ -365,7 +366,7 @@ class PositionManager {
   async saveState() {
     const state = await this.loadState();
     state.updatedAt = nowIso();
-    await fs.mkdir(path.dirname(this.statePath), { recursive: true });
+    storage.ensureDir(path.dirname(this.statePath));
     await writeJsonFileAtomic(this.statePath, state);
     return state;
   }

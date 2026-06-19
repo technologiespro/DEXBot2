@@ -15,7 +15,7 @@ function isDexbot2Root(candidate: string) {
 }
 
 function findDexbot2Root(startDir?: string) {
-  let candidate = path.resolve(startDir || __dirname);
+  let candidate = path.resolve(startDir || PATHS.PROJECT_ROOT || '');
   for (let i = 0; i < 8; i++) {
     if (isDexbot2Root(candidate)) {
       return candidate;
@@ -26,7 +26,7 @@ function findDexbot2Root(startDir?: string) {
     }
     candidate = parent;
   }
-  return path.resolve(startDir || __dirname);
+  return path.resolve(startDir || PATHS.PROJECT_ROOT || '');
 }
 
 const DEFAULT_ROOT = findDexbot2Root(PATHS.PROJECT_ROOT);

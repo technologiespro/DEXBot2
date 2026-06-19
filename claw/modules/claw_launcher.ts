@@ -3,9 +3,37 @@
 const { getStorage } = require('../../modules/storage');
 const storage = getStorage();
 const { path } = require('../../modules/path_api');
-const { spawn } = require('child_process');
 const { PATHS, getRecalculateTriggerFile } = require('../../modules/paths');
-const chainKeys = require('../../modules/chain_keys');
+
+let _chainKeys: any;
+function getChainKeys(): any {
+    if (_chainKeys === undefined) {
+        try {
+            _chainKeys = require('../../modules/chain_keys');
+        } catch {
+            _chainKeys = null;
+        }
+    }
+    if (!_chainKeys) {
+        throw new Error('chain_keys module not available in this environment');
+    }
+    return _chainKeys;
+}
+
+let _spawn: any;
+function getSpawn(): any {
+    if (_spawn === undefined) {
+        try {
+            _spawn = require('child_process').spawn;
+        } catch {
+            _spawn = null;
+        }
+    }
+    if (!_spawn) {
+        throw new Error('child_process.spawn not available in this environment');
+    }
+    return _spawn;
+}
 const { loadSettingsFile, resolveRawBotEntries, saveSettingsFile, normalizeBotEntries } = require('../../modules/bot_settings');
 const { normalizeMode, detectMode, setPreferredMode, describeModeChoice } = require('./launcher_mode_detector');
 const { normalizeRoot, resolveRuntimeScript } = require('./launcher_paths');
@@ -35,7 +63,7 @@ async function launcherStart(botName: string | null, options: Record<string, any
     args.push(botName);
   }
 
-  const child = spawn('node', [dexbotPath, ...args], {
+  const child = getSpawn()('node', [dexbotPath, ...args], {
     detached: true,
     stdio: 'ignore',
     cwd: ROOT
@@ -66,7 +94,7 @@ async function launcherDrystart(botName: string | null, options: Record<string, 
     args.push(botName);
   }
 
-  const child = spawn('node', [dexbotPath, ...args], {
+  const child = getSpawn()('node', [dexbotPath, ...args], {
     detached: true,
     stdio: 'ignore',
     cwd: ROOT
@@ -195,7 +223,7 @@ async function launcherPm2Start(botName: string | null, options: Record<string, 
   }
 
   // Then check if daemon is ready
-  if (!(await chainKeys.isDaemonResponsive())) {
+  if (!(await getChainKeys().isDaemonResponsive())) {
     throw new Error(
       'Credential daemon is not running. Start it first with: node pm2 or node unlock'
     );
@@ -359,7 +387,7 @@ async function launcherClawOnly(options: Record<string, any> = {}) {
   const ROOT = normalizeRoot(options);
   const pm2ScriptPath = resolveRuntimeScript(ROOT, 'pm2.js');
 
-  const child = spawn('node', [pm2ScriptPath, 'claw-only'], {
+  const child = getSpawn()('node', [pm2ScriptPath, 'claw-only'], {
     detached: true,
     stdio: 'ignore',
     cwd: ROOT
@@ -391,7 +419,7 @@ async function launcherUnlockStart(botName: string | null, options: Record<strin
     args.push(botName);
   }
 
-  const child = spawn('node', [unlockPath, ...args], {
+  const child = getSpawn()('node', [unlockPath, ...args], {
     detached: true,
     stdio: 'ignore',
     cwd: ROOT

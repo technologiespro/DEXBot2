@@ -91,9 +91,23 @@ const {
     createCipheriv,
     createDecipheriv,
 } = require('./crypto/sync');
-const net = require('net');
 const { path } = require('./path_api');
 const { readInput, readPassword } = require('./order/utils/system');
+
+let _net: any;
+function getNet(): any {
+    if (_net === undefined) {
+        try {
+            _net = require('net');
+        } catch {
+            _net = null;
+        }
+    }
+    if (!_net) {
+        throw new Error('Unix socket IPC not available in this environment');
+    }
+    return _net;
+}
 const { TIMING, CREDENTIAL_PROMPTS } = require('./constants');
 const { PATHS } = require('./paths');
 const {
@@ -956,6 +970,12 @@ function isDaemonResponsive(options = {}, timeout = 2000) {
             return resolve(false);
         }
 
+        let net;
+        try {
+            net = getNet();
+        } catch {
+            return resolve(false);
+        }
         const socketPath = getCredentialSocketPath(options);
         const socket = net.createConnection(socketPath);
         let settled = false;
@@ -1037,7 +1057,7 @@ async function waitForDaemon(maxWaitMs = TIMING.DAEMON_STARTUP_TIMEOUT_MS, optio
  * @returns {Promise<*>} Resolved value from extractResult
  */
 function sendDaemonRequest(requestType, accountName, timeout = TIMING.DAEMON_PING_TIMEOUT_MS, options = {}, label = 'request', extractResult = null) {
-    const net = require('net');
+    const net = getNet();
     const socketPath = getCredentialSocketPath(options);
 
     return new Promise((resolve, reject) => {

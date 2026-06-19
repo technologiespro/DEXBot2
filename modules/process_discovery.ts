@@ -3,6 +3,7 @@
 const { getStorage } = require('./storage');
 const storage = getStorage();
 const { runtime } = require('./runtime');
+const { hasProcess } = require('./env');
 
 export interface ProcessStat {
     utime: number;
@@ -248,7 +249,7 @@ export function resetProcessDiscovery(): void {
 
 export function getProcessDiscovery(): ProcessDiscovery {
     if (!_instance) {
-        _instance = typeof process !== 'undefined' && runtime.platform === 'linux'
+        _instance = hasProcess() && runtime.platform === 'linux'
             ? new LinuxProcessDiscovery()
             : new NullProcessDiscovery();
     }

@@ -1,5 +1,6 @@
+const { getStorage } = require('../../modules/storage');
+const storage = getStorage();
 const { path } = require('../../modules/path_api');
-const fs = require('fs/promises');
 const { PATHS } = require('../../modules/paths');
 
 export function normalizeRepoRoot(variableName: string, repoRoot?: string) {
@@ -70,12 +71,12 @@ export function buildSkillTomlLines(skillName: string, description: string, tags
   return lines.join('\n');
 }
 
-export async function writeSkillFile(outputPath: string, content: string) {
+export function writeSkillFile(outputPath: string, content: string) {
   if (!outputPath) {
     throw new Error('outputPath is required');
   }
 
-  await fs.mkdir(path.dirname(outputPath), { recursive: true });
-  await fs.writeFile(outputPath, content, 'utf8');
+  storage.ensureDir(path.dirname(outputPath));
+  storage.writeFile(outputPath, content, 'utf8');
   return content;
 }

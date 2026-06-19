@@ -10,29 +10,37 @@
  * Browser: would be populated from URL params, localStorage, etc.
  */
 
+let _hasProcess: boolean;
+function checkHasProcess(): boolean {
+    if (_hasProcess === undefined) {
+        _hasProcess = typeof process !== 'undefined' && typeof process.execPath === 'string';
+    }
+    return _hasProcess;
+}
+
 function str(key: string): string | undefined {
-    return process.env[key] !== undefined ? process.env[key] : undefined;
+    return checkHasProcess() && process.env[key] !== undefined ? process.env[key] : undefined;
 }
 
 function strWithDefault(key: string, defaultValue: string): string {
-    return process.env[key] !== undefined ? String(process.env[key]) : defaultValue;
+    return checkHasProcess() && process.env[key] !== undefined ? String(process.env[key]) : defaultValue;
 }
 
 function num(key: string, defaultValue: number): number {
-    const val = process.env[key];
+    const val = checkHasProcess() ? process.env[key] : undefined;
     return val !== undefined ? Number(val) : defaultValue;
 }
 
 function bool(key: string): boolean {
-    return process.env[key] === '1';
+    return checkHasProcess() && process.env[key] === '1';
 }
 
 function hasOwn(key: string): boolean {
-    return Object.prototype.hasOwnProperty.call(process.env, key);
+    return checkHasProcess() && Object.prototype.hasOwnProperty.call(process.env, key);
 }
 
 function hasProcess(): boolean {
-    return typeof process !== 'undefined' && typeof process.execPath === 'string';
+    return checkHasProcess();
 }
 
 const Config: {

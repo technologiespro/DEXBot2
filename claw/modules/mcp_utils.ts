@@ -1,4 +1,10 @@
+const { hasProcess } = require('../../modules/env');
+const { Config } = require('../../modules/config');
+
 export function writeMessage(message: any) {
+  if (!hasProcess()) {
+    return Promise.reject(new Error('MCP stdio transport not available in this environment'));
+  }
   return new Promise<void>((resolve, reject) => {
     try {
       process.stdout.write(`${JSON.stringify(message)}\n`, (error) => {
@@ -35,17 +41,21 @@ export function failure(id: any, code: any, message: any, data = undefined) {
 }
 
 export function createMessageParser(onMessage: any) {
-  let buffer = Buffer.alloc(0);
+  if (!hasProcess()) {
+    throw new Error('MCP stdio transport not available in this environment');
+  }
+  const decoder = new TextDecoder('utf-8');
+  let buffer = new Uint8Array(0);
   let queue = Promise.resolve();
 
   function processBuffer() {
     while (true) {
-      const newlineIndex = buffer.indexOf('\n');
+      const newlineIndex = buffer.indexOf(0x0a);
       if (newlineIndex === -1) {
         return;
       }
 
-      const line = buffer.slice(0, newlineIndex).toString('utf8').trim();
+      const line = decoder.decode(buffer.slice(0, newlineIndex)).trim();
       buffer = buffer.slice(newlineIndex + 1);
 
       if (!line) {
@@ -65,9 +75,17 @@ export function createMessageParser(onMessage: any) {
     }
   }
 
+  function appendUint8(a: Uint8Array, b: Uint8Array): Uint8Array {
+    const out = new Uint8Array(a.length + b.length);
+    out.set(a, 0);
+    out.set(b, a.length);
+    return out;
+  }
+
   return {
     push(chunk: any) {
-      buffer = Buffer.concat([buffer, chunk]);
+      const incoming = chunk instanceof Uint8Array ? chunk : new Uint8Array(0);
+      buffer = appendUint8(buffer, incoming);
       processBuffer();
       return queue;
     }
@@ -75,7 +93,10 @@ export function createMessageParser(onMessage: any) {
 }
 
 export async function runMcpServer(parseArgs: (argv: string[]) => Record<string, any>, handleRequest: (message: any, defaults: any) => Promise<void>): Promise<void> {
-  const defaults = parseArgs(process.argv.slice(2));
+  if (!hasProcess()) {
+    throw new Error('MCP stdio transport not available in this environment');
+  }
+  const defaults = parseArgs(Config.ARGS);
   const parser = createMessageParser((message: any) => handleRequest(message, defaults));
   let lastQueue = Promise.resolve();
 

@@ -1,9 +1,11 @@
 const { path } = require('./path_api');
-const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const { Config } = require('./config');
 
-const MODULE_DIR = path.dirname(__dirname);
-const PROJECT_ROOT = resolveProjectRoot(MODULE_DIR);
+const MODULE_DIR = typeof __dirname !== 'undefined' ? path.dirname(__dirname) : '';
+function isDistCodeRoot(dirPath: string): boolean {
+    return dirPath.endsWith('/modules') || dirPath.endsWith(`${path.sep}modules`);
+}
+const PROJECT_ROOT = isDistCodeRoot(MODULE_DIR) ? path.dirname(MODULE_DIR) : MODULE_DIR;
 const PROFILES_DIR = path.join(PROJECT_ROOT, 'profiles');
 
 const PATHS = {

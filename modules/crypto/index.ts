@@ -1,5 +1,6 @@
 export type { CryptoProvider, EcPoint, ScryptOptions, Aes256GcmEncryptResult } from './provider';
 import type { CryptoProvider } from './provider';
+import { isBrowser } from '../env';
 import { NodeCryptoProvider } from './node_provider';
 import { BrowserCryptoProvider } from './browser_provider';
 export { NodeCryptoProvider } from './node_provider';
@@ -26,7 +27,7 @@ let _crypto: CryptoProvider | null = null;
 
 export function getCrypto(): CryptoProvider {
     if (!_crypto) {
-        _crypto = typeof globalThis.window !== 'undefined'
+        _crypto = isBrowser()
             ? new BrowserCryptoProvider()
             : new NodeCryptoProvider();
     }

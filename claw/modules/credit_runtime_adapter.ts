@@ -1,6 +1,7 @@
 'use strict';
 
 const { path } = require('../../modules/path_api');
+const { Config } = require('../../modules/config');
 const CreditRuntime = require('../../modules/credit_runtime');
 
 const DEFAULT_CREDIT_RUNTIME_DIR = 'profiles/credit_runtime';
@@ -9,7 +10,7 @@ function createCreditRuntimeAdapter(infra: any, options: Record<string, any> = {
   const _runtimes = new Map<string, any>();
   const _stateDir: string =
     options.stateDir ||
-    path.join(infra.runtime?.profileRoot || process.cwd(), DEFAULT_CREDIT_RUNTIME_DIR);
+    path.join(infra.runtime?.profileRoot || Config.CWD, DEFAULT_CREDIT_RUNTIME_DIR);
 
   function _buildBotShim(botEntry: Record<string, any>): any {
     return {

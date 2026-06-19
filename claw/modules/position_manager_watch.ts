@@ -1,4 +1,5 @@
-const fsPromises = require('fs/promises');
+const { getStorage } = require('../../modules/storage');
+const storage = getStorage();
 const { path } = require('../../modules/path_api');
 const { PATHS } = require('../../modules/paths');
 const { PositionManager, DEFAULT_STATE_PATH } = require('./position_manager');
@@ -109,13 +110,9 @@ function createPositionManagerWatcher(options: Record<string, any> = {}) {
     };
   }
 
-  async function writeHealth() {
+  function writeHealth() {
     try {
-      const healthDir = path.dirname(resolvedOptions.healthPath);
-      await fsPromises.mkdir(healthDir, { recursive: true });
-      const tmpPath = `${resolvedOptions.healthPath}.tmp.${process.pid}.${Date.now()}`;
-      await fsPromises.writeFile(tmpPath, JSON.stringify(getHealth(), null, 2) + '\n', 'utf8');
-      await fsPromises.rename(tmpPath, resolvedOptions.healthPath);
+      storage.writeJSON(resolvedOptions.healthPath, getHealth());
     } catch {
       // Best-effort — do not let health writes break the watcher
     }
@@ -248,7 +245,7 @@ export = {
   main
 };
 
-if (require.main === module) {
+if (typeof require !== 'undefined' && require.main === module) {
   main().catch((err) => {
     console.error(err.message);
     process.exit(1);

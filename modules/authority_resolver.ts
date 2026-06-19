@@ -1,8 +1,7 @@
 'use strict';
 
-const ecc = typeof globalThis.window !== 'undefined'
-    ? require('./bitshares-native/crypto/ecc.browser')
-    : require('./bitshares-native/crypto/ecc');
+const getEcc = require('./bitshares-native/crypto/ecc_selector');
+const ecc = getEcc();
 const { NATIVE_CLIENT } = require('./constants');
 const Logger = require('./logger');
 

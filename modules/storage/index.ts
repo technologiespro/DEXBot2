@@ -21,14 +21,14 @@
 const { IStorageAdapter } = require('./types');
 const NodeStorageAdapter = require('./node_adapter');
 const createBrowserStorageAdapter = require('./browser_adapter');
+const { isBrowser } = require('../env');
 
 let _adapter = null;
 
 function getStorage() {
   if (_adapter) return _adapter;
 
-  const isBrowser = typeof globalThis !== 'undefined' && typeof globalThis.window !== 'undefined';
-  if (isBrowser) {
+  if (isBrowser()) {
     _adapter = createBrowserStorageAdapter();
   } else {
     _adapter = new NodeStorageAdapter();

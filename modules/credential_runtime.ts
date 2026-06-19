@@ -1,6 +1,7 @@
 const { path } = require('./path_api');
 const { getStorage } = require('./storage');
 const storage = getStorage();
+const { hasProcess } = require('./env');
 const { resolveProjectRoot } = require('./launcher/runtime_entry');
 const { Config } = require('./config');
 const { ensureDir } = require('./utils/fs_utils');
@@ -30,7 +31,7 @@ const DEFAULT_SOCKET_BASENAME = 'dexbot-cred-daemon.sock';
 const DEFAULT_READY_BASENAME = 'dexbot-cred-daemon.ready';
 
 function getDexbotRoot() {
-    const MODULE_DIR = path.dirname(__dirname);
+    const MODULE_DIR = typeof __dirname !== 'undefined' ? path.dirname(__dirname) : '';
     return resolveProjectRoot(MODULE_DIR);
 }
 
@@ -92,7 +93,7 @@ function ensureCredentialRuntimeDirSync(options: RuntimeDirOptions = {}) {
 }
 
 function getCurrentUid() {
-    return typeof process.getuid === 'function' ? process.getuid() : null;
+    return hasProcess() && typeof process.getuid === 'function' ? process.getuid() : null;
 }
 
 function assertPrivatePathSecurity(filePath: string, options: PrivatePathOptions = {}) {

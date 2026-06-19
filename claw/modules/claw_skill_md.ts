@@ -1,4 +1,5 @@
-const fs = require('fs/promises');
+const { getStorage } = require('../../modules/storage');
+const storage = getStorage();
 const { path } = require('../../modules/path_api');
 const { getClawToolCatalog } = require('./claw_catalog');
 const { getSupportedClawRuntime } = require('./claw_runtime_matrix');
@@ -300,10 +301,10 @@ function buildRuntimeSkillMarkdown(runtimeName: string, options: Record<string, 
   ].join('\n');
 }
 
-async function writeRuntimeSkillMarkdown(outputPath: string, runtimeName: string, options: Record<string, any> = {}) {
+function writeRuntimeSkillMarkdown(outputPath: string, runtimeName: string, options: Record<string, any> = {}) {
   const content = buildRuntimeSkillMarkdown(runtimeName, options);
-  await fs.mkdir(path.dirname(outputPath), { recursive: true });
-  await fs.writeFile(outputPath, content, 'utf8');
+  storage.ensureDir(path.dirname(outputPath));
+  storage.writeFile(outputPath, content, 'utf8');
   return content;
 }
 
