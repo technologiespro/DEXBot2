@@ -19,8 +19,6 @@
  */
 
 const { IStorageAdapter } = require('./types');
-const NodeStorageAdapter = require('./node_adapter');
-const createBrowserStorageAdapter = require('./browser_adapter');
 const { isBrowser } = require('../env');
 
 let _adapter = null;
@@ -29,8 +27,10 @@ function getStorage() {
   if (_adapter) return _adapter;
 
   if (isBrowser()) {
+    const createBrowserStorageAdapter = require('./browser_adapter');
     _adapter = createBrowserStorageAdapter();
   } else {
+    const NodeStorageAdapter = require('./node_adapter');
     _adapter = new NodeStorageAdapter();
   }
 
@@ -45,4 +45,4 @@ function setAdapter(adapter) {
   _adapter = adapter;
 }
 
-export { getStorage, setAdapter, IStorageAdapter, NodeStorageAdapter, createBrowserStorageAdapter };
+export { getStorage, setAdapter, IStorageAdapter };

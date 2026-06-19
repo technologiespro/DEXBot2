@@ -218,24 +218,80 @@ common cause of `require('fs')` / `process.kill` / Unix-socket regressions
 in the browser bundle.
 
 **Browser-safe** (may be imported from any context):
-- `modules/crypto/` — `BrowserCryptoProvider` + `NodeCryptoProvider` selected by `getCryptoProvider()`
-- `modules/storage/` — use `getStorage()`; the adapter swap is automatic
-- `modules/claw/` — JSON bridge for AI agents (all top-level requires are lazy or browser-safe)
+- `modules/crypto/` — `BrowserCryptoProvider` + `NodeCryptoProvider` selected by `getCrypto()`; `node_provider.ts` uses lazy `require('crypto')` with try/catch guard
+- `modules/storage/` — use `getStorage()`; the adapter swap is automatic (top-level adapter requires are lazy)
+- `modules/claw/` — JSON bridge for AI agents. **Caveat:** `claw/index.ts` top-level requires reach Node-only modules (credential_runtime, dexbot_credential_client, kibana_price_source → https). Import individual sub-modules (e.g. `claw/modules/claw_bridge`) for browser-safe access; `claw/index.ts` is node-only.
 - `modules/env.ts` — `isBrowser()` / `hasProcess()` are the canonical environment checks
 - `modules/runtime.ts` — `getRuntime()` / `runtime` singleton (use this, not inline `process.*`)
 - `modules/config.ts` — `Config` object (use this, not inline `process.env.*`)
-- `modules/paths.ts` — `PATHS` (use this, not inline `path.join(__dirname, …)`)
+- `modules/paths.ts` — `PATHS` (use this, not inline `path.join(__dirname, …)`); guarded for ESM/browser
 - `modules/path_api.ts` — `path` (use this, not inline `require('path')`)
-- `modules/crypto/sync.ts` — `createHash`/`createHmac`/`randomBytes` etc.
+- `modules/crypto/sync.ts` — `createHash`/`createHmac`/`randomBytes` etc. (guarded `require('crypto')`)
 - `modules/bitshares-native/crypto/ecc_selector.ts` — `getEcc()` is the canonical ecc loader
 - `modules/bitshares-native/` — chain client, transport, signing, ecc. **Caveat:** `transport.ts` lazily requires `ws` (resolved at call time, not load time); bundlers that eagerly resolve all `require()` calls may require `ws` in `optionalDependencies`.
+- `modules/logger.ts` — auto-selects `BrowserLogger` (console-only) vs Node logger via `isBrowser()` split
+- `modules/constants.ts` — pure data / tuning parameters, no Node imports
+- `modules/types.ts` — pure TypeScript types
+- `modules/settings_merge.ts` — pure data merge logic
+- `modules/cr_planner.ts` — pure math / credit planning
+- `modules/cli_whitelist_args.ts` — pure string manipulation
+- `modules/order/utils/math.ts` — pure math functions
+- `modules/order/utils/order.ts` — pure order logic
+- `modules/order/utils/validate.ts` — pure validation
+- `modules/order/utils/system.ts` — browser-safe (uses storage/runtime abstractions, no raw Node imports)
+- `modules/order/format.ts` — pure formatting functions
+- `modules/order/async_lock.ts` — pure async locking
+- `modules/order/logger_state.ts` — pure state tracking
+- `modules/order/processed_fill_store.ts` — pure fill tracking
+- `modules/utils/math_utils.ts` — pure math
+- `modules/utils/base58check.ts` — browser-safe (uses sync.ts)
+- `modules/fund_registry.ts` — browser-safe (uses storage abstraction)
+- `modules/authority_resolver.ts` — browser-safe (uses ecc, no fs/process)
+- `modules/validate_profiles.ts` — browser-safe (pure validation logic, uses storage abstraction)
+- `modules/market_adapter_whitelist.ts` — browser-safe (uses storage abstraction)
 
 **Node-only** (must not be reached from a browser bundle):
 - `modules/launcher/*` — credential daemon, bot supervisor, market adapter runtime, monolithic runtime
-- `modules/storage/node_adapter.ts` — `fs.*Sync` direct calls
+- `modules/storage/node_adapter.ts` — `fs.*Sync` direct calls (loaded via lazy require inside `getStorage()`)
 - `modules/key_store.ts` — no `BrowserKeyStore` implementation exists
 - `modules/dexbot_maintenance_runtime.ts`, `modules/order/logger.ts`, `modules/order/export.ts`, `modules/order/runner.ts` — direct `fs` / `child_process` / `os` use
+- `modules/process_discovery.ts` — Linux-specific `/proc/*` filesystem reads
+- `modules/graceful_shutdown.ts` — direct `process.on('SIGTERM'/'SIGINT')` signal handlers
+- `modules/dexbot_credential_client.ts` — Unix socket IPC via `require('net')`
+- `modules/credential_runtime.ts` — lazy `require('./launcher/runtime_entry')` for daemon paths
+- `modules/credit_runtime.ts` — uses `bots_file_lock`, `writeJsonFileAtomic`
+- `modules/node_health_cache.ts` — uses `bots_file_lock`
+- `modules/dexbot_class.ts` — imports `key_store`, `dexbot_maintenance_runtime`
+- `modules/dexbot_fill_runtime.ts` — fill processing runtime
+- `modules/bots_file_lock.ts` — file locking
+- `modules/general_settings.ts` — uses `bots_file_lock`
+- `modules/bot_settings.ts` — uses `bots_file_lock`
+- `modules/chain_keys.ts` — lazy `require('net')` for credential daemon
+- `modules/chain_orders.ts` — blockchain order operations
+- `modules/account_orders.ts` — file-backed order persistence
+- `modules/credential_policy.ts` — lazy `require('child_process').spawn`
+- `modules/credential_session_cache.ts` — depends on `chain_keys`
+- `modules/order/index.ts` — lazy `getLogger()` accessor (top-level `require('fs')` guarded)
+- `modules/order/manager.ts` — full order lifecycle
+- `modules/order/grid.ts` — grid calculations (part of order subsystem)
+- `modules/order/working_grid.ts` — copy-on-write grid (part of order subsystem)
+- `modules/order/strategy.ts` — trading strategy (part of order subsystem)
+- `modules/order/accounting.ts` — fee accounting (part of order subsystem)
+- `modules/order/sync_engine.ts` — blockchain sync (part of order subsystem)
+- `modules/order/grid_reconcile.ts` — chain reconciliation (part of order subsystem)
+- `modules/bitshares_client.ts` — BitShares node management
+- `modules/node_manager.ts` — multi-node health and failover
+- `modules/account_bots.ts` — CLI tool
 - `unlock.ts`, `bot.ts`, `dexbot.ts`, `pm2.ts`, `credential-daemon.ts` — CLI entry points (also listed in `package.json` `browser` field as `false`)
+- `market_adapter/ama_signal_runner.ts` — CLI script with `#!/usr/bin/env node`
+- `market_adapter/market_adapter.ts` — standalone price adapter runtime
+- `market_adapter/core/market_adapter_service.ts` — price adapter service
+- `market_adapter/inputs/` — Kibana/LP data fetcher scripts
+- `market_adapter/lp_chart_runner.ts` — `require('child_process')` for chart rendering
+- `market_adapter/core/kibana_client.ts` — `require('https')` for Elasticsearch queries
+- `market_adapter/core/kibana_candles.ts`, `market_adapter/core/kibana_market_candles.ts` — transitive `kibana_client` dependency
+- `market_adapter/inputs/kibana_source.ts` — transitive `kibana_client` dependency
+- `claw/index.ts` — top-level requires reach Node-only modules (see claw caveat above)
 
 **Environment detection** — always go through `modules/env.ts`:
 ```ts

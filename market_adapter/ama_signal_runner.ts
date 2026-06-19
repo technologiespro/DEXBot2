@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 'use strict';
 
-const fs = require('fs');
+let _fs: any;
+function getFs(): any {
+    if (!_fs) {
+        try { _fs = require('fs'); } catch { _fs = null; }
+    }
+    return _fs;
+}
 const { getStorage } = require('../modules/storage');
 const storage = getStorage();
 
@@ -226,7 +232,7 @@ async function main(): Promise<void> {
     }
     const out = buildOutput(payload, cli.bot);
     const json = cli.compact ? JSON.stringify(out) : JSON.stringify(out, null, 2);
-    fs.writeFileSync(1, `${json}\n`, 'utf8');
+    process.stdout.write(`${json}\n`);
     process.exit(0);
 }
 
@@ -235,6 +241,6 @@ main().catch((err: Error) => {
         ok: false,
         error: err.message,
     };
-    fs.writeFileSync(1, `${JSON.stringify(out, null, 2)}\n`, 'utf8');
+    process.stdout.write(`${JSON.stringify(out, null, 2)}\n`);
     process.exit(1);
 });

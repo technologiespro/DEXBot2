@@ -1,9 +1,7 @@
 export type { CryptoProvider, EcPoint, ScryptOptions, Aes256GcmEncryptResult } from './provider';
 import type { CryptoProvider } from './provider';
 import { isBrowser } from '../env';
-import { NodeCryptoProvider } from './node_provider';
 import { BrowserCryptoProvider } from './browser_provider';
-export { NodeCryptoProvider } from './node_provider';
 export { BrowserCryptoProvider } from './browser_provider';
 export { ripemd160 as pureRipemd160 } from './pure_ripemd160';
 export { scrypt as pureScrypt } from './pure_scrypt';
@@ -27,9 +25,12 @@ let _crypto: CryptoProvider | null = null;
 
 export function getCrypto(): CryptoProvider {
     if (!_crypto) {
-        _crypto = isBrowser()
-            ? new BrowserCryptoProvider()
-            : new NodeCryptoProvider();
+        if (isBrowser()) {
+            _crypto = new BrowserCryptoProvider();
+        } else {
+            const { NodeCryptoProvider } = require('./node_provider');
+            _crypto = new NodeCryptoProvider();
+        }
     }
     return _crypto;
 }
@@ -37,5 +38,3 @@ export function getCrypto(): CryptoProvider {
 export function setCrypto(provider: CryptoProvider | null): void {
     _crypto = provider;
 }
-
-

@@ -60,15 +60,21 @@ const order = require('./utils/order');
 const system = require('./utils/system');
 const utils = { ...math, ...order, ...system };
 const constants = require('../constants');
-const logger = require('./logger');
 const grid = require('./grid');
 
-export = {
+let _logger: any;
+function getLogger(): any {
+    if (!_logger) _logger = require('./logger');
+    return _logger;
+}
+
+const _export: any = {
   OrderManager,
   // Lazy-load the calculation runner so tests can require this module without triggering heavy I/O.
   runOrderManagerCalculation: (...args: any[]) => require('./runner').runOrderManagerCalculation(...args),
   utils,
   constants,
-  logger,
   grid,
 };
+Object.defineProperty(_export, 'logger', { get: getLogger, enumerable: true });
+export = _export;

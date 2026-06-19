@@ -9,13 +9,13 @@ const { LOGGING_CONFIG, ORDER_STATES } = require('../constants');
 const { Config } = require('../config');
 
 function pmExecPath(): string | undefined {
-    return Config.pm_exec_path || process.env.pm_exec_path;
+    return Config.pm_exec_path;
 }
 function pmOutLogPath(): string | undefined {
-    return Config.pm_out_log_path || process.env.pm_out_log_path;
+    return Config.pm_out_log_path;
 }
 function pmErrLogPath(): string | undefined {
-    return Config.pm_err_log_path || process.env.pm_err_log_path;
+    return Config.pm_err_log_path;
 }
 
 /**

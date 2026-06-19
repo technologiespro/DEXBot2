@@ -1,6 +1,14 @@
 'use strict';
 
-import * as crypto from 'crypto';
+import { createHash, createHmac, randomBytes as cryptoRandomBytes, createECDH } from '../../crypto/sync';
+
+let _crypto: any;
+function getNodeCrypto(): any {
+    if (!_crypto) {
+        try { _crypto = require('crypto'); } catch { _crypto = null; }
+    }
+    return _crypto;
+}
 
 interface EcPoint {
     x: bigint;
@@ -31,19 +39,19 @@ const SECP256K1_BASE_POINT: EcPoint = {
 };
 
 function sha256(data: Buffer): Buffer {
-    return crypto.createHash('sha256').update(data).digest();
+    return createHash('sha256').update(data).digest();
 }
 
 function hmacSha256(key: Buffer, data: Buffer): Buffer {
-    return crypto.createHmac('sha256', key).update(data).digest();
+    return createHmac('sha256', key).update(data).digest();
 }
 
 function sha512(data: Buffer | string): Buffer {
-    return crypto.createHash('sha512').update(data).digest();
+    return createHash('sha512').update(data).digest();
 }
 
 function ripemd160(data: Buffer): Buffer {
-    return crypto.createHash('ripemd160').update(data).digest();
+    return createHash('ripemd160').update(data).digest();
 }
 
 function hash160(data: Buffer): Buffer {
@@ -55,12 +63,12 @@ function hash256(data: Buffer): Buffer {
 }
 
 function randomBytes(length: number): Buffer {
-    return crypto.randomBytes(length);
+    return cryptoRandomBytes(length);
 }
 
-function privateKeyFromRaw(rawKey: Buffer): crypto.KeyObject {
+function privateKeyFromRaw(rawKey: Buffer): any {
     const keyData = Buffer.concat([SEC1_DER_PREFIX, rawKey, SEC1_DER_SUFFIX]);
-    return crypto.createPrivateKey({
+    return getNodeCrypto().createPrivateKey({
         key: keyData,
         format: 'der',
         type: 'sec1',
@@ -85,7 +93,7 @@ function privateKeyToPublicKey(rawKey: Buffer, compressed = true): Buffer {
     if (!Buffer.isBuffer(rawKey) || rawKey.length !== 32) {
         throw new Error('Invalid private key: must be 32 bytes');
     }
-    const ecdh = crypto.createECDH('secp256k1');
+    const ecdh = createECDH('secp256k1');
     ecdh.setPrivateKey(rawKey);
     return ecdh.getPublicKey(null, compressed ? 'compressed' : 'uncompressed');
 }

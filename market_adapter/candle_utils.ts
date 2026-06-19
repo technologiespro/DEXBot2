@@ -1,8 +1,5 @@
 'use strict';
 
-const fs = require('fs');
-const { path } = require('../modules/path_api');
-
 function rawToHuman(rawAmount: any, precision: any) {
     if (precision === undefined || precision === null || !Number.isFinite(Number(precision))) {
         throw new Error(`Invalid precision for rawToHuman: ${precision}`);
