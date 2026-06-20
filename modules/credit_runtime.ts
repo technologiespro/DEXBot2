@@ -1939,6 +1939,7 @@ class CreditRuntime {
                             collateralAmount: reborrowCollateralAmount,
                             autoRepay: autoRepaySetting,
                             specificPolicy: reborrowPolicy,
+                            pendingRepayAmount: repayAmount,
                             pendingReleaseCollateralAmount: options.pendingReleaseCollateralAmount,
                             requestedAt: new Date().toISOString(),
                             reason: err.message,
@@ -1969,6 +1970,7 @@ class CreditRuntime {
                         collateralAmount: reborrowCollateralAmount,
                         autoRepay: autoRepaySetting,
                         specificPolicy: reborrowPolicy,
+                        pendingRepayAmount: repayAmount,
                         pendingReleaseCollateralAmount: options.pendingReleaseCollateralAmount,
                         requestedAt: new Date().toISOString(),
                         reason: 'offer unavailable',
@@ -1997,6 +1999,7 @@ class CreditRuntime {
                         ? reborrowPolicy.autoRepay
                         : (dealSummary.autoRepay ?? false)),
                 specificPolicy: reborrowPolicy,
+                pendingRepayAmount: repayAmount,
                 pendingReleaseCollateralAmount: options.pendingReleaseCollateralAmount,
                 requestedAt: new Date().toISOString(),
                 reason: deferredReborrowRequest?.reason || null,
@@ -2048,11 +2051,19 @@ class CreditRuntime {
             collateralAmount: request.collateralAmount ?? null,
             autoRepay: request.autoRepay ?? false,
             specificPolicy: request.specificPolicy || null,
+            pendingRepayAmount: request.pendingRepayAmount ?? null,
             pendingReleaseCollateralAmount: request.pendingReleaseCollateralAmount ?? null,
             requestedAt: request.requestedAt || new Date().toISOString(),
             reason: request.reason || null,
         });
         this.state.reborrowPending = this.state.pendingReborrows.length > 0;
+    }
+
+    _extractDealNumericId(id) {
+        if (!id) return 0;
+        const parts = String(id).split('.');
+        const num = Number(parts[parts.length - 1]);
+        return Number.isFinite(num) ? num : 0;
     }
 
     async _getOfferById(offerId) {
@@ -2379,6 +2390,24 @@ class CreditRuntime {
                     continue;
                 }
 
+                // If the source deal is gone but a replacement deal from the same
+                // offer already exists (higher deal ID, same offer), this pending
+                // request is stale — the reborrow was already handled elsewhere.
+                if (request.sourceDealId && request.offerId && requestPolicy?.renewOnly === true) {
+                    const sourceNum = this._extractDealNumericId(request.sourceDealId);
+                    if (sourceNum > 0) {
+                        const hasNewerReplacement = onChainDeals.some((d) =>
+                            String(d?.offerId) === String(request.offerId)
+                            && this._extractDealNumericId(d.id) > sourceNum
+                        );
+                        if (hasNewerReplacement) {
+                            this.warn(`credit runtime: dropping stale pending reborrow for deal ${request.sourceDealId} — replacement deal already exists for offer ${request.offerId}`);
+                            processed++;
+                            continue;
+                        }
+                    }
+                }
+
                 let effectiveCollateralAmount = request.collateralAmount ?? null;
                 if (effectiveCollateralAmount !== null && requestPolicy?.collateralAsset) {
                     const isBare = typeof effectiveCollateralAmount === 'number'
@@ -2404,6 +2433,7 @@ class CreditRuntime {
                             borrowAmount: request.borrowAmount,
                             collateralAmount: effectiveCollateralAmount,
                             autoRepay: request.autoRepay ?? false,
+                            pendingRepayAmount: request.pendingRepayAmount ?? null,
                             pendingReleaseCollateralAmount: request.pendingReleaseCollateralAmount,
                             excludeOfferId: request.offerId,
                         })
@@ -2431,6 +2461,7 @@ class CreditRuntime {
                         collateralAmount: effectiveCollateralAmount,
                         autoRepay: request.autoRepay ?? false,
                         specificPolicy: request.specificPolicy || requestPolicy,
+                        pendingRepayAmount: request.pendingRepayAmount ?? null,
                         pendingReleaseCollateralAmount: request.pendingReleaseCollateralAmount,
                     });
                     await this.executeOperations([acceptOp], 'credit reborrow');
@@ -2595,6 +2626,18 @@ class CreditRuntime {
                     if (!Number.isFinite(existingCollateralAmount) || existingCollateralAmount <= 0) {
                         throw new Error(`unable to convert deal ${deal.id} collateral amount for release`);
                     }
+                    // Snapshot pre-existing pending reborrows for this deal so we
+                    // can prune stale ones after repayCreditDeal without removing
+                    // any new deferred entry that repayCreditDeal itself may queue.
+                    const staleSnapshot = Array.isArray(this.state.pendingReborrows)
+                        ? this.state.pendingReborrows.filter(
+                            (r) => r.sourceDealId === String(deal.id)
+                        )
+                        : [];
+                    const staleKeys = new Set(
+                        staleSnapshot.map((r) => `${r.sourceDealId}:${r.offerId}:${r.requestedAt}`)
+                    );
+
                     await this.repayCreditDeal(deal, repayAmount, {
                         autoReborrow: true,
                         collateralAmount: {
@@ -2605,6 +2648,19 @@ class CreditRuntime {
                         specificPolicy: lendingItem,
                         fillLockAlreadyHeld: runtimeContext?.options?.fillLockAlreadyHeld === true,
                     });
+
+                    // Prune only the stale entries that existed before the call
+                    // (identified by requestedAt), not any freshly queued one.
+                    if (staleKeys.size > 0 && Array.isArray(this.state.pendingReborrows)) {
+                        const before = this.state.pendingReborrows.length;
+                        this.state.pendingReborrows = this.state.pendingReborrows.filter(
+                            (r) => !staleKeys.has(`${r.sourceDealId}:${r.offerId}:${r.requestedAt}`)
+                        );
+                        if (this.state.pendingReborrows.length < before) {
+                            this.log(`credit runtime: pruned ${before - this.state.pendingReborrows.length} stale pending reborrow(s) for deal ${deal.id}`);
+                        }
+                        this.state.reborrowPending = this.state.pendingReborrows.length > 0;
+                    }
                     // repayCreditDeal calls refreshState() which mutates this.state.positions[posKey];
                     // re-read from fresh state for subsequent loop iterations
                     const refreshedPosState = this.state.positions[posKey];

@@ -3387,6 +3387,282 @@ async function testProactiveRepayReborrowMultiAssetOffer() {
   }
 }
 
+async function testPendingReborrowStoresPendingRepayAmount() {
+  const calls = [];
+  const dbCalls = [];
+  const restore = installStubs(calls, dbCalls, {
+    dealResponses: [
+      [
+        {
+          id: '1.19.77',
+          borrower: '1.2.3',
+          offer_id: '1.18.42',
+          offer_owner: '1.2.9',
+          debt_asset: '1.3.10',
+          debt_amount: 500,
+          collateral_asset: '1.3.0',
+          collateral_amount: 1000,
+          fee_rate: 30000,
+          latest_repay_time: '2030-01-01T00:00:00',
+          auto_repay: 0,
+        },
+      ],
+      [],
+    ],
+    offersById: {
+      '1.18.42': null,
+    },
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-pending-repay-amount-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-pending-repay-amount',
+        debtPolicy: {
+          lending: [
+            {
+              asset: 'HONEST.USD',
+                    collateralAsset: 'BTS',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralRatio: 2.5,
+              maxFeeRatePerDay: 0.05,
+              autoReborrow: true,
+              autoRepay: 2,
+            },
+          ],
+        },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    await runtime.refreshState();
+    const result = await runtime.repayCreditDeal('1.19.77', 200);
+    assert.strictEqual(result.tx_id, 'tx-1', 'repay should broadcast');
+    assert.strictEqual(runtime.state.pendingReborrows.length, 1, 'deferred reborrow should be queued');
+    assert.strictEqual(runtime.state.pendingReborrows[0].sourceDealId, '1.19.77', 'source deal should be referenced');
+    assert.strictEqual(runtime.state.pendingReborrows[0].pendingRepayAmount, 200, 'pendingRepayAmount should be stored in queued entry');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testPendingReborrowDropsStaleEntryWhenReplacementExists() {
+  const calls = [];
+  const dbCalls = [];
+  const newerDealId = '1.19.99';
+  const sourceDealId = '1.19.77';
+  const offerId = '1.18.42';
+  const restore = installStubs(calls, dbCalls, {
+    dealResponses: [[
+      {
+        id: newerDealId,
+        borrower: '1.2.3',
+        offer_id: offerId,
+        offer_owner: '1.2.9',
+        debt_asset: '1.3.10',
+        debt_amount: 200,
+        collateral_asset: '1.3.0',
+        collateral_amount: 400,
+        fee_rate: 30000,
+        latest_repay_time: '2030-06-01T00:00:00',
+        auto_repay: 2,
+      },
+    ]],
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-stale-reborrow-drop-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const policy = {
+      asset: 'HONEST.USD',
+      collateralAsset: 'BTS',
+      type: 'creditOffer',
+      ratio: 1,
+      maxBorrowAmount: 1000,
+      maxCollateralAmount: 10000,
+      maxCollateralRatio: 2.5,
+      maxFeeRatePerDay: 0.05,
+      autoReborrow: true,
+      autoRepay: 2,
+      renewOnly: true,
+    };
+    const gridMaintenanceCalls = [];
+    const fetchTotalsCalls = [];
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-stale-reborrow-drop',
+        debtPolicy: { lending: [policy] },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      manager: {
+        _fillProcessingLock: {
+          acquire: async (fn) => fn(),
+        },
+        fetchAccountTotals: async (accountId) => {
+          fetchTotalsCalls.push(accountId);
+        },
+      },
+      _runGridMaintenance: async (context, options = {}) => {
+        gridMaintenanceCalls.push({ context, options });
+        return { checked: true, context, options };
+      },
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    await runtime.refreshState();
+    runtime.state.pendingReborrows = [{
+      sourceDealId: sourceDealId,
+      offerId: offerId,
+      borrowAmount: 200,
+      collateralAmount: 400,
+      autoRepay: 2,
+      specificPolicy: policy,
+      pendingRepayAmount: 200,
+      pendingReleaseCollateralAmount: 400,
+      requestedAt: '2026-01-01T00:00:00.000Z',
+      reason: 'deferred repay',
+    }];
+    runtime.state.reborrowPending = true;
+
+    const result = await runtime.processPendingReborrows();
+    assert.strictEqual(result.processed, 1, 'stale entry should be counted as processed (dropped)');
+    assert.strictEqual(result.remaining, 0, 'stale entry should not be re-queued');
+    assert.strictEqual(runtime.state.pendingReborrows.length, 0, 'stale entry should be dropped from state');
+    assert.strictEqual(calls.length, 0, 'no reborrow should be broadcast for stale entry');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testProactiveRepayPrunesStalePendingReborrow() {
+  const calls = [];
+  const dbCalls = [];
+  const dealId = '1.19.77';
+  const offerId = '1.18.42';
+  const debtAmount = 500;
+  const collateralAmount = 1000;
+  const repayTime = new Date(Date.now() - 3600000).toISOString();
+  const activeDeal = {
+    id: dealId,
+    borrower: '1.2.3',
+    offer_id: offerId,
+    offer_owner: '1.2.9',
+    debt_asset: '1.3.10',
+    debt_amount: debtAmount,
+    collateral_asset: '1.3.0',
+    collateral_amount: collateralAmount,
+    fee_rate: 30000,
+    latest_repay_time: repayTime,
+    auto_repay: 0,
+  };
+  const restore = installStubs(calls, dbCalls, {
+    dealResponses: [[activeDeal], []],
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-proactive-prune-stale-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const policy = {
+      asset: 'HONEST.USD',
+      collateralAsset: 'BTS',
+      type: 'creditOffer',
+      ratio: 1,
+      maxBorrowAmount: 1000,
+      maxCollateralRatio: 2.5,
+      maxFeeRatePerDay: 0.05,
+      autoReborrow: true,
+      autoRepay: 2,
+      renewOnly: true,
+    };
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-proactive-prune-stale',
+        debtPolicy: { lending: [policy] },
+        TIMING: { CREDIT_DEAL_EXPIRY_THRESHOLD_HOURS: 168 },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      manager: {
+        _fillProcessingLock: {
+          acquire: async (fn) => fn(),
+        },
+        fetchAccountTotals: async () => {},
+      },
+      _runGridMaintenance: async () => ({ checked: true }),
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    await runtime.refreshState();
+
+    // Seed a stale pending reborrow referencing this deal
+    runtime.state.pendingReborrows = [{
+      sourceDealId: dealId,
+      offerId: offerId,
+      borrowAmount: debtAmount,
+      collateralAmount: collateralAmount,
+      autoRepay: 2,
+      specificPolicy: policy,
+      pendingRepayAmount: debtAmount,
+      pendingReleaseCollateralAmount: collateralAmount,
+      requestedAt: '2026-01-01T00:00:00.000Z',
+      reason: 'stale from previous cycle',
+    }];
+    runtime.state.reborrowPending = true;
+
+    runtime.state.positions['1.3.10:1.3.0'] = {
+      assignedCollateralBudget: 1000,
+      creditConversionRate: 0.5,
+      creditDeals: [{
+        id: dealId,
+        debtAssetId: '1.3.10',
+        debtAmount: debtAmount,
+        collateralAssetId: '1.3.0',
+        collateralAmount: collateralAmount,
+        latestRepayTime: repayTime,
+        feeRate: 30000,
+        offerId: offerId,
+        autoRepay: 0,
+      }],
+    };
+
+    const pruneLogCalls = [];
+    const origLog = runtime.log.bind(runtime);
+    runtime.log = (...args) => {
+      pruneLogCalls.push(args);
+      origLog(...args);
+    };
+
+    await runtime._runCreditMaintenance(policy, '1.3.10');
+
+    // Should have pruned the stale entry — the inline reborrow succeeded
+    assert.strictEqual(runtime.state.pendingReborrows.length, 0, 'stale pending reborrow should be pruned after proactive repay');
+    assert.strictEqual(runtime.state.reborrowPending, false, 'reborrowPending flag should be false after prune');
+    const pruneLog = pruneLogCalls.find((args) => String(args[0]).includes('pruned'));
+    assert.ok(pruneLog, 'prune should log the stale entry cleanup');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
 (async () => {
   await testRefreshAndMpaPlan();
   await testCreditOfferCollateralPercentUsesDebtSnapshot();
@@ -3425,6 +3701,9 @@ async function testProactiveRepayReborrowMultiAssetOffer() {
   await testGetCollateralOffsets();
   await testProactiveRepayBundlesReborrowInSingleBatch();
   await testProactiveRepayReborrowMultiAssetOffer();
+  await testPendingReborrowStoresPendingRepayAmount();
+  await testPendingReborrowDropsStaleEntryWhenReplacementExists();
+  await testProactiveRepayPrunesStalePendingReborrow();
   console.log('credit runtime tests passed');
   process.exit(0);
 })().catch((err) => {
