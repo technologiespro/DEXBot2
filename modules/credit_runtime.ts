@@ -1840,10 +1840,24 @@ class CreditRuntime {
 
     async openCreditPosition({ offer, borrowAmount, collateralAmount, autoRepay = false, reason = 'credit borrow' }) {
         const offerObj = typeof offer === 'object' ? offer : await this._getOfferById(offer);
+        let resolvedCollateral = collateralAmount;
+        if (resolvedCollateral !== null && resolvedCollateral !== undefined && offerObj) {
+            const isBare = typeof resolvedCollateral === 'number'
+                || (typeof resolvedCollateral === 'object' && resolvedCollateral.assetId == null);
+            if (isBare) {
+                const collateralMap = normalizeCollateralMap(offerObj.acceptable_collateral);
+                if (collateralMap.size === 1) {
+                    const amountVal = typeof resolvedCollateral === 'number'
+                        ? resolvedCollateral
+                        : (resolvedCollateral.amount ?? null);
+                    resolvedCollateral = { amount: amountVal, assetId: collateralMap.keys().next().value };
+                }
+            }
+        }
         const acceptOp = await this.buildCreditOfferAcceptOperation({
             offer: offerObj,
             borrowAmount,
-            collateralAmount,
+            collateralAmount: resolvedCollateral,
             autoRepay,
         });
         const result = await this.executeOperations([acceptOp], reason);
@@ -1870,9 +1884,19 @@ class CreditRuntime {
             const reborrowAmount = options.reborrowAmount !== undefined && options.reborrowAmount !== null
                 ? options.reborrowAmount
                 : repayAmount;
-            const reborrowCollateralAmount = options.collateralAmount !== undefined
+            let reborrowCollateralAmount = options.collateralAmount !== undefined
                 ? options.collateralAmount
                 : null;
+            if (reborrowCollateralAmount !== null && dealSummary.collateralAssetId) {
+                const isBare = typeof reborrowCollateralAmount === 'number'
+                    || (typeof reborrowCollateralAmount === 'object' && reborrowCollateralAmount.assetId == null);
+                if (isBare) {
+                    const amountVal = typeof reborrowCollateralAmount === 'number'
+                        ? reborrowCollateralAmount
+                        : (reborrowCollateralAmount.amount ?? null);
+                    reborrowCollateralAmount = { amount: amountVal, assetId: dealSummary.collateralAssetId };
+                }
+            }
             const policyHasAutoRepay = Object.prototype.hasOwnProperty.call(reborrowPolicy, 'autoRepay');
             const autoRepaySetting = options.autoRepay !== undefined
                 ? options.autoRepay
@@ -2355,6 +2379,21 @@ class CreditRuntime {
                     continue;
                 }
 
+                let effectiveCollateralAmount = request.collateralAmount ?? null;
+                if (effectiveCollateralAmount !== null && requestPolicy?.collateralAsset) {
+                    const isBare = typeof effectiveCollateralAmount === 'number'
+                        || (typeof effectiveCollateralAmount === 'object' && effectiveCollateralAmount.assetId == null);
+                    if (isBare) {
+                        const colAsset = await this._resolveAsset(requestPolicy.collateralAsset);
+                        if (colAsset?.id) {
+                            const amountVal = typeof effectiveCollateralAmount === 'number'
+                                ? effectiveCollateralAmount
+                                : (effectiveCollateralAmount.amount ?? null);
+                            effectiveCollateralAmount = { amount: amountVal, assetId: colAsset.id };
+                        }
+                    }
+                }
+
                 if (!offer || offer.enabled === false) {
                     const fallbackIds = await this._resolveFallbackAssetIds(requestPolicy, offer);
                     const fallback = fallbackIds.debtAssetId && fallbackIds.collateralAssetId
@@ -2363,7 +2402,7 @@ class CreditRuntime {
                             collateralAssetId: fallbackIds.collateralAssetId,
                             policy: requestPolicy,
                             borrowAmount: request.borrowAmount,
-                            collateralAmount: request.collateralAmount,
+                            collateralAmount: effectiveCollateralAmount,
                             autoRepay: request.autoRepay ?? false,
                             pendingReleaseCollateralAmount: request.pendingReleaseCollateralAmount,
                             excludeOfferId: request.offerId,
@@ -2389,7 +2428,7 @@ class CreditRuntime {
                     const acceptOp = await this.buildCreditOfferAcceptOperation({
                         offer,
                         borrowAmount: request.borrowAmount ?? null,
-                        collateralAmount: request.collateralAmount || null,
+                        collateralAmount: effectiveCollateralAmount,
                         autoRepay: request.autoRepay ?? false,
                         specificPolicy: request.specificPolicy || requestPolicy,
                         pendingReleaseCollateralAmount: request.pendingReleaseCollateralAmount,
@@ -2558,7 +2597,10 @@ class CreditRuntime {
                     }
                     await this.repayCreditDeal(deal, repayAmount, {
                         autoReborrow: true,
-                        collateralAmount: existingCollateralAmount,
+                        collateralAmount: {
+                            amount: existingCollateralAmount,
+                            assetId: deal.collateralAssetId,
+                        },
                         pendingReleaseCollateralAmount: existingCollateralAmount,
                         specificPolicy: lendingItem,
                         fillLockAlreadyHeld: runtimeContext?.options?.fillLockAlreadyHeld === true,
