@@ -9,11 +9,11 @@
  * ===============================================================================
  *
  * CORE COMPONENTS:
- * - OrderManager - Core class managing order grid and fund tracking (manager.js)
- * - grid - Grid creation and sizing utilities (grid.js)
- * - utils - Combined helpers from utils/math.js, utils/order.js, and utils/system.js
- * - constants - ORDER_TYPES, ORDER_STATES, defaults, and limits (../constants.js)
- * - logger - Color-coded console output for debugging (logger.js)
+ * - OrderManager - Core class managing order grid and fund tracking (manager.ts)
+ * - grid - Grid creation and sizing utilities (grid.ts)
+ * - utils - Combined helpers from utils/math.ts, utils/order.ts, and utils/system.ts
+ * - constants - ORDER_TYPES, ORDER_STATES, defaults, and limits (../constants.ts)
+ * - logger - Color-coded console output for debugging (logger.ts)
  *
  * LAZY-LOADED:
  * - runOrderManagerCalculation(...args) - Heavy I/O calculation runner (runner.js)
@@ -21,7 +21,7 @@
  *
  * ===============================================================================
  *
- * FUND TRACKING MODEL (see manager.js for details):
+ * FUND TRACKING MODEL (see manager.ts for details):
  * - available = max(0, chainFree - virtual - applicableBtsFeesOwed - btsFeesReservation)
  * - total.chain = chainFree + committed.chain (on-blockchain)
  * - total.grid = committed.grid + virtual (grid allocation)
@@ -36,18 +36,18 @@
  * ===============================================================================
  *
  * SUBSYSTEM MODULES:
- * 1. manager.js - OrderManager class (order lifecycle, fund tracking)
- * 2. grid.js - Grid class (grid creation, synchronization, health)
- * 3. utils/math.js, utils/order.js, utils/system.js - Helper functions by concern
- * 4. format.js - Numeric formatting (18 functions for consistent display)
- * 5. accounting.js - Accountant class (fund calculations and reconciliation)
- * 6. logger.js - Logger class (structured, color-coded output)
- * 7. async_lock.js - AsyncLock class (race condition prevention)
- * 9. export.js - QTradeX export module (trade history extraction)
- * 10. runner.js - Heavy calculation and I/O operations
+ * 1. manager.ts - OrderManager class (order lifecycle, fund tracking)
+ * 2. grid.ts - Grid class (grid creation, synchronization, health)
+ * 3. utils/math.ts, utils/order.ts, utils/system.ts - Helper functions by concern
+ * 4. format.ts - Numeric formatting (18 functions for consistent display)
+ * 5. accounting.ts - Accountant class (fund calculations and reconciliation)
+ * 6. logger.ts - Logger class (structured, color-coded output)
+ * 7. async_lock.ts - AsyncLock class (race condition prevention)
+ * 9. export.ts - QTradeX export module (trade history extraction)
+ * 10. runner.ts - Heavy calculation and I/O operations
  * 11. grid_reconcile.ts - Grid reconciliation against chain (startup + maintenance)
- * 12. strategy.js - Strategy configuration and parsing
- * 13. sync_engine.js - Real-time blockchain synchronization
+ * 12. strategy.ts - Strategy configuration and parsing
+ * 13. sync_engine.ts - Real-time blockchain synchronization
  *
  * ===============================================================================
  */

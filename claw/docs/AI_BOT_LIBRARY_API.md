@@ -295,7 +295,6 @@ This is the right place for reusable mechanics that Claw needs before it decides
 
 Reads the DEXBot2 `profiles/` directory and normalizes:
 
-- `profiles/config.json` when present
 - `profiles/bots.json`
 - `profiles/general.settings.json`
 - `profiles/market_profiles.json`
@@ -353,7 +352,7 @@ Returns one normalized JSON object that combines:
 
 This is the preferred one-call entrypoint for Claw.
 
-### 9. `createHonestEcosystemAdapter(options)`
+### 12. `createHonestEcosystemAdapter(options)`
 
 Returns a HONEST-focused infrastructure helper that:
 
@@ -366,7 +365,7 @@ Useful companion method:
 
 - `resolveHonestPairPrice(assetA, assetB, options)` for the special-case bridge plus DEXBot2 fallback pool pricing
 
-### 10. Command bridge
+### 13. Command bridge
 
 The bridge exposed by [../modules/claw_bridge.ts](../modules/claw_bridge.ts) supports:
 
@@ -398,6 +397,19 @@ The bridge exposed by [../modules/claw_bridge.ts](../modules/claw_bridge.ts) sup
 - `bot-settings`
 - `bot-settings-preview`
 - `bot-settings-apply`
+- `credit-runtime-status`
+- `credit-runtime-refresh`
+- `credit-runtime-maintenance`
+- `credit-runtime-watchdog`
+- `credit-runtime-reborrows`
+- `launcher-run`
+- `launcher-drystart`
+- `launcher-reset`
+- `launcher-disable`
+- `launcher-pm2-start`
+- `launcher-pm2-stop`
+- `launcher-pm2-delete`
+- `launcher-pm2-restart`
 
 ## Root Export Disambiguation
 

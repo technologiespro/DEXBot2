@@ -68,7 +68,7 @@ These use HONEST.BTC as collateral instead of BTS — different collateral dynam
 ## Live Discovery
 
 ```bash
-tsx claw/scripts/honest_assets_report.ts --json
+tsx scripts/honest_assets_report.ts --json
 ```
 
 Filter by `type === 'MPA'` for margin-tradeable assets. The `honest_ecosystem.ts` module's `isMpa()` function checks for `bitasset_data_id`.

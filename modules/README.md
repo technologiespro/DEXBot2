@@ -33,6 +33,17 @@ modules/
 ├── credential_session_cache.ts    encrypted session cache
 ├── dexbot_credential_client.ts    credential daemon client
 ├── constants.ts                   central config and tuning params
+├── config.ts                      load-time process.env snapshot
+├── env.ts                         isBrowser/hasProcess detection
+├── runtime.ts                     process abstraction singleton
+├── paths.ts                       guarded path resolution
+├── path_api.ts                    portable path abstraction for ESM/browser
+├── settings_merge.ts              consolidated settings merge
+├── fund_registry.ts               shared-account fund registry
+├── authority_resolver.ts          signing key resolution
+├── key_store.ts                   key storage (node-only)
+├── process_discovery.ts           Linux /proc/* filesystem reads
+├── validate_profiles.ts           profile validation
 ├── general_settings.ts            global settings loader
 ├── bot_settings.ts                per-bot settings loader
 ├── logger.ts                      structured logging
@@ -44,6 +55,22 @@ modules/
 ├── node_health_cache.ts           node health tracking
 ├── market_adapter_whitelist.ts    adapter whitelist I/O
 ├── types.ts                       shared type definitions
+│
+├── crypto/                        cross-environment crypto providers
+│   ├── index.ts                   barrel export
+│   ├── provider.ts                abstract crypto provider interface
+│   ├── browser_provider.ts        Web Crypto based provider
+│   ├── node_provider.ts           Node crypto based provider
+│   ├── sync.ts                    crypto provider lazy loader
+│   ├── pure_ripemd160.ts          pure-JS ripemd160 fallback
+│   ├── pure_scrypt.ts             pure-JS scrypt fallback
+│   └── pure_secp256k1.ts          pure-JS secp256k1 fallback
+│
+├── storage/                       portable storage abstraction
+│   ├── index.ts                   barrel export
+│   ├── types.ts                   storage adapter interface
+│   ├── browser_adapter.ts         in-memory Map-based adapter
+│   └── node_adapter.ts            fs.*Sync based adapter
 │
 ├── order/                         order lifecycle and grid management
 │   ├── manager.ts                 OrderManager — central controller, COW rebalance
@@ -85,7 +112,10 @@ modules/
 │   └── interfaces.d.ts            type declarations
 │
 └── utils/
-    └── base58check.ts             Base58Check encoding
+    ├── base58check.ts             Base58Check encoding
+    ├── build_dir.ts               BUILD_DIR constant helper
+    ├── fs_utils.ts                atomic JSON, read/write, mkdirp
+    └── math_utils.ts              clamp, precision rounding, integer math
 ```
 
 ## Key Relationships

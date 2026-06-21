@@ -8,7 +8,7 @@ Betting that the MPA price (in BTS terms) will decrease.
 
 **Lifecycle:**
 
-1. **Borrow** — Issue MPA debt against BTS collateral (`call_order_update` with positive debt and collateral deltas). Collateral ratio must be in the green zone (CR >= 2.0).
+1. **Borrow** — Issue MPA debt against BTS collateral (`call_order_update` with positive debt and collateral deltas). Collateral ratio must be in the green zone (CR >= 1.7).
 2. **Sell** — Place a limit order selling the borrowed MPA for BTS. As a maker order this incurs 0% fee on HONEST.Assets.
 3. **Cover** — Later, buy back the MPA at a lower price to repay the debt.
 4. **Close** — Repay the debt (`call_order_update` with negative debt delta) and release the collateral.
@@ -58,7 +58,7 @@ An open debt position can be adjusted without closing it:
 | Increase debt | `borrow-mpa` | Issues more MPA, decreases CR |
 | Repay partial | `repay-mpa` | Reduces debt, increases CR |
 
-Adjustments change the collateral ratio — the position must remain in the green zone (CR >= 2.0). See `references/position-management.md` for CR zones.
+Adjustments change the collateral ratio — the position must remain in the green zone (CR >= 1.7). See `references/position-management.md` for CR zones.
 
 ## Position Queries
 

@@ -249,8 +249,8 @@ If you optimize primarily for:
 
 The executable behavior lives in the `claw/` modules and scripts. This comparison is documentation only and should be kept aligned with:
 
-- `modules/claw_runtime_matrix.ts`
-- `modules/claw_catalog.ts`
-- `modules/claw_manifest.ts`
-- `modules/claw_skill_md.ts`
-- `scripts/claw_skill_md.ts`
+- `../modules/claw_runtime_matrix.ts`
+- `../modules/claw_catalog.ts`
+- `../modules/claw_manifest.ts`
+- `../modules/claw_skill_md.ts`
+- `../scripts/claw_skill_md.ts`

@@ -177,7 +177,7 @@ Shared analyzers and chart renderers for regime work. Contains the core signal e
 | `volatility_chart_generator.ts` | ATR volatility / symmetric shift chart generator |
 | `regime_chart_generator.ts` | Regime classification chart generator |
 
-**Tests:** `tests/test_kalman_trend.ts`, `tests/test_kalman_velocity_smoothing.ts`
+**Tests:** `analysis/trend_detection/tests/test_kalman_trend.ts`, `analysis/trend_detection/tests/test_kalman_velocity_smoothing.ts`
 
 ```bash
 tsx analysis/trend_detection/tests/test_kalman_trend.ts
@@ -192,7 +192,7 @@ AMA parameter optimization and comparison tools.
 
 | Script | Purpose |
 |--------|---------|
-| *(in `market_adapter/core/strategies/`)* | Kaufman Adaptive Moving Average implementation |
+| `market_adapter/core/strategies/ama.ts` | Kaufman Adaptive Moving Average implementation |
 | `optimizer_high_resolution.ts` | AMA parameter optimizer (erPeriod, fast/slow bounds) |
 | `generate_unified_comparison_chart.ts` | AMA comparison chart across multiple parameter sets |
 | `analyze_ama_price_changes.ts` | AMA price-change analysis |

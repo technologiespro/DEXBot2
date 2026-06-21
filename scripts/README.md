@@ -43,9 +43,17 @@ bash scripts/clear-logs.sh
 bash scripts/clear-orders.sh
 ```
 
+### Clear Market Adapter State
+**File:** `clear-market-adapter.sh`
+**Purpose:** Delete market adapter state and log files, including `dexbot-adapter` logs and `market_adapter_centers.json`.
+```bash
+# IRREVERSIBLE: Removes market adapter state files and adapter-specific logs
+bash scripts/clear-market-adapter.sh
+```
+
 ### Wipe Orders + Logs
 **File:** `clear-all.sh`
-**Purpose:** Delete order state files and `.log` files in one confirmed operation.
+**Purpose:** Delete order state files and `.log` files in one confirmed operation (includes market adapter cleanup).
 ```bash
 # IRREVERSIBLE: Deletes profiles/orders/* and profiles/logs/*.log, including market_adapter.log
 bash scripts/clear-all.sh

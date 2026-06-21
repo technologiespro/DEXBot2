@@ -137,7 +137,7 @@ For manual pool discovery, use `--pool`, `--precA`, and `--precB` instead of `--
 
 ## Notes
 
-- The chart uses `uPlot` from the CDN in the generated HTML.
+- The chart uses vendored `uPlot` from `analysis/uplot/` in the generated HTML (no CDN dependency).
 - The displayed indicators are computed from the 1h base candles and then sampled onto the selected timeframe.
 - The current volume-weighted overlay is a rolling `VWMA`, not a session-reset VWAP.
 - SMA is disabled by default.
@@ -149,7 +149,7 @@ For manual pool discovery, use `--pool`, `--precA`, and `--precB` instead of `--
 - The pair switcher inverts the candles client-side, so you can inspect both `A/B` and `B/A` views from one export.
 - Indicator, timeframe, and scale changes are persisted in browser `localStorage` for the generated HTML.
 - The price axis defaults to log base `10`, with a toolbar switch for `Log` / `Linear`.
-- If you regenerate the HTML and then open it later, the browser still needs access to the `uPlot` CDN unless you inline or bundle the library.
+- If you regenerate the HTML and then open it later, no CDN access is needed — `uPlot` is loaded from the vendored local copy at `analysis/uplot/`.
 
 ## Typical Workflow
 

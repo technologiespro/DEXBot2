@@ -241,6 +241,8 @@ Available bridge and native tool surfaces include:
 - MPA borrow, repay, collateral adjustment, and settlement
 - BTS-backed short open, take-profit, close, and plan builders
 - MPA position lookup
+- credit runtime status, refresh, maintenance, watchdog, and reborrow management
+- launcher run, drystart, reset, disable, and PM2 lifecycle commands
 
 ### OpenFang
 

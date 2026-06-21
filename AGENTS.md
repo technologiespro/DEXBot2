@@ -130,6 +130,8 @@ File: <path>
 - `modules/node_manager.ts` - Multi-node health checking and failover
 - `modules/fund_registry.ts` - Shared-account fund registry with cross-bot invariants
 - `modules/settings_merge.ts` - Consolidated settings merge (single source of truth)
+- `modules/cr_planner.ts` - Pure math / credit planning
+- `modules/credit_runtime.ts` - Credit offer and MPA debt lifecycle management
 
 ### Order Management (`modules/order/`)
 - `manager.ts` - Order lifecycle and state management
@@ -156,8 +158,8 @@ File: <path>
 
 ### Configuration
 - `profiles/bots.json` - Bot configuration
-- `profiles/general.settings.json` - Global settings (auto-generated on first run)
-- `profiles/market_profiles.json` - Market-specific settings (AMA params, price offset params)
+- `profiles/general.settings.json` - Global settings (auto-generated on first run; file may not exist until first launch)
+- `profiles/market_profiles.json` - Market-specific settings (AMA params, price offset params; auto-generated on first run)
 
 ### Claw Integration (`claw/`)
 - `claw/index.ts` - Main export combining all modules
@@ -167,7 +169,8 @@ File: <path>
 - `claw/modules/claw_manifest.ts` - Runtime manifest
 - `claw/modules/claw_infra.ts` - Shared runtime infrastructure
 - `claw/modules/bitshares_client.ts` - BitShares connection, queries, broadcast
-- `claw/modules/chain_actions.ts` - High-level chain operations
+- `claw/modules/chain_actions.ts` - High-level chain operations (limit orders, MPA, credit)
+- `claw/modules/credit_runtime_adapter.ts` - Credit runtime lifecycle bridge
 - `claw/modules/decision_loop.ts` - Position evaluation orchestration
 - `claw/modules/dexbot_profiles.ts` - DEXBot2 profile reader
 - `claw/modules/dexbot_credential_client.ts` - Credential daemon client
@@ -217,52 +220,7 @@ operator UI; mixing the two surfaces inside a shared module is the most
 common cause of `require('fs')` / `process.kill` / Unix-socket regressions
 in the browser bundle.
 
-**Browser-safe** (may be imported from any context):
-- `modules/crypto/` — `BrowserCryptoProvider` + `NodeCryptoProvider` selected by `getCrypto()`; `node_provider.ts` uses lazy `require('crypto')` with try/catch guard
-- `modules/storage/` — use `getStorage()`; the adapter swap is automatic (top-level adapter requires are lazy)
-- `modules/claw/` — JSON bridge for AI agents. **Caveat:** `claw/index.ts` top-level requires reach Node-only modules (credential_runtime, dexbot_credential_client, kibana_price_source → https). Import individual sub-modules (e.g. `claw/modules/claw_bridge`) for browser-safe access; `claw/index.ts` is node-only.
-- `modules/env.ts` — `isBrowser()` / `hasProcess()` are the canonical environment checks
-- `modules/runtime.ts` — `getRuntime()` / `runtime` singleton (use this, not inline `process.*`)
-- `modules/config.ts` — `Config` object (use this, not inline `process.env.*`)
-- `modules/paths.ts` — `PATHS` (use this, not inline `path.join(__dirname, …)`); guarded for ESM/browser
-- `modules/path_api.ts` — `path` (use this, not inline `require('path')`)
-- `modules/crypto/sync.ts` — `createHash`/`createHmac`/`randomBytes` etc. (guarded `require('crypto')`)
-- `modules/bitshares-native/crypto/ecc_selector.ts` — `getEcc()` is the canonical ecc loader
-- `modules/bitshares-native/crypto/ecc.browser.ts` — browser-portable pure-JS ECC (Uint8Array, no Buffer)
-- `modules/bitshares-native/serial/chain_constants.ts` — pure data (chain IDs, prefixes, precision)
-- `modules/logger.ts` — auto-selects `BrowserLogger` (console-only) vs Node logger via `isBrowser()` split
-- `modules/constants.ts` — pure data / tuning parameters, no Node imports
-- `modules/types.ts` — pure TypeScript types
-- `modules/settings_merge.ts` — pure data merge logic
-- `modules/cr_planner.ts` — pure math / credit planning
-- `modules/cli_whitelist_args.ts` — pure string manipulation
-- `modules/order/utils/math.ts` — pure math functions
-- `modules/order/utils/order.ts` — pure order logic
-- `modules/order/utils/validate.ts` — pure validation
-- `modules/order/utils/system.ts` — browser-safe (uses storage/runtime abstractions; grid/working_grid requires guarded by `isBrowser()`)
-- `modules/order/format.ts` — pure formatting functions
-- `modules/order/async_lock.ts` — pure async locking
-- `modules/order/logger_state.ts` — pure state tracking
-- `modules/order/processed_fill_store.ts` — pure fill tracking
-- `modules/order/logger.ts` — browser-safe (uses only storage/runtime/path_api abstractions; no direct `require('fs')`)
-- `modules/order/index.ts` — browser-safe (top-level requires all safe; lazy `getLogger()` no longer has `require('fs')`)
-- `modules/order/manager.ts` — browser-safe (top-level requires all safe; `working_grid`/`sync_engine` imports are safe)
-- `modules/order/working_grid.ts` — browser-safe (pure data/order manipulation, no Node imports)
-- `modules/order/sync_engine.ts` — browser-safe (top-level requires all safe; blockchain sync is a runtime dependency, not an import dependency)
-- `modules/order/strategy.ts` — browser-safe (pure grid strategy logic; top-level requires all safe; lazy requires inside method bodies)
-- `modules/order/accounting.ts` — browser-safe (pure fee/fund math; top-level requires all safe; `chain_orders` lazy inside `_performStateRecovery`)
-- `modules/order/grid.ts` — browser-safe (top-level requires all safe; `bitshares_client`/`grid_reconcile`/`working_grid` lazy inside method bodies)
-- `modules/account_orders.ts` — browser-safe (all top-level requires are abstractions: storage, path_api, constants, logger; file-backed persistence routes through `getStorage()`)
-- `modules/bots_file_lock.ts` — browser-safe (uses `getStorage()` for all I/O; in-memory semaphore, no `flock`)
-- `modules/general_settings.ts` — browser-safe (uses storage abstraction + `bots_file_lock`)
-- `modules/bot_settings.ts` — browser-safe (storage + bots_file_lock + crypto/sync; all top-level requires safe)
-- `modules/node_health_cache.ts` — browser-safe (storage abstraction + bots_file_lock + fs_utils)
-- `modules/validate_profiles.ts` — browser-safe (pure validation logic, uses storage abstraction; `account_orders` require is lazy inside `validateCrossFileConsistency`)
-- `modules/utils/math_utils.ts` — pure math
-- `modules/utils/base58check.ts` — browser-safe (uses sync.ts; Buffer-free)
-- `modules/fund_registry.ts` — browser-safe (uses storage abstraction)
-- `modules/authority_resolver.ts` — browser-safe (uses ecc, no fs/process)
-- `modules/market_adapter_whitelist.ts` — browser-safe (uses storage abstraction)
+**Convention: everything is browser-safe unless listed below as Node-only.**
 
 **Node-only** (must not be reached from a browser bundle):
 - `modules/launcher/*` — credential daemon, bot supervisor, market adapter runtime, monolithic runtime
@@ -286,6 +244,8 @@ in the browser bundle.
 - `modules/bitshares-native/crypto/ecc.ts` — Node ECC (Buffer-heavy; loaded via `ecc_selector.ts` only in Node)
 - `modules/bitshares-native/serial/serializer.ts` — BufferWriter/BufferReader serialization
 - `modules/bitshares-native/serial/types.ts` — serial type system
+- `modules/bitshares-native/serial/index.ts` — re-exports all serial modules
+- `modules/bitshares-native/serial/operations.ts` — operation type definitions
 - `modules/bitshares-native/signing_client.ts` — transaction signing
 - `modules/bitshares-native/tx/builder.ts` — transaction building
 - `modules/bitshares-native/transport.ts` — WS transport with lazy `require('ws')`

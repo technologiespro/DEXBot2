@@ -1,4 +1,4 @@
-# First-Release Skill Boundaries
+# Skill Boundaries
 
 | Skill | Boundary | Allowed work | Not allowed |
 | --- | --- | --- | --- |

@@ -33,7 +33,7 @@ The health assessor classifies collateral ratios into three zones using the thre
 | Zone | CR range | Status | Meaning |
 |---|---|---|---|
 | `red_low` | below `CR_ZONES.RED_LOW` (1.7) | `not_acceptable` | Near liquidation, immediate action needed |
-| `green` | `CR_ZONES.RED_LOW` (1.7) – `CR_ZONES.RED_HIGH` (3.0) | `safe` | Healthy operating range |
+| `green` | `CR_ZONES.RED_LOW` (1.7) ≤ CR < `CR_ZONES.RED_HIGH` (3.0) | `safe` | Healthy operating range |
 | `red_high` | above `CR_ZONES.RED_HIGH` (3.0) | `over_collateralized` | Capital sitting idle, consider deploying |
 
 ## Dual-Layer Actions
