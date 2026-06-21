@@ -4,6 +4,7 @@ const { getStorage } = require('./storage');
 const storage = getStorage();
 const { runtime } = require('./runtime');
 const { hasProcess } = require('./env');
+const { sleep } = require('./order/utils/system');
 
 export interface ProcessStat {
     utime: number;
@@ -124,7 +125,7 @@ export class LinuxProcessDiscovery implements ProcessDiscovery {
             const prev = snap();
             if (!prev) return '-';
             for (let i = 0; i < samples - 1; i++) {
-                await new Promise(r => setTimeout(r, intervalMs));
+                await sleep(intervalMs);
             }
             const cur = snap();
             if (!cur) return '-';

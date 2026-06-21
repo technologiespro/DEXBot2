@@ -1,6 +1,6 @@
 'use strict';
 
-import { createHash, createHmac, randomBytes as cryptoRandomBytes, createECDH } from '../../crypto/sync';
+const { createHash, createHmac, randomBytes: cryptoRandomBytes, createECDH } = require('../../crypto/sync');
 
 let _crypto: any;
 function getNodeCrypto(): any {

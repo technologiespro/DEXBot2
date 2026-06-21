@@ -1,6 +1,6 @@
 'use strict';
 
-import { isBrowser } from './env';
+const { isBrowser } = require('./env');
 
 declare var window: any;
 

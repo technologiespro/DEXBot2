@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// node-only entry point — credential daemon (Unix socket, net, os, fs)
 /**
  * credential-daemon.ts - Secure Private Key Server
  *

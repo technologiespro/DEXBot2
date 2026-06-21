@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// node-only entry point — PM2 process orchestration (spawn, exec, fs, os)
 /**
  * pm2.ts - PM2 Orchestration Launcher
  *

@@ -10,7 +10,7 @@ const Grid = require('./order/grid');
 const { ORDER_STATES, ORDER_TYPES, TIMING, GRID_LIMITS, FEE_PARAMETERS, BTS_PRECISION, NATIVE_CLIENT } = require('./constants');
 const { PATHS } = require('./paths');
 const { buildRuntimeScriptPath, isDistCodeRoot } = require('./launcher/runtime_entry');
-const { applyGridDivergenceCorrections, loadAmaCenterSnapshot } = require('./order/utils/system');
+const { applyGridDivergenceCorrections, loadAmaCenterSnapshot, sleep } = require('./order/utils/system');
 const { isPm2Runtime } = require('./order/logger');
 const { getSharedMarketAdapterRuntime } = require('./launcher/market_adapter_runtime');
 const {
@@ -1021,7 +1021,7 @@ function startOpenOrdersSyncLoop(bot) {
                 bot._warn(`Order manager loop error: ${err.message}`);
             }
 
-            await new Promise(resolve => setTimeout(resolve, loopDelayMs));
+            await sleep(loopDelayMs);
         }
     })().catch(err => {
         bot._warn(`Open-orders sync loop failed: ${err && err.message ? err.message : err}`);

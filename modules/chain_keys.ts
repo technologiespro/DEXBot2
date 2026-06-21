@@ -92,7 +92,7 @@ const {
     createDecipheriv,
 } = require('./crypto/sync');
 const { path } = require('./path_api');
-const { readInput, readPassword } = require('./order/utils/system');
+const { readInput, readPassword, sleep } = require('./order/utils/system');
 
 let _net: any;
 function getNet(): any {
@@ -1039,7 +1039,7 @@ async function waitForDaemon(maxWaitMs = TIMING.DAEMON_STARTUP_TIMEOUT_MS, optio
         if (isDaemonReady(options)) {
             return;
         }
-        await new Promise(resolve => setTimeout(resolve, checkInterval));
+        await sleep(checkInterval);
     }
 
     throw new Error(`Daemon did not start within ${maxWaitMs}ms`);

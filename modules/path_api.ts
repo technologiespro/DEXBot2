@@ -1,6 +1,6 @@
 'use strict';
 
-import { isBrowser } from './env';
+const { isBrowser } = require('./env');
 
 export interface PathApi {
   join(...paths: string[]): string;

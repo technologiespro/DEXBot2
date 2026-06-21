@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+// node-only entry point — credential daemon launcher (Unix socket, child_process, fs)
 /**
  * unlock.ts - Credential Daemon Launcher
  *

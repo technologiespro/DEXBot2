@@ -18,6 +18,7 @@ const { Config } = require('../config');
 const { PATHS } = require('../paths');
 const { safeUnlink } = require('../utils/fs_utils');
 const { readHeadlessPassword } = require('./headless_password');
+const { sleep } = require('../order/utils/system');
 
 const DEFAULT_POLL_INTERVAL_MS = 1000;
 
@@ -157,7 +158,7 @@ function createCredentialDaemonController({
         forwardSignal('SIGTERM');
         await Promise.race([
             daemonExitPromise || waitForExit(daemonProcess),
-            new Promise((resolve) => setTimeout(resolve, 5000)),
+            sleep(5000),
         ]);
 
         safeUnlink(socketPath)
@@ -176,7 +177,7 @@ function createCredentialDaemonController({
         }
 
         while (await isDaemonReady()) {
-            await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+            await sleep(pollIntervalMs);
         }
 
         return 0;

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// node-only entry point — primary CLI driver (process.argv, process.exit, process.stdout/stderr, process.stdin)
 /**
  * dexbot.ts - DEXBot2 Primary CLI Driver
  *

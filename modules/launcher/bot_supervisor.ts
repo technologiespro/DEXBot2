@@ -2,7 +2,8 @@
 
 const fs = require('fs');
 const { path } = require('../path_api');
-import net = require('net');
+const net = require('net');
+import type { Socket } from 'net';
 const { getStorage } = require('../storage');
 const storage = getStorage();
 const { spawn, execSync } = require('child_process');
@@ -15,6 +16,7 @@ const { ensureDir, readJSON, safeUnlink } = require('../utils/fs_utils');
 const { Config } = require('../config');
 const { getProcessDiscovery } = require('../process_discovery');
 const { runtime } = require('../runtime');
+const { sleep } = require('../order/utils/system');
 
 const BOT_SCRIPT = buildRuntimeScriptPath(CODE_ROOT, ['bot']);
 const SOCKET_PATH = Config.DEXBOT_SUPERVISOR_SOCKET || PATHS.PROFILES.SUPERVISOR_SOCK;
@@ -253,7 +255,7 @@ async function waitForPidExit(pid, timeoutMs) {
     const started = Date.now();
     while (Date.now() - started < timeoutMs) {
         if (!isPidAlive(pid)) return true;
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await sleep(200);
     }
     return !isPidAlive(pid);
 }
@@ -427,7 +429,7 @@ function createBotSupervisor({
     let memoryCheckTimer = null;
     let statusLogTimer = null;
     let socketServer = null;
-    let socketConnections = new Set<net.Socket>();
+    let socketConnections = new Set<Socket>();
     let userStopped = false;
 
     function allStopped() {
@@ -927,7 +929,7 @@ function createBotSupervisor({
                 }
             }
             if (i < activeApps.length - 1) {
-                await new Promise((r) => setTimeout(r, STAGGER_DELAY_MS));
+                await sleep(STAGGER_DELAY_MS);
             }
         }
 

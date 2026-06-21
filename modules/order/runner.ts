@@ -63,7 +63,7 @@ const { PATHS } = require('../paths');
 const Grid = require('./grid');
 const { readBotsFileSync } = require('../bots_file_lock');
 const { Config } = require('../config');
-const { parseJsonWithComments } = require('./utils/system');
+const { parseJsonWithComments, sleep } = require('./utils/system');
 const { derivePrice } = require('./utils/system');
 const { isNumeric } = require('./format');
 
@@ -136,7 +136,7 @@ async function runOrderManagerCalculation() {
         // Use syncFromOpenOrders([]) to simulate a sync check in the test runner
         await manager.syncFromOpenOrders([]);
         manager.logger && manager.logger.displayStatus && manager.logger.displayStatus(manager);
-        if (cycle < cycles) await new Promise(resolve => setTimeout(resolve, delayMs));
+        if (cycle < cycles) await sleep(delayMs);
     }
 }
 

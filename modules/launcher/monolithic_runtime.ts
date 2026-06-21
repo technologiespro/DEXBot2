@@ -21,6 +21,7 @@ const { Config } = require('../config');
 const { runtime } = require('../runtime');
 const { getCredentialReadyFilePath, getCredentialSocketPath } = require('../credential_runtime');
 const { resolveRawBotEntries, loadSettingsFile } = require('../bot_settings');
+const { sleep } = require('../order/utils/system');
 
 const MONOLITHIC_PID_FILE = PATHS.PROFILES.MONOLITHIC_PID;
 const MONOLITHIC_BOT_PID_FILE = PATHS.PROFILES.MONOLITHIC_BOT_PID;
@@ -141,7 +142,7 @@ async function stopCredentialDaemonPid(pid: string | number) {
         if (!isAlive(daemonPid)) {
             return;
         }
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await sleep(100);
     }
 
     const SIGKILL_DEADLINE_MS = LAUNCHER.MONOLITHIC.DAEMON_SIGKILL_DEADLINE_MS;
@@ -158,7 +159,7 @@ async function stopCredentialDaemonPid(pid: string | number) {
             if (!isAlive(daemonPid)) {
                 return;
             }
-            await new Promise((resolve) => setTimeout(resolve, 100));
+            await sleep(100);
         }
     }
 

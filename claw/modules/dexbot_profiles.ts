@@ -6,6 +6,7 @@ const { DEFAULT_CONFIG, GRID_LIMITS, INCREMENT_BOUNDS } = require('../../modules
 const { resolveRelativePrice } = require('../../modules/order/utils/math');
 const { Config } = require('../../modules/config');
 const { PATHS, getRecalculateTriggerFile } = require('../../modules/paths');
+const { writeJsonFileAtomic: baseWriteJsonFileAtomic } = require('../../modules/bots_file_lock');
 const { acquireFileLock } = require('../../market_adapter/utils/file_lock');
 
 import type { BotSettings, ProfileOptions, Logger, ClawProfileBundle } from './types';
@@ -754,10 +755,6 @@ function readJsonFile(filePath: any) {
   }
 }
 
-function writeJsonPayload(filePath: any, data: any) {
-  storage.writeJSON(filePath, data);
-}
-
 function writeTextPayload(filePath: any, content: any) {
   storage.writeFile(filePath, `${content}\n`, 'utf8');
 }
@@ -765,7 +762,7 @@ function writeTextPayload(filePath: any, content: any) {
 async function writeJsonFileAtomic(filePath: any, data: any) {
   const release = await acquireFileLock(filePath);
   try {
-    await writeJsonPayload(filePath, data);
+    baseWriteJsonFileAtomic(filePath, data);
   } finally {
     await release();
   }

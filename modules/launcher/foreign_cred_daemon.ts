@@ -4,6 +4,7 @@ const storage = getStorage();
 const { safeUnlink } = require('../utils/fs_utils');
 const { getProcessDiscovery } = require('../process_discovery');
 const { runtime } = require('../runtime');
+const { sleep } = require('../order/utils/system');
 
 /**
  * Foreign credential daemon detection.
@@ -71,7 +72,7 @@ async function stopPid(pid, timeoutMs = 5000) {
     const startedAt = Date.now();
     while ((Date.now() - startedAt) < timeoutMs) {
         if (!isPidAlive(pid)) return true;
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await sleep(100);
     }
 
     try {

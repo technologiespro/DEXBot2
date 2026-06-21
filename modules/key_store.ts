@@ -13,6 +13,7 @@ const { PATHS } = require('./paths');
 const { getStorage } = require('./storage');
 const storage = getStorage();
 const { runtime } = require('./runtime');
+const { sleep } = require('./order/utils/system');
 
 export interface SigningResult {
     success: boolean;
@@ -144,7 +145,7 @@ export class DaemonKeyStore implements KeyStore {
                     signingKey.sessionId = newSessionId;
 
                     if (isSourceAuthError) {
-                        await new Promise(r => setTimeout(r, 500));
+                        await sleep(500);
                     }
 
                     const retryResult = await executeOperationsViaCredentialDaemon(accountName, operations, {

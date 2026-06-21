@@ -1,6 +1,6 @@
 'use strict';
 
-import { isBrowser } from '../../env';
+const { isBrowser } = require('../../env');
 
 /**
  * ECC module selector — picks the browser-safe or Node implementation.

@@ -1,6 +1,6 @@
 'use strict';
 
-import CC = require('./chain_constants');
+const CC = require('./chain_constants');
 
 const { BufferWriter, BufferReader } = require('./serializer');
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// node-only entry point — single bot instance launcher (process.argv, process.exit, stdin, child_process)
 /**
  * bot.ts - Single Bot Instance Launcher
  *
@@ -54,6 +55,7 @@ setUmask(0o077);
 
 const { getStorage } = require('./modules/storage');
 const storage = getStorage();
+const { runtime } = require('./modules/runtime');
 const { createPm2AwareLogger } = require('./modules/logger');
 const DEXBot = require('./modules/dexbot_class');
 const { normalizeBotEntry } = require('./modules/dexbot_class');
@@ -80,7 +82,7 @@ const launcherLogger = createPm2AwareLogger('bot.js');
 // Get bot name from args or environment
 // Support both direct names (tsx bot.ts botname) and flag format (tsx bot.ts --botname)
 // Flag format is used by PM2 for consistency with other CLI tools
-let botNameArg = process.argv[2];
+let botNameArg = Config.ARGS[0];
 if (botNameArg && botNameArg.startsWith('--')) {
     // Strip '--' prefix if present (e.g., --mybot becomes mybot)
     botNameArg = botNameArg.substring(2);
@@ -91,7 +93,7 @@ const botName = botNameArg || botNameEnv;
 if (!botName) {
     launcherLogger.error('No bot name provided. Usage: tsx bot.ts <bot-name>');
     launcherLogger.error('Or set BOT_NAME or PREFERRED_ACCOUNT environment variable');
-    process.exit(1);
+    runtime.exit(1);
 }
 
 /**
@@ -102,7 +104,7 @@ if (!botName) {
 function loadBotConfig(name: string) {
     if (!storage.exists(PROFILES_BOTS_FILE)) {
         launcherLogger.error('profiles/bots.json not found. Run: dexbot bots');
-        process.exit(1);
+        runtime.exit(1);
     }
 
     try {
@@ -116,7 +118,7 @@ function loadBotConfig(name: string) {
             const ok = printValidationProblems(result);
             if (!ok) {
                 launcherLogger.error('Fix the configuration errors above and restart.');
-                process.exit(1);
+                runtime.exit(1);
             }
         }
 
@@ -124,13 +126,13 @@ function loadBotConfig(name: string) {
             const bots = resolveRawBotEntries(config);
             launcherLogger.error(`Bot '${name}' not found in profiles/bots.json`);
             launcherLogger.error(`Available bots: ${bots.map((b: any) => b.name).join(', ') || 'none'}`);
-            process.exit(1);
+            runtime.exit(1);
         }
 
         return botEntry;
     } catch (err: any) {
         launcherLogger.error(`Error loading bot config: ${err.message}`);
-        process.exit(1);
+        runtime.exit(1);
     }
 }
 
@@ -219,7 +221,7 @@ async function getSigningSecretForAccount(accountName: string) {
 
      } catch (err: any) {
          launcherLogger.error(`Failed to start bot: ${err.message}`);
-         process.exit(1);
+         runtime.exit(1);
      }
 })();
 export {};
