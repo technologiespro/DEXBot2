@@ -244,6 +244,7 @@ in the browser bundle.
 - `modules/order/async_lock.ts` — pure async locking
 - `modules/order/logger_state.ts` — pure state tracking
 - `modules/order/processed_fill_store.ts` — pure fill tracking
+- `modules/order/logger.ts` — browser-safe (uses only storage/runtime/path_api abstractions; no direct `require('fs')`)
 - `modules/order/index.ts` — browser-safe (top-level requires all safe; lazy `getLogger()` no longer has `require('fs')`)
 - `modules/order/manager.ts` — browser-safe (top-level requires all safe; `working_grid`/`sync_engine` imports are safe)
 - `modules/order/working_grid.ts` — browser-safe (pure data/order manipulation, no Node imports)
@@ -267,7 +268,7 @@ in the browser bundle.
 - `modules/launcher/*` — credential daemon, bot supervisor, market adapter runtime, monolithic runtime
 - `modules/storage/node_adapter.ts` — `fs.*Sync` direct calls (loaded via lazy require inside `getStorage()`)
 - `modules/key_store.ts` — no `BrowserKeyStore` implementation exists
-- `modules/dexbot_maintenance_runtime.ts`, `modules/order/logger.ts`, `modules/order/export.ts`, `modules/order/runner.ts` — direct `fs` / `child_process` / `os` use
+- `modules/dexbot_maintenance_runtime.ts`, `modules/order/export.ts`, `modules/order/runner.ts` — direct `fs` / `child_process` / `os` use
 - `modules/process_discovery.ts` — Linux-specific `/proc/*` filesystem reads
 - `modules/graceful_shutdown.ts` — direct `process.on('SIGTERM'/'SIGINT')` signal handlers
 - `modules/dexbot_credential_client.ts` — Unix socket IPC via `require('net')`
