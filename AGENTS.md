@@ -228,7 +228,8 @@ in the browser bundle.
 - `modules/path_api.ts` — `path` (use this, not inline `require('path')`)
 - `modules/crypto/sync.ts` — `createHash`/`createHmac`/`randomBytes` etc. (guarded `require('crypto')`)
 - `modules/bitshares-native/crypto/ecc_selector.ts` — `getEcc()` is the canonical ecc loader
-- `modules/bitshares-native/` — chain client, transport, signing, ecc. **Caveat:** `transport.ts` lazily requires `ws` (resolved at call time, not load time); bundlers that eagerly resolve all `require()` calls may require `ws` in `optionalDependencies`.
+- `modules/bitshares-native/crypto/ecc.browser.ts` — browser-portable pure-JS ECC (Uint8Array, no Buffer)
+- `modules/bitshares-native/serial/chain_constants.ts` — pure data (chain IDs, prefixes, precision)
 - `modules/logger.ts` — auto-selects `BrowserLogger` (console-only) vs Node logger via `isBrowser()` split
 - `modules/constants.ts` — pure data / tuning parameters, no Node imports
 - `modules/types.ts` — pure TypeScript types
@@ -257,7 +258,7 @@ in the browser bundle.
 - `modules/node_health_cache.ts` — browser-safe (storage abstraction + bots_file_lock + fs_utils)
 - `modules/validate_profiles.ts` — browser-safe (pure validation logic, uses storage abstraction; `account_orders` require is lazy inside `validateCrossFileConsistency`)
 - `modules/utils/math_utils.ts` — pure math
-- `modules/utils/base58check.ts` — browser-safe (uses sync.ts)
+- `modules/utils/base58check.ts` — browser-safe (uses sync.ts; Buffer-free)
 - `modules/fund_registry.ts` — browser-safe (uses storage abstraction)
 - `modules/authority_resolver.ts` — browser-safe (uses ecc, no fs/process)
 - `modules/market_adapter_whitelist.ts` — browser-safe (uses storage abstraction)
@@ -281,6 +282,15 @@ in the browser bundle.
 - `modules/order/grid_reconcile.ts` — chain reconciliation (part of order subsystem)
 - `modules/bitshares_client.ts` — BitShares node management
 - `modules/node_manager.ts` — multi-node health and failover
+- `modules/bitshares-native/crypto/ecc.ts` — Node ECC (Buffer-heavy; loaded via `ecc_selector.ts` only in Node)
+- `modules/bitshares-native/serial/serializer.ts` — BufferWriter/BufferReader serialization
+- `modules/bitshares-native/serial/types.ts` — serial type system
+- `modules/bitshares-native/signing_client.ts` — transaction signing
+- `modules/bitshares-native/tx/builder.ts` — transaction building
+- `modules/bitshares-native/transport.ts` — WS transport with lazy `require('ws')`
+- `modules/bitshares-native/chain_client.ts` — chain client (requires transport)
+- `modules/bitshares-native/subscriptions.ts` — subscription manager (requires transport)
+- `modules/bitshares-native/index.ts` — re-exports all of the above (only reachable through `bitshares_client.ts`)
 - `modules/account_bots.ts` — CLI tool
 - `unlock.ts`, `bot.ts`, `dexbot.ts`, `pm2.ts`, `credential-daemon.ts` — CLI entry points (also listed in `package.json` `browser` field as `false`)
 - `market_adapter/ama_signal_runner.ts` — CLI script with `#!/usr/bin/env node`

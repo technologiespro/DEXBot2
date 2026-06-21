@@ -58,6 +58,8 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 
 **Jun 18–19**: Browser compatibility — six portable abstractions (`StorageAdapter`, `CryptoProvider`, `Config`, `PATHS`, `ProcessDiscovery`, `KeyStore`), `env.ts` environment detection, `Runtime` singleton, `path_api.ts`, pure-JS crypto fallbacks (`pure_scrypt`, `pure_ripemd160`, `pure_secp256k1`), `ecc.browser.ts` (pure-JS ECC), `ecc_selector.ts`, browser `StorageAdapter` (in-memory Map), lazy `require('ws')`/`require('pm2')`, browser bundle verification script, comprehensive 1288-line browser abstraction test suite. All 140+ existing files refactored to route through portable abstractions — browser-safe surface complete.
 
+**Jun 20–21**: Credit runtime hardening (multi-asset collateral `assetId` wrapping, stale pending reborrow `renewOnly` bypass fix). Full I/O pipeline centralization through `StorageAdapter` with 15 newly browser-safe modules and 28-check bundle verification. Runtime path consolidation and shared `sleep()`/`writeJsonFileAtomic` utilities across 21 files. Final browser-compat gaps closed — `base58check.ts` Buffer-free, `ecc.ts` crypto routing, `paths.ts` env detection, serial/signing pipeline marked node-only.
+
 ---
 
 ## Architecture Evolution
@@ -69,7 +71,7 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 - **Post-5: Zero-Dependency & TypeScript Migration**: Full codebase migration from JavaScript to TypeScript with strict mode, `tsc` build pipeline, zero-dependency runtime via `tsx`, and explicit architectural policy removing all external runtime dependencies.
 - **Post-5.1: Fill Detection Overhaul**: Native BitShares fill detection rewrite — direct-notice dispatch, instance-based cursor, subscription reconnect, btsFeeState hardening
 - **Post-5.2: Runtime Self-Healing**: Chain-truth reconciliation for shortfalls and drift, structural resync signaling, order-batch fill guarding.
-- **Phase 6: Stable Release (v1.0.0)**: Logging system overhaul with write queue, rotation, and JSON output. Startup profile validation. Final TS strict-mode completion. On-chain authority resolution. Credential security hardening across 8 finding groups. Centralization of project-root resolution, fs/math utilities, and magic numbers with regression fixing. Error-path hardening eliminating all silent catches. Comprehensive doc sweep. The project reaches production stability.
+- **Phase 6: Stable Release (v1.0.0)**: Logging system overhaul with write queue, rotation, and JSON output. Startup profile validation. Final TS strict-mode completion. On-chain authority resolution. Credential security hardening across 8 finding groups. Centralization of project-root resolution, fs/math utilities, and magic numbers with regression fixing. Error-path hardening eliminating all silent catches. Comprehensive doc sweep. Browser compatibility: portable abstractions, pure-JS crypto, complete browser-safe surface with bundle verification. Credit runtime hardening. I/O pipeline centralization. The project reaches production stability with full browser-safe core.
 
 ---
 
@@ -147,8 +149,8 @@ BUILD_DIR centralization, source-mode runtime, HMAC recovery, error hardening, z
 ### v0.7.17 → v0.7.18 (8 commits)
 Removed all 89 @ts-nocheck directives, added type annotations across 67 files. Race-condition batch 1 (atomic JSON writes, in-flight flags, snapshot persist). Across-the-board timeout hardening and leak fixes. DRY refactoring extracting shared utilities (~460 lines removed).
 
-### v0.7.18 → v1.0.0 (75 commits)
-First stable release. Profile validation, logging overhaul, AMA delta threshold, on-chain authority resolution, credential hardening (8 finding groups), centralization of project-root/fs/math/magic-number utilities, error-path hardening, doc sweep. Post-release: headless unlock mode, Credit/MPA Claw bridge, credit runtime fixes, credential daemon hardening, test auto-discovery, settings merge consolidation, shared-account fund registry, credit/MPA collateral proportional allocation, vendored uPlot library, node config editor, analyze-git Chart.js→uPlot migration. Browser compatibility: six portable abstractions (`StorageAdapter`, `CryptoProvider`, `Config`, `PATHS`, `ProcessDiscovery`, `KeyStore`), `env.ts`, `Runtime` singleton, `path_api.ts`, pure-JS crypto fallbacks, `ecc.browser.ts`, `ecc_selector.ts`, lazy `ws`/`pm2` loading, browser bundle verification, 1288-line test suite.
+### v0.7.18 → v1.0.0 (81 commits)
+First stable release. Profile validation, logging overhaul, AMA delta threshold, on-chain authority resolution, credential hardening (8 finding groups), centralization of project-root/fs/math/magic-number utilities, error-path hardening, doc sweep. Post-release: headless unlock mode, Credit/MPA Claw bridge, credit runtime fixes, credential daemon hardening, test auto-discovery, settings merge consolidation, shared-account fund registry, credit/MPA collateral proportional allocation, vendored uPlot library, node config editor, analyze-git Chart.js→uPlot migration. Browser compatibility: six portable abstractions (`StorageAdapter`, `CryptoProvider`, `Config`, `PATHS`, `ProcessDiscovery`, `KeyStore`), `env.ts`, `Runtime` singleton, `path_api.ts`, pure-JS crypto fallbacks, `ecc.browser.ts`, `ecc_selector.ts`, lazy `ws`/`pm2` loading, browser bundle verification, 1288-line test suite, 15 newly browser-safe modules, 28-check dist-level verification. Credit runtime multi-asset collateral fixes and stale reborrow guard. I/O pipeline centralization through StorageAdapter. Final browser-compat gaps closed.
 
 ---
 
@@ -198,7 +200,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: June 19, 2026
-**Total Commits**: 1620
-**Date Range**: December 2, 2025 - June 19, 2026 (ongoing)
+**Last Updated**: June 21, 2026
+**Total Commits**: 1626
+**Date Range**: December 2, 2025 - June 21, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)
