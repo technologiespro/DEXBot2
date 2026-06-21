@@ -1,7 +1,9 @@
 /** Credential client module - connects to credential daemon for key operations */
+const { getNodeRequire } = require('./env');
+const _require = getNodeRequire();
 let net;
 try {
-    net = require('net');
+    net = _require ? _require('net') : undefined;
 } catch {
     // Browser: Unix socket IPC unavailable; methods will throw when called
 }

@@ -60,9 +60,15 @@
  */
 
 const { getStorage } = require('../storage');
+const { getNodeRequire } = require('../env');
+const _require = getNodeRequire();
 const storage = getStorage();
 const { path } = require('../path_api');
-const readline = require('readline');
+let _readline: any;
+function getReadline() {
+    if (!_readline && _require) _readline = _require('readline');
+    return _readline;
+}
 const Format = require('./format');
 const { TIMING, DEFAULT_CONFIG } = require('../constants');
 const { PATHS } = require('../paths');
@@ -162,7 +168,7 @@ async function parseLogFile(logFilePath) {
 
     try {
         const fileStream = storage.createReadStream(logFilePath);
-        const rl = readline.createInterface({
+        const rl = getReadline().createInterface({
             input: fileStream,
             crlfDelay: Infinity
         });

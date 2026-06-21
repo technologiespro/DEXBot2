@@ -15,7 +15,15 @@
 
 'use strict';
 
-const https = require('https');
+const { getNodeRequire } = require('../../modules/env');
+const _require = getNodeRequire();
+let _https: any;
+const https = new Proxy({} as any, {
+    get(_, prop) {
+        if (!_https && _require) _https = _require('https');
+        return _https ? _https[prop] : undefined;
+    }
+});
 const { MARKET_ADAPTER } = require('../../modules/constants');
 
 const KIBANA_URL = 'https://kibana.bitshares.dev';
@@ -54,7 +62,7 @@ function doKibanaRequest(cfg: any, esQuery: any, resolve: any, reject: any, redi
   const headers = {
     'Content-Type':   'application/json',
     'kbn-xsrf':       'true',
-    'Content-Length': Buffer.byteLength(body),
+    'Content-Length': new TextEncoder().encode(body).length,
   };
   if (cfg.apiKey) (headers as any)['Authorization'] = `ApiKey ${cfg.apiKey}`;
 

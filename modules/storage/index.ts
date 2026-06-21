@@ -19,7 +19,8 @@
  */
 
 const { IStorageAdapter } = require('./types');
-const { isBrowser } = require('../env');
+const { isBrowser, getNodeRequire } = require('../env');
+const _require = getNodeRequire();
 
 let _adapter = null;
 
@@ -29,9 +30,13 @@ function getStorage() {
   if (isBrowser()) {
     const createBrowserStorageAdapter = require('./browser_adapter');
     _adapter = createBrowserStorageAdapter();
-  } else {
-    const NodeStorageAdapter = require('./node_adapter');
+  } else if (_require) {
+    const NodeStorageAdapter = _require('./node_adapter');
     _adapter = new NodeStorageAdapter();
+  }
+
+  if (!_adapter) {
+    throw new Error('No storage adapter available for this environment');
   }
 
   return _adapter;

@@ -1,5 +1,15 @@
 'use strict';
 
+const { getNodeRequire } = require('../../env');
+const _require = getNodeRequire();
+let _Buffer: any;
+const Buffer = new Proxy({} as any, {
+    get(_, prop) {
+        if (!_Buffer && _require) _Buffer = _require('buffer').Buffer;
+        return _Buffer ? _Buffer[prop] : undefined;
+    }
+});
+
 class BufferWriter {
     buf: Buffer;
 

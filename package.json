@@ -63,35 +63,9 @@
     "./dist/modules/launcher/market_adapter_watchdog.js": false,
     "./dist/modules/launcher/foreign_cred_daemon.js": false,
     "./dist/modules/launcher/credential_bootstrap.js": false,
-    "./dist/modules/storage/node_adapter.js": false,
-    "./dist/modules/key_store.js": false,
     "./dist/modules/dexbot_maintenance_runtime.js": false,
-    "./dist/modules/order/logger.js": false,
-    "./dist/modules/order/export.js": false,
-    "./dist/modules/order/runner.js": false,
-    "./dist/modules/process_discovery.js": false,
-    "./dist/modules/graceful_shutdown.js": false,
-    "./dist/modules/chain_keys.js": false,
-    "./dist/modules/credential_policy.js": false,
-    "./dist/modules/credential_session_cache.js": false,
-    "./dist/modules/dexbot_credential_client.js": false,
-    "./dist/modules/credit_runtime.js": false,
-    "./dist/modules/node_manager.js": false,
-    "./dist/modules/bitshares_client.js": false,
-    "./dist/modules/account_bots.js": false,
-    "./dist/market_adapter/ama_signal_runner.js": false,
-    "./dist/market_adapter/market_adapter.js": false,
-    "./dist/market_adapter/lp_chart_runner.js": false,
-    "./dist/market_adapter/core/kibana_client.js": false,
-    "./dist/market_adapter/core/kibana_candles.js": false,
-    "./dist/market_adapter/core/kibana_market_candles.js": false,
-    "./dist/market_adapter/inputs/kibana_source.js": false,
-    "./dist/claw/index.js": false,
-    "./dist/modules/bitshares-native/crypto/ecc.js": false,
-    "./dist/modules/bitshares-native/serial/serializer.js": false,
-    "./dist/modules/bitshares-native/serial/types.js": false,
-    "./dist/modules/bitshares-native/signing_client.js": false,
-    "./dist/modules/bitshares-native/tx/builder.js": false
+    "./dist/modules/dexbot_class.js": false,
+    "./dist/market_adapter/lp_chart_runner.js": false
   },
   "bugs": {
     "url": "https://github.com/froooze/DEXBot2/issues"
@@ -104,6 +78,5 @@
     "@types/node": "^25.9.1",
     "tsx": "^4.22.3",
     "typescript": "^6.0.3"
-  },
-  "dependencies": {}
+  }
 }

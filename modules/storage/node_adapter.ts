@@ -17,7 +17,15 @@
  *   6. account_orders._persist        (writeFileSync + read-fsync + renameSync)
  */
 
-const fs = require('fs');
+const { getNodeRequire } = require('../env');
+const _require = getNodeRequire();
+let _fs: any;
+const fs = new Proxy({} as any, {
+    get(_, prop) {
+        if (!_fs && _require) _fs = _require('fs');
+        return _fs ? _fs[prop] : undefined;
+    }
+});
 const { path } = require('../path_api');
 const { randomBytes } = require('../crypto/sync');
 const { runtime } = require('../runtime');

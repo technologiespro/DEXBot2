@@ -222,47 +222,16 @@ in the browser bundle.
 
 **Convention: everything is browser-safe unless listed below as Node-only.**
 
+**Enforcement:** `package.json` "browser" field is the source of truth — it maps every
+Node-only **compiled** entry (dist/*.js) to `false`. The list below is documentation
+only; always check `package.json` before adding or removing a classification.
+
 **Node-only** (must not be reached from a browser bundle):
 - `modules/launcher/*` — credential daemon, bot supervisor, market adapter runtime, monolithic runtime
-- `modules/storage/node_adapter.ts` — `fs.*Sync` direct calls (loaded via lazy require inside `getStorage()`)
-- `modules/key_store.ts` — no `BrowserKeyStore` implementation exists
-- `modules/dexbot_maintenance_runtime.ts`, `modules/order/export.ts`, `modules/order/runner.ts` — direct `fs` / `child_process` / `os` use
-- `modules/process_discovery.ts` — Linux-specific `/proc/*` filesystem reads
-- `modules/graceful_shutdown.ts` — direct `process.on('SIGTERM'/'SIGINT')` signal handlers
-- `modules/dexbot_credential_client.ts` — Unix socket IPC via `require('net')`
-- `modules/credential_runtime.ts` — lazy `require('./launcher/runtime_entry')` for daemon paths
-- `modules/dexbot_class.ts` — imports `key_store`, `dexbot_maintenance_runtime`
-- `modules/dexbot_fill_runtime.ts` — fill processing runtime
-- `modules/credit_runtime.ts` — uses `writeJsonFileAtomic` (persistState)
-- `modules/chain_keys.ts` — lazy `require('net')` for credential daemon
-- `modules/chain_orders.ts` — blockchain order operations
-- `modules/credential_policy.ts` — lazy `require('child_process').spawn`
-- `modules/credential_session_cache.ts` — depends on `chain_keys`
-- `modules/order/grid_reconcile.ts` — chain reconciliation (part of order subsystem)
-- `modules/bitshares_client.ts` — BitShares node management
-- `modules/node_manager.ts` — multi-node health and failover
-- `modules/bitshares-native/crypto/ecc.ts` — Node ECC (Buffer-heavy; loaded via `ecc_selector.ts` only in Node)
-- `modules/bitshares-native/serial/serializer.ts` — BufferWriter/BufferReader serialization
-- `modules/bitshares-native/serial/types.ts` — serial type system
-- `modules/bitshares-native/serial/index.ts` — re-exports all serial modules
-- `modules/bitshares-native/serial/operations.ts` — operation type definitions
-- `modules/bitshares-native/signing_client.ts` — transaction signing
-- `modules/bitshares-native/tx/builder.ts` — transaction building
-- `modules/bitshares-native/transport.ts` — WS transport with lazy `require('ws')`
-- `modules/bitshares-native/chain_client.ts` — chain client (requires transport)
-- `modules/bitshares-native/subscriptions.ts` — subscription manager (requires transport)
-- `modules/bitshares-native/index.ts` — re-exports all of the above (only reachable through `bitshares_client.ts`)
-- `modules/account_bots.ts` — CLI tool
-- `unlock.ts`, `bot.ts`, `dexbot.ts`, `pm2.ts`, `credential-daemon.ts` — CLI entry points (also listed in `package.json` `browser` field as `false`)
-- `market_adapter/ama_signal_runner.ts` — CLI script with `#!/usr/bin/env node`
-- `market_adapter/market_adapter.ts` — standalone price adapter runtime
-- `market_adapter/core/market_adapter_service.ts` — price adapter service
-- `market_adapter/inputs/` — Kibana/LP data fetcher scripts
+- `modules/dexbot_maintenance_runtime.ts` — direct `fs` / `child_process` / `os` use
+- `modules/dexbot_class.ts` — imports `dexbot_maintenance_runtime`
+- `unlock.ts`, `bot.ts`, `dexbot.ts`, `pm2.ts`, `credential-daemon.ts` — CLI entry points
 - `market_adapter/lp_chart_runner.ts` — `require('child_process')` for chart rendering
-- `market_adapter/core/kibana_client.ts` — `require('https')` for Elasticsearch queries
-- `market_adapter/core/kibana_candles.ts`, `market_adapter/core/kibana_market_candles.ts` — transitive `kibana_client` dependency
-- `market_adapter/inputs/kibana_source.ts` — transitive `kibana_client` dependency
-- `claw/index.ts` — top-level requires reach Node-only modules (see claw caveat above)
 
 **Environment detection** — always go through `modules/env.ts`:
 ```ts

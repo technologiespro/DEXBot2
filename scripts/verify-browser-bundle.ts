@@ -178,6 +178,54 @@ const TESTS: BundleTest[] = [
     expectFail: false,
     externalizeNodeBuiltins: true,
   },
+  {
+    label: 'modules/storage/node_adapter.ts (browser-safe)',
+    entry: 'modules/storage/node_adapter.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'modules/order/export.ts (browser-safe)',
+    entry: 'modules/order/export.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'modules/crypto/sync.ts (browser-safe)',
+    entry: 'modules/crypto/sync.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'market_adapter/core/kibana_client.ts (browser-safe)',
+    entry: 'market_adapter/core/kibana_client.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'modules/bitshares-native/serial/serializer.ts (browser-safe)',
+    entry: 'modules/bitshares-native/serial/serializer.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'modules/bitshares-native/serial/types.ts (browser-safe)',
+    entry: 'modules/bitshares-native/serial/types.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'modules/utils/base58check.ts (browser-safe)',
+    entry: 'modules/utils/base58check.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'modules/paths.ts (browser-safe)',
+    entry: 'modules/paths.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
   // ── Dist-level entries (browser-safe after tsc + browser-field) ─
   // Catches stale `package.json` "browser" entries that shadow a module
   // which is supposed to be reachable from the browser-safe surface.
@@ -222,12 +270,6 @@ const TESTS: BundleTest[] = [
   {
     label: 'claw/index.ts (node-only)',
     entry: 'claw/index.ts',
-    expectFail: true,
-    externalizeNodeBuiltins: false,
-  },
-  {
-    label: 'market_adapter/core/kibana_client.ts (node-only)',
-    entry: 'market_adapter/core/kibana_client.ts',
     expectFail: true,
     externalizeNodeBuiltins: false,
   },
