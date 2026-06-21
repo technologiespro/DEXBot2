@@ -34,3 +34,4 @@ export const createCipheriv = _crypto ? _crypto.createCipheriv.bind(_crypto) : (
 export const createDecipheriv = _crypto ? _crypto.createDecipheriv.bind(_crypto) : ((..._: any[]) => throwNoCrypto('createDecipheriv')) as any;
 export const createECDH = _crypto ? _crypto.createECDH.bind(_crypto) : ((..._: any[]) => throwNoCrypto('createECDH')) as any;
 export const scrypt = _crypto ? _crypto.scrypt.bind(_crypto) : ((..._: any[]) => throwNoCrypto('scrypt')) as any;
+export const createPrivateKey = _crypto ? _crypto.createPrivateKey.bind(_crypto) : ((..._: any[]) => throwNoCrypto('createPrivateKey')) as any;

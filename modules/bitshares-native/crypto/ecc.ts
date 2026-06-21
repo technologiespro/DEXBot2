@@ -1,14 +1,6 @@
 'use strict';
 
-const { createHash, createHmac, randomBytes: cryptoRandomBytes, createECDH } = require('../../crypto/sync');
-
-let _crypto: any;
-function getNodeCrypto(): any {
-    if (!_crypto) {
-        try { _crypto = require('crypto'); } catch { _crypto = null; }
-    }
-    return _crypto;
-}
+const { createHash, createHmac, randomBytes: cryptoRandomBytes, createECDH, createPrivateKey } = require('../../crypto/sync');
 
 interface EcPoint {
     x: bigint;
@@ -68,7 +60,7 @@ function randomBytes(length: number): Buffer {
 
 function privateKeyFromRaw(rawKey: Buffer): any {
     const keyData = Buffer.concat([SEC1_DER_PREFIX, rawKey, SEC1_DER_SUFFIX]);
-    return getNodeCrypto().createPrivateKey({
+    return createPrivateKey({
         key: keyData,
         format: 'der',
         type: 'sec1',

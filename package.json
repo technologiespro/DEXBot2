@@ -86,7 +86,12 @@
     "./dist/market_adapter/core/kibana_candles.js": false,
     "./dist/market_adapter/core/kibana_market_candles.js": false,
     "./dist/market_adapter/inputs/kibana_source.js": false,
-    "./dist/claw/index.js": false
+    "./dist/claw/index.js": false,
+    "./dist/modules/bitshares-native/crypto/ecc.js": false,
+    "./dist/modules/bitshares-native/serial/serializer.js": false,
+    "./dist/modules/bitshares-native/serial/types.js": false,
+    "./dist/modules/bitshares-native/signing_client.js": false,
+    "./dist/modules/bitshares-native/tx/builder.js": false
   },
   "bugs": {
     "url": "https://github.com/froooze/DEXBot2/issues"

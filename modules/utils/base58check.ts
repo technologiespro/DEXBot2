@@ -4,13 +4,15 @@ const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const ALPHABET_MAP = new Map([...ALPHABET].map((ch, index) => [ch, index]));
 
 // ── Sync (Node crypto) — used by chain_keys, ecc.ts ────────────────
-function checksum(payload: Buffer | string | Uint8Array): Buffer {
-    const first = createHash('sha256').update(payload).digest();
-    return createHash('sha256').update(first).digest().subarray(0, 4);
+function checksum(payload: Uint8Array | string): Uint8Array {
+    const first = createHash('sha256').update(payload).digest() as Uint8Array;
+    return (createHash('sha256').update(first).digest() as Uint8Array).subarray(0, 4);
 }
 
-function base58Encode(buffer: Buffer | Uint8Array | number[] | string): string {
-    const bytes = Buffer.from(buffer);
+function base58Encode(buffer: Uint8Array | number[] | string): string {
+    const bytes = typeof buffer === 'string' ? new TextEncoder().encode(buffer)
+                 : buffer instanceof Uint8Array ? buffer
+                 : new Uint8Array(buffer);
     if (bytes.length === 0) return '';
 
     let value = 0n;
@@ -33,9 +35,9 @@ function base58Encode(buffer: Buffer | Uint8Array | number[] | string): string {
     return encoded || '1';
 }
 
-function base58Decode(value: string): Buffer {
+function base58Decode(value: string): Uint8Array {
     if (typeof value !== 'string') throw new TypeError('Base58 value must be a string');
-    if (value.length === 0) return Buffer.alloc(0);
+    if (value.length === 0) return new Uint8Array(0);
 
     let decoded = 0n;
     for (const ch of value) {
@@ -55,15 +57,19 @@ function base58Decode(value: string): Buffer {
         bytes.unshift(0);
     }
 
-    return Buffer.from(bytes);
+    return new Uint8Array(bytes);
 }
 
-function encode(payload: Buffer | string | Uint8Array): string {
-    const body = Buffer.from(payload);
-    return base58Encode(Buffer.concat([body, checksum(body)]));
+function encode(payload: Uint8Array | string): string {
+    const body = typeof payload === 'string' ? new TextEncoder().encode(payload) : payload;
+    const csum = checksum(body);
+    const combined = new Uint8Array(body.length + csum.length);
+    combined.set(body);
+    combined.set(csum, body.length);
+    return base58Encode(combined);
 }
 
-function decode(value: string): Buffer {
+function decode(value: string): Uint8Array {
     const decoded = base58Decode(value);
     if (decoded.length < 4) throw new Error('Invalid Base58Check payload');
 
@@ -107,7 +113,7 @@ async function decodeAsync(value: string): Promise<Uint8Array> {
         throw new Error('Invalid Base58Check checksum');
     }
 
-    return new Uint8Array(payload);
+    return payload;
 }
 
 export = {
