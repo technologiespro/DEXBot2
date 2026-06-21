@@ -159,6 +159,22 @@ class NodeStorageAdapter {
   readlink(path) {
     return fs.readlinkSync(path);
   }
+
+  appendFile(path, data, options) {
+    fs.appendFileSync(path, data, options ?? 'utf8');
+  }
+
+  async appendFileAsync(path, data, options) {
+    await fs.promises.appendFile(path, data, options ?? 'utf8');
+  }
+
+  createReadStream(path) {
+    return fs.createReadStream(path);
+  }
+
+  createWriteStream(path) {
+    return fs.createWriteStream(path);
+  }
 }
 
 export = NodeStorageAdapter;

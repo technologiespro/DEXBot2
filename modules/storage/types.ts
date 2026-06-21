@@ -78,4 +78,16 @@ export interface IStorageAdapter {
 
   /** Read the target of a symbolic link */
   readlink(path: string): string;
+
+  /** Append data to a file (creates if missing). Non-atomic. */
+  appendFile(path: string, data: string, options?: { mode?: number } | string): void;
+
+  /** Append data to a file asynchronously (creates if missing). Non-atomic. */
+  appendFileAsync(path: string, data: string, options?: { mode?: number } | string): Promise<void>;
+
+  /** Create a readable stream for a file (Node-only; throws in browser adapter) */
+  createReadStream(path: string): any;
+
+  /** Create a writable stream for a file (Node-only; throws in browser adapter) */
+  createWriteStream(path: string): any;
 }

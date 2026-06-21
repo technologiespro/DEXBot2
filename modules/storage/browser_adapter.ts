@@ -212,6 +212,30 @@ function createBrowserStorageAdapter() {
       return path;
     },
 
+    appendFile(path, data, options) {
+      const existing = store.get(path);
+      const newContent = existing ? existing.content + data : data;
+      store.set(path, {
+        content: newContent,
+        type: 'text',
+        mtime: Date.now(),
+        mode: typeof options === 'object' ? options.mode : undefined,
+      });
+    },
+
+    appendFileAsync(path, data, options) {
+      this.appendFile(path, data, options);
+      return Promise.resolve();
+    },
+
+    createReadStream() {
+      throw new Error('createReadStream() not supported in browser adapter');
+    },
+
+    createWriteStream() {
+      throw new Error('createWriteStream() not supported in browser adapter');
+    },
+
     flush,
   };
 

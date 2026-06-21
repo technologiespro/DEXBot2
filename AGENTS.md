@@ -243,11 +243,23 @@ in the browser bundle.
 - `modules/order/async_lock.ts` — pure async locking
 - `modules/order/logger_state.ts` — pure state tracking
 - `modules/order/processed_fill_store.ts` — pure fill tracking
+- `modules/order/index.ts` — browser-safe (top-level requires all safe; lazy `getLogger()` no longer has `require('fs')`)
+- `modules/order/manager.ts` — browser-safe (top-level requires all safe; `working_grid`/`sync_engine` imports are safe)
+- `modules/order/working_grid.ts` — browser-safe (pure data/order manipulation, no Node imports)
+- `modules/order/sync_engine.ts` — browser-safe (top-level requires all safe; blockchain sync is a runtime dependency, not an import dependency)
+- `modules/order/strategy.ts` — browser-safe (pure grid strategy logic; top-level requires all safe; lazy requires inside method bodies)
+- `modules/order/accounting.ts` — browser-safe (pure fee/fund math; top-level requires all safe; `chain_orders` lazy inside `_performStateRecovery`)
+- `modules/order/grid.ts` — browser-safe (top-level requires all safe; `bitshares_client`/`grid_reconcile`/`working_grid` lazy inside method bodies)
+- `modules/account_orders.ts` — browser-safe (all top-level requires are abstractions: storage, path_api, constants, logger; file-backed persistence routes through `getStorage()`)
+- `modules/bots_file_lock.ts` — browser-safe (uses `getStorage()` for all I/O; in-memory semaphore, no `flock`)
+- `modules/general_settings.ts` — browser-safe (uses storage abstraction + `bots_file_lock`)
+- `modules/bot_settings.ts` — browser-safe (storage + bots_file_lock + crypto/sync; all top-level requires safe)
+- `modules/node_health_cache.ts` — browser-safe (storage abstraction + bots_file_lock + fs_utils)
+- `modules/validate_profiles.ts` — browser-safe (pure validation logic, uses storage abstraction; `account_orders` require is lazy inside `validateCrossFileConsistency`)
 - `modules/utils/math_utils.ts` — pure math
 - `modules/utils/base58check.ts` — browser-safe (uses sync.ts)
 - `modules/fund_registry.ts` — browser-safe (uses storage abstraction)
 - `modules/authority_resolver.ts` — browser-safe (uses ecc, no fs/process)
-- `modules/validate_profiles.ts` — browser-safe (pure validation logic, uses storage abstraction; `account_orders` require is lazy inside `validateCrossFileConsistency`)
 - `modules/market_adapter_whitelist.ts` — browser-safe (uses storage abstraction)
 
 **Node-only** (must not be reached from a browser bundle):
@@ -259,25 +271,13 @@ in the browser bundle.
 - `modules/graceful_shutdown.ts` — direct `process.on('SIGTERM'/'SIGINT')` signal handlers
 - `modules/dexbot_credential_client.ts` — Unix socket IPC via `require('net')`
 - `modules/credential_runtime.ts` — lazy `require('./launcher/runtime_entry')` for daemon paths
-- `modules/credit_runtime.ts` — uses `bots_file_lock`, `writeJsonFileAtomic`
-- `modules/node_health_cache.ts` — uses `bots_file_lock`
 - `modules/dexbot_class.ts` — imports `key_store`, `dexbot_maintenance_runtime`
 - `modules/dexbot_fill_runtime.ts` — fill processing runtime
-- `modules/bots_file_lock.ts` — file locking
-- `modules/general_settings.ts` — uses `bots_file_lock`
-- `modules/bot_settings.ts` — uses `bots_file_lock`
+- `modules/credit_runtime.ts` — uses `writeJsonFileAtomic` (persistState)
 - `modules/chain_keys.ts` — lazy `require('net')` for credential daemon
 - `modules/chain_orders.ts` — blockchain order operations
-- `modules/account_orders.ts` — file-backed order persistence
 - `modules/credential_policy.ts` — lazy `require('child_process').spawn`
 - `modules/credential_session_cache.ts` — depends on `chain_keys`
-- `modules/order/index.ts` — lazy `getLogger()` accessor (top-level `require('fs')` guarded)
-- `modules/order/manager.ts` — full order lifecycle
-- `modules/order/grid.ts` — grid calculations (part of order subsystem)
-- `modules/order/working_grid.ts` — copy-on-write grid (part of order subsystem)
-- `modules/order/strategy.ts` — trading strategy (part of order subsystem)
-- `modules/order/accounting.ts` — fee accounting (part of order subsystem)
-- `modules/order/sync_engine.ts` — blockchain sync (part of order subsystem)
 - `modules/order/grid_reconcile.ts` — chain reconciliation (part of order subsystem)
 - `modules/bitshares_client.ts` — BitShares node management
 - `modules/node_manager.ts` — multi-node health and failover

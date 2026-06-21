@@ -1,11 +1,18 @@
 /**
  * Verify that the browser-safe surface actually bundles for the web.
  *
- * Uses esbuild --platform=browser to attempt bundling selected entry points.
- * Node built-ins (fs, path, crypto, net, https, child_process, os, tls, http)
- * are externalized — they are handled by the package.json "browser" field at
- * real build time.  This test catches cases where a local module import cannot
- * be resolved (missing file) or where a module pulls in unexpected dependencies.
+ * Two layers of checks:
+ *   1. Source-level: bundles modules/*.ts entry points with --platform=browser.
+ *      Local imports are resolved by file path, so the package.json "browser"
+ *      field does not apply. Catches cases where a local module import cannot
+ *      be resolved (missing file) or pulls in unexpected dependencies.
+ *   2. Dist-level: builds dist/ via tsc, then bundles dist/modules/*.js entry
+ *      points. Local imports now go through the bundler's package.json
+ *      resolution, so the "browser" field DOES apply. The bundle is scanned
+ *      for "(disabled):" markers — esbuild inserts these when a module is
+ *      replaced via the "browser" field. Any marker means an entry on the
+ *      "browser" field shadows a module that is supposed to be reachable
+ *      from the browser-safe surface.
  *
  * Node-only entries are tested WITHOUT externalizing Node built-ins, so they
  * correctly fail with "Could not resolve 'fs'" / 'net' / 'https' etc.
@@ -15,6 +22,9 @@
  */
 
 import { spawnSync } from 'child_process';
+import { existsSync, readFileSync, unlinkSync } from 'fs';
+import { tmpdir } from 'os';
+import { join as pathJoin } from 'path';
 import mod from 'module';
 
 // Complete list of Node.js built-in modules — generated at runtime.
@@ -38,6 +48,12 @@ interface BundleTest {
   entry: string;
   expectFail: boolean;
   externalizeNodeBuiltins: boolean;
+  /**
+   * Entry is a dist/ path. Triggers a `tsc` build if any test sets this flag.
+   * Bundles are then scanned for "(disabled):" markers — esbuild inserts
+   * these when a module is replaced via the package.json "browser" field.
+   */
+  dist?: boolean;
 }
 
 const TESTS: BundleTest[] = [
@@ -90,6 +106,118 @@ const TESTS: BundleTest[] = [
     expectFail: false,
     externalizeNodeBuiltins: true,
   },
+  {
+    label: 'modules/bots_file_lock.ts (browser-safe)',
+    entry: 'modules/bots_file_lock.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'modules/general_settings.ts (browser-safe)',
+    entry: 'modules/general_settings.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'modules/bot_settings.ts (browser-safe)',
+    entry: 'modules/bot_settings.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'modules/node_health_cache.ts (browser-safe)',
+    entry: 'modules/node_health_cache.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'modules/order/strategy.ts (browser-safe)',
+    entry: 'modules/order/strategy.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'modules/order/accounting.ts (browser-safe)',
+    entry: 'modules/order/accounting.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'modules/order/grid.ts (browser-safe)',
+    entry: 'modules/order/grid.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'modules/account_orders.ts (browser-safe)',
+    entry: 'modules/account_orders.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'modules/validate_profiles.ts (browser-safe)',
+    entry: 'modules/validate_profiles.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'modules/order/index.ts (browser-safe)',
+    entry: 'modules/order/index.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'modules/order/manager.ts (browser-safe)',
+    entry: 'modules/order/manager.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  {
+    label: 'modules/order/working_grid.ts (browser-safe)',
+    entry: 'modules/order/working_grid.ts',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+  },
+  // ── Dist-level entries (browser-safe after tsc + browser-field) ─
+  // Catches stale `package.json` "browser" entries that shadow a module
+  // which is supposed to be reachable from the browser-safe surface.
+  // esbuild inserts "(disabled):<path>" markers for any module replaced
+  // via the "browser" field; any such marker fails the test.
+  {
+    label: 'dist/modules/constants.js (browser-safe, dist)',
+    entry: 'dist/modules/constants.js',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+    dist: true,
+  },
+  {
+    label: 'dist/modules/bots_file_lock.js (browser-safe, dist)',
+    entry: 'dist/modules/bots_file_lock.js',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+    dist: true,
+  },
+  {
+    label: 'dist/modules/general_settings.js (browser-safe, dist)',
+    entry: 'dist/modules/general_settings.js',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+    dist: true,
+  },
+  {
+    label: 'dist/modules/bot_settings.js (browser-safe, dist)',
+    entry: 'dist/modules/bot_settings.js',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+    dist: true,
+  },
+  {
+    label: 'dist/modules/node_health_cache.js (browser-safe, dist)',
+    entry: 'dist/modules/node_health_cache.js',
+    expectFail: false,
+    externalizeNodeBuiltins: true,
+    dist: true,
+  },
   // ── Node-only entries (should fail without externals) ─────────
   {
     label: 'claw/index.ts (node-only)',
@@ -114,10 +242,35 @@ const TESTS: BundleTest[] = [
 let passed = 0;
 let failed = 0;
 
+// Build dist/ if any test uses it. Required so that dist/ entries actually
+// exist when esbuild tries to bundle them.
+const needsDist = TESTS.some(t => t.dist);
+if (needsDist) {
+  console.log('Building dist/ via tsc (required for dist-level tests)...');
+  const build = spawnSync('npx', ['tsc'], {
+    cwd: process.cwd(),
+    stdio: 'inherit',
+    encoding: 'utf-8',
+    timeout: 300000,
+  });
+  if (build.status !== 0) {
+    console.error('tsc build failed; dist-level tests cannot run.');
+    process.exit(1);
+  }
+}
+
 for (const { label, entry, expectFail, externalizeNodeBuiltins } of TESTS) {
+  // Write to a temp file (not /dev/null) so we can scan the bundle for
+  // "(disabled):" markers that esbuild inserts when a module is replaced
+  // via the package.json "browser" field.
+  const outfile = pathJoin(
+    tmpdir(),
+    `verify-browser-bundle-${process.pid}-${Math.random().toString(36).slice(2, 10)}.js`
+  );
+
   const args = [
     'esbuild', '--platform=browser', '--bundle',
-    `--outfile=/dev/null`,
+    `--outfile=${outfile}`,
     ...(externalizeNodeBuiltins ? EXTERNAL_ARGS : []),
     entry,
   ];
@@ -132,14 +285,36 @@ for (const { label, entry, expectFail, externalizeNodeBuiltins } of TESTS) {
   const exitOk = result.status === 0;
   const outcomeCorrect = exitOk === !expectFail;
 
-  if (outcomeCorrect) {
+  // For tests that should succeed, check the bundle for "(disabled):" markers
+  // that correspond to the entry itself. esbuild inserts these when a module
+  // is replaced via the package.json "browser" field. If the entry's path
+  // is among them, the entry was incorrectly disabled — the original bug
+  // pattern this layer exists to catch. Other disabled modules (e.g. lazy
+  // Node-only fallbacks like storage/node_adapter) are expected and ignored.
+  let entryDisabled = false;
+  if (outcomeCorrect && !expectFail && existsSync(outfile)) {
+    try {
+      const bundle = readFileSync(outfile, 'utf-8');
+      const entryKey = entry.replace(/\.js$/, '');
+      entryDisabled = bundle.includes(`(disabled):${entryKey}`);
+    } catch {}
+  }
+
+  try { unlinkSync(outfile); } catch {}
+
+  if (outcomeCorrect && !entryDisabled) {
     console.log(`  ✓ ${label}`);
     passed++;
   } else {
     console.log(`  ✗ ${label}`);
-    console.log(`    Expected ${expectFail ? 'failure' : 'success'}, got ${exitOk ? 'success' : 'failure'}`);
-    const lines = (result.stderr || '').trim().split('\n').slice(0, 6);
-    for (const line of lines) console.log(`    ${line}`);
+    if (!outcomeCorrect) {
+      console.log(`    Expected ${expectFail ? 'failure' : 'success'}, got ${exitOk ? 'success' : 'failure'}`);
+      const lines = (result.stderr || '').trim().split('\n').slice(0, 6);
+      for (const line of lines) console.log(`    ${line}`);
+    }
+    if (entryDisabled) {
+      console.log(`    Entry "${entry}" was disabled by package.json "browser" field — module would be empty in browser bundle.`);
+    }
     failed++;
   }
 }

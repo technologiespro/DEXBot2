@@ -59,8 +59,8 @@
  * ===============================================================================
  */
 
-const fs = require('fs');
-const fsPromises = require('fs').promises;
+const { getStorage } = require('../storage');
+const storage = getStorage();
 const { path } = require('../path_api');
 const readline = require('readline');
 const Format = require('./format');
@@ -161,7 +161,7 @@ async function parseLogFile(logFilePath) {
     const fees = [];
 
     try {
-        const fileStream = fs.createReadStream(logFilePath);
+        const fileStream = storage.createReadStream(logFilePath);
         const rl = readline.createInterface({
             input: fileStream,
             crlfDelay: Infinity
@@ -238,7 +238,7 @@ async function writeTradesCSV(trades, outputPath) {
             }).join(','))
             .join('\n');
 
-        await fsPromises.writeFile(outputPath, csv + '\n', 'utf8');
+        storage.writeFile(outputPath, csv + '\n', 'utf8');
         exportLogger.info(`✓ Exported ${trades.length} trades to ${outputPath}`);
 
         return { success: true, count: trades.length };
@@ -281,7 +281,7 @@ async function writeSettingsJSON(botConfig, botName, outputPath) {
             exported_at: new Date().toISOString()
         };
 
-        await fsPromises.writeFile(outputPath, JSON.stringify(sanitized, null, 2) + '\n', 'utf8');
+        storage.writeFile(outputPath, JSON.stringify(sanitized, null, 2) + '\n', 'utf8');
         exportLogger.info(`✓ Exported settings to ${outputPath}`);
 
         return { success: true };
@@ -301,14 +301,14 @@ async function writeSettingsJSON(botConfig, botName, outputPath) {
 async function exportBotTrades(botKey, botConfig, outputDir = './exports') {
     try {
         // Ensure output directory exists
-        await fsPromises.mkdir(outputDir, { recursive: true });
+        storage.ensureDir(outputDir);
 
         // Find log file (PM2 format: {botKey}-error.log or {botKey}.log)
         const logsDir = PATHS.LOGS_DIR;
         let logFilePath = null;
 
         try {
-            const logFiles = await fsPromises.readdir(logsDir);
+            const logFiles = storage.readdir(logsDir);
             const matchingLog = logFiles.find(f =>
                 f.includes(botKey) && f.endsWith('.log') && !f.includes('error')
             );

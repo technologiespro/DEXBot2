@@ -415,6 +415,20 @@ async function testBrowserStorage() {
     assert.throws(() => adapter.write(1, 'test'), /not supported/);
     assert.throws(() => adapter.fsync(), /not supported/);
 
+    // appendFile — creates file if missing, appends if exists
+    adapter.appendFile('/test/append.txt', 'line1\n');
+    assert.strictEqual(adapter.readFile('/test/append.txt'), 'line1\n');
+    adapter.appendFile('/test/append.txt', 'line2\n');
+    assert.strictEqual(adapter.readFile('/test/append.txt'), 'line1\nline2\n');
+
+    // appendFileAsync
+    await adapter.appendFileAsync('/test/append-async.txt', 'a\n');
+    assert.strictEqual(adapter.readFile('/test/append-async.txt'), 'a\n');
+
+    // createReadStream / createWriteStream throw in browser
+    assert.throws(() => adapter.createReadStream('/test/foo.txt'), /not supported/);
+    assert.throws(() => adapter.createWriteStream('/test/bar.txt'), /not supported/);
+
     // flush exists and is async
     assert.strictEqual(typeof adapter.flush, 'function');
     await adapter.flush(); // should not throw
@@ -588,6 +602,39 @@ async function testNodeStorage() {
             const linkTarget = adapter.readlink(linkPath);
             assert.strictEqual(linkTarget, testFile);
         }
+        // appendFile
+        const appendFile = path.join(tmpDir, 'append.log');
+        adapter.appendFile(appendFile, 'line1\n');
+        assert.strictEqual(adapter.readFile(appendFile), 'line1\n');
+        adapter.appendFile(appendFile, 'line2\n');
+        assert.strictEqual(adapter.readFile(appendFile), 'line1\nline2\n');
+
+        // appendFileAsync
+        const appendAsyncFile = path.join(tmpDir, 'append-async.log');
+        await adapter.appendFileAsync(appendAsyncFile, 'a\n');
+        assert.strictEqual(adapter.readFile(appendAsyncFile), 'a\n');
+
+        // createReadStream — read content via stream
+        const streamFile = path.join(tmpDir, 'stream-test.txt');
+        adapter.writeFile(streamFile, 'hello stream');
+        const rsContent = await new Promise<string>((resolve, reject) => {
+            const rs = adapter.createReadStream(streamFile);
+            let data = '';
+            rs.on('data', (chunk: any) => { data += chunk; });
+            rs.on('end', () => resolve(data));
+            rs.on('error', reject);
+        });
+        assert.strictEqual(rsContent, 'hello stream');
+
+        // createWriteStream — write content via stream
+        const streamOut = path.join(tmpDir, 'stream-out.txt');
+        await new Promise<void>((resolve, reject) => {
+            const ws = adapter.createWriteStream(streamOut);
+            ws.write('written data', 'utf8');
+            ws.end(resolve);
+            ws.on('error', reject);
+        });
+        assert.strictEqual(adapter.readFile(streamOut), 'written data');
     } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -624,6 +671,10 @@ async function testStorageSingleton() {
     assert.strictEqual(typeof storage.rm, 'function');
     assert.strictEqual(typeof storage.mkdtemp, 'function');
     assert.strictEqual(typeof storage.readlink, 'function');
+    assert.strictEqual(typeof storage.appendFile, 'function');
+    assert.strictEqual(typeof storage.appendFileAsync, 'function');
+    assert.strictEqual(typeof storage.createReadStream, 'function');
+    assert.strictEqual(typeof storage.createWriteStream, 'function');
 
     // setAdapter null resets to auto-detect
     setAdapter(null);

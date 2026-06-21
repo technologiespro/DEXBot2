@@ -1,8 +1,9 @@
 'use strict';
 
-const fs = require('fs');
+const { getStorage } = require('../storage');
 const { path } = require('../path_api');
 const { runtime } = require('../runtime');
+const storage = getStorage();
 const Format = require('./format');
 const LoggerState = require('./logger_state');
 const { LOGGING_CONFIG, ORDER_STATES } = require('../constants');
@@ -135,20 +136,20 @@ class Logger {
 
         try {
             const dir = path.dirname(this.logFile);
-            await fs.promises.mkdir(dir, { recursive: true });
+            storage.ensureDir(dir);
 
             const perFileLimit = Math.floor(this._maxTotalSize / (this._maxLogFiles + 1));
             if (perFileLimit > 0) {
                 try {
-                    const stat = await fs.promises.stat(this.logFile);
+                    const stat = storage.stat(this.logFile);
                     if (stat.size >= perFileLimit) {
-                        await this._rotateLogFile();
+                        this._rotateLogFile();
                     }
                 } catch (err: any) {
                 }
             }
 
-            await fs.promises.appendFile(this.logFile, plainLines.join('\n') + '\n', 'utf8');
+            await storage.appendFileAsync(this.logFile, plainLines.join('\n') + '\n', 'utf8');
         } catch (err: any) {
             const now = Date.now();
             if (now - this._lastFileErrorTime > 60000) {
@@ -169,7 +170,7 @@ class Logger {
         }
     }
 
-    async _rotateLogFile() {
+    _rotateLogFile() {
         const maxFiles = this._maxLogFiles;
         if (maxFiles <= 0) return;
 
@@ -177,15 +178,15 @@ class Logger {
             const oldPath = this.logFile + '.' + i;
             const newPath = this.logFile + '.' + (i + 1);
             try {
-                await fs.promises.access(oldPath);
-                await fs.promises.rename(oldPath, newPath);
+                storage.access(oldPath);
+                storage.rename(oldPath, newPath);
             } catch (err: any) {
             }
         }
 
         try {
-            await fs.promises.access(this.logFile);
-            await fs.promises.rename(this.logFile, this.logFile + '.1');
+            storage.access(this.logFile);
+            storage.rename(this.logFile, this.logFile + '.1');
         } catch (err: any) {
         }
     }
