@@ -237,6 +237,11 @@ function validateBotEntry(b: any, i: number, src: string): string | null {
                                 problems.push(`debtPolicy.lending[${idx}].allowedOfferIds must be an array`);
                             }
                         }
+                        if ('disallowedDealIds' in item) {
+                            if (!Array.isArray(item.disallowedDealIds)) {
+                                problems.push(`debtPolicy.lending[${idx}].disallowedDealIds must be an array`);
+                            }
+                        }
                     }
                 });
             }

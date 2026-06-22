@@ -1028,6 +1028,10 @@ class CreditRuntime {
             if (allowedOfferIds.length > 0 && deal.offerId && !allowedOfferIds.includes(String(deal.offerId))) {
                 return { allow: false, reason: `deal offer ${deal.offerId} is not allowed` };
             }
+            const disallowedDealIds = this._normalizePolicyList(policy.disallowedDealIds);
+            if (disallowedDealIds.length > 0 && deal.id && disallowedDealIds.includes(String(deal.id))) {
+                return { allow: false, reason: `deal ${deal.id} is excluded by disallowedDealIds` };
+            }
         }
 
         const dailyRate = this._calculateDailyFeeRate(offer);

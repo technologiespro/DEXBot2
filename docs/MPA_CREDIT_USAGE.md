@@ -88,7 +88,8 @@ Fields available for both `"mpa"` and `"creditOffer"` types:
 | `maxFeeRatePerDay` | `number` | No | Maximum acceptable daily fee rate. Defaults to `1/3000` (~0.033%/day). |
 | `autoReborrow` | `boolean` | No | If `true`, the bot reborrows from the same offer after repayment. |
 | `autoRepay` | `number` | No | On-chain auto-repay mode: `0` (off), `1` (full only), `2` (partial allowed). |
-| `allowedOfferIds` | `string[]` | No | Whitelist of credit offer object IDs the bot may accept. |
+| `allowedOfferIds` | `string[]` | No | Whitelist of credit offer object IDs (1.21.x) the bot may accept. |
+| `disallowedDealIds` | `string[]` | No | Denylist of credit deal object IDs (1.22.x) the bot must ignore. Deals in this list are excluded — no repay, reborrow, or auto-repay update. |
 | `renewOnly` | `boolean` | No | If `true`, the bot only reborrows existing deals — standalone credit borrows are refused. Default `false`. |
 | `minDurationSeconds` | `number` | No | Minimum acceptable offer duration in seconds. Offers with `duration_seconds` below this value are skipped. |
 
@@ -171,7 +172,7 @@ For each `type: "mpa"` lending item:
 For each `type: "creditOffer"` lending item, the runtime:
 
 - Discovers active credit deals on-chain.
-- Validates deals against the per-item policy (`maxCollateralRatio`, `maxFeeRatePerDay`, `allowedOfferIds`, etc.).
+- Validates deals against the per-item policy (`maxCollateralRatio`, `maxFeeRatePerDay`, `allowedOfferIds`, `disallowedDealIds`, etc.).
 - Gates increases on unused assigned collateral. If the collateral shortfall is at least `minCollateralIncreaseThreshold`, it accepts an additional credit deal from the cheapest acceptable offer; the selected offer's price derives the borrow amount, capped by `maxBorrowAmount`. A borrow-cap-capped increase is skipped if the actual collateral used would fall below `minCollateralIncreaseThreshold`.
 - Proactively repays deals nearing expiration (within `CREDIT_DEAL_EXPIRY_THRESHOLD_HOURS`) and reborrows when `autoReborrow` is enabled.
 - Ensures `auto_repay` on-chain matches the policy's `autoRepay` setting, updating local state after each successful broadcast.

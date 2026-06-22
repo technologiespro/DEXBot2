@@ -1100,6 +1100,7 @@ Bots can declare a `debtPolicy` block for native MPA and credit-offer workflows.
         "collateralAsset": "BTS",
         "type": "creditOffer",
         "allowedOfferIds": ["1.18.42"],
+        "disallowedDealIds": ["1.22.5", "1.22.12"],
         "maxBorrowAmount": 1000,
         "maxCollateralAmount": 25000,
         "maxFeeRatePerDay": 0.001,
@@ -1117,7 +1118,7 @@ Bots can declare a `debtPolicy` block for native MPA and credit-offer workflows.
 - No separate runtime switch — active when `debtPolicy.lending` is present, non-empty, and each item declares `collateralAsset`
 - Credit and MPA checks run from the dedicated credit watchdog interval
 - Every successful CR adjustment triggers a grid rebuild via `requestGridReset()`
-- Runtime policy enforces `maxFeeRatePerDay`, CR ceilings, and allowed assets before broadcasting
+- Runtime policy enforces `maxFeeRatePerDay`, `maxCollateralRatio`, `allowedOfferIds`, `disallowedDealIds`, and allowed assets before broadcasting
 - Full usage details live in [MPA and Credit Usage](MPA_CREDIT_USAGE.md)
 
 ---

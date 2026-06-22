@@ -423,8 +423,8 @@ function validateOpConstraints(opName: string, constraints: any): { errors: stri
 
     // credit_deal_repay
     if (opName === 'credit_deal_repay') {
-        if (constraints.allowedDealIds !== undefined && !isStringArray(constraints.allowedDealIds))
-            errors.push('allowedDealIds must be an array of strings');
+        if (constraints.disallowedDealIds !== undefined && !isStringArray(constraints.disallowedDealIds))
+            errors.push('disallowedDealIds must be an array of strings');
         if (constraints.maxRepayAmount !== undefined && !isPositiveInt(constraints.maxRepayAmount))
             errors.push('maxRepayAmount must be a positive integer');
         if (constraints.maxCreditFee !== undefined && !isPositiveInt(constraints.maxCreditFee))
@@ -433,8 +433,8 @@ function validateOpConstraints(opName: string, constraints: any): { errors: stri
 
     // credit_deal_update
     if (opName === 'credit_deal_update') {
-        if (constraints.allowedDealIds !== undefined && !isStringArray(constraints.allowedDealIds))
-            errors.push('allowedDealIds must be an array of strings');
+        if (constraints.disallowedDealIds !== undefined && !isStringArray(constraints.disallowedDealIds))
+            errors.push('disallowedDealIds must be an array of strings');
         if (constraints.allowAutoRepay !== undefined && typeof constraints.allowAutoRepay !== 'boolean')
             errors.push('allowAutoRepay must be a boolean');
     }
@@ -1021,12 +1021,12 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
     }
 
     if (opName === 'credit_deal_repay') {
-        if (Array.isArray(constraints.allowedDealIds) && constraints.allowedDealIds.length > 0) {
+        if (Array.isArray(constraints.disallowedDealIds) && constraints.disallowedDealIds.length > 0) {
             const dealId = d.deal_id;
-            if (dealId && !constraints.allowedDealIds.includes(String(dealId))) {
+            if (dealId && constraints.disallowedDealIds.includes(String(dealId))) {
                 return {
                     allow: false,
-                    reason: `credit_deal_repay: deal "${dealId}" not in allowedDealIds`,
+                    reason: `credit_deal_repay: deal "${dealId}" excluded by disallowedDealIds`,
                     policyId: 'opParams',
                 };
             }
@@ -1072,12 +1072,12 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
     }
 
     if (opName === 'credit_deal_update') {
-        if (Array.isArray(constraints.allowedDealIds) && constraints.allowedDealIds.length > 0) {
+        if (Array.isArray(constraints.disallowedDealIds) && constraints.disallowedDealIds.length > 0) {
             const dealId = d.deal_id;
-            if (dealId && !constraints.allowedDealIds.includes(String(dealId))) {
+            if (dealId && constraints.disallowedDealIds.includes(String(dealId))) {
                 return {
                     allow: false,
-                    reason: `credit_deal_update: deal "${dealId}" not in allowedDealIds`,
+                    reason: `credit_deal_update: deal "${dealId}" excluded by disallowedDealIds`,
                     policyId: 'opParams',
                 };
             }

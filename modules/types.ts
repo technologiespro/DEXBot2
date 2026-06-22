@@ -974,6 +974,7 @@ export interface CreditOfferLendingEntry extends LendingEntryBase {
   autoReborrow?: boolean;
   autoRepay?: number;
   allowedOfferIds?: string[];
+  disallowedDealIds?: string[];
   renewOnly?: boolean;
   minDurationSeconds?: number;
 }

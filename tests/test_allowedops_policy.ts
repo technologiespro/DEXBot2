@@ -639,7 +639,7 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
     const creditRepayPolicy = {
         allowedOps: {
             credit_deal_repay: {
-                allowedDealIds: ['1.19.77'],
+                disallowedDealIds: ['1.19.77'],
                 maxRepayAmount: 800,
                 maxCreditFee: 50,
             },
@@ -663,15 +663,16 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
         ],
     };
     const creditRepayResult = await policy.evaluatePolicy(creditRepayPolicy, creditRepayContext);
-    assert.strictEqual(creditRepayResult.allow, true, `Expected allow, got deny: ${creditRepayResult.reason}`);
-    console.log('  ✓ credit_deal_repay within limits allowed');
+    assert.strictEqual(creditRepayResult.allow, false, `Expected deny for excluded deal, got: ${creditRepayResult.reason}`);
+    assert(creditRepayResult.reason.includes('excluded by disallowedDealIds'), `Expected reason about disallowedDealIds, got: ${creditRepayResult.reason}`);
+    console.log('  ✓ credit_deal_repay excluded deal denied');
 
     // Test 14: credit_deal_update parameter validation
     console.log('[Test 18] Evaluate allowedOps - credit_deal_update parameter validation');
     const creditUpdatePolicy = {
         allowedOps: {
             credit_deal_update: {
-                allowedDealIds: ['1.19.77'],
+                disallowedDealIds: ['1.19.77'],
                 allowAutoRepay: false,
             },
         },
@@ -693,11 +694,41 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
         ],
     };
     const creditUpdateResult = await policy.evaluatePolicy(creditUpdatePolicy, creditUpdateContext);
-    assert.strictEqual(creditUpdateResult.allow, false, 'Expected deny for disallowed auto_repay update');
-    assert(creditUpdateResult.reason.includes('auto_repay'));
+    assert.strictEqual(creditUpdateResult.allow, false, `Expected deny for excluded deal, got: ${creditUpdateResult.reason}`);
+    assert(creditUpdateResult.reason.includes('excluded by disallowedDealIds'), `Expected reason about disallowedDealIds, got: ${creditUpdateResult.reason}`);
+    console.log('  ✓ credit_deal_update excluded deal denied');
+
+    // Test 18b: credit_deal_update auto_repay denied (non-excluded deal)
+    console.log('[Test 18b] Evaluate allowedOps - credit_deal_update auto_repay restriction');
+    const creditUpdateAutoRepayPolicy = {
+        allowedOps: {
+            credit_deal_update: {
+                disallowedDealIds: ['1.19.77'],
+                allowAutoRepay: false,
+            },
+        },
+        maxOpsPerBatch: 20,
+    };
+    const creditUpdateAutoRepayContext = {
+        accountName: 'test',
+        requestType: 'sign',
+        operations: [
+            {
+                op_name: 'credit_deal_update',
+                op_data: {
+                    account: '1.2.100',
+                    deal_id: '1.19.99',
+                    auto_repay: 1,
+                },
+            },
+        ],
+    };
+    const creditUpdateAutoRepayResult = await policy.evaluatePolicy(creditUpdateAutoRepayPolicy, creditUpdateAutoRepayContext);
+    assert.strictEqual(creditUpdateAutoRepayResult.allow, false, `Expected deny for disallowed auto_repay, got: ${creditUpdateAutoRepayResult.reason}`);
+    assert(creditUpdateAutoRepayResult.reason.includes('auto_repay'), `Expected reason about auto_repay, got: ${creditUpdateAutoRepayResult.reason}`);
     console.log('  ✓ credit_deal_update auto_repay change denied');
 
-    // Test 14: maxOpsPerBatch limit enforcement
+    // Test 19: maxOpsPerBatch limit enforcement
     console.log('[Test 19] Evaluate allowedOps - maxOpsPerBatch limit enforcement');
     const batchContext = {
         accountName: 'test',
