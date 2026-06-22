@@ -1028,10 +1028,6 @@ class CreditRuntime {
             if (allowedOfferIds.length > 0 && deal.offerId && !allowedOfferIds.includes(String(deal.offerId))) {
                 return { allow: false, reason: `deal offer ${deal.offerId} is not allowed` };
             }
-            const disallowedDealIds = this._normalizePolicyList(policy.disallowedDealIds);
-            if (disallowedDealIds.length > 0 && deal.id && disallowedDealIds.includes(String(deal.id))) {
-                return { allow: false, reason: `deal ${deal.id} is excluded by disallowedDealIds` };
-            }
         }
 
         const dailyRate = this._calculateDailyFeeRate(offer);
@@ -1880,7 +1876,13 @@ class CreditRuntime {
         const repayOp = await this.buildCreditDealRepayOperation(dealSummary, repayAmount);
         const operations: any[] = [repayOp];
         const reborrowPolicy = options.specificPolicy || await this._findLendingItemForAsset(dealSummary.debtAssetId, 'creditOffer') || {};
-        const shouldAutoReborrow = options.autoReborrow !== false && !!reborrowPolicy.autoReborrow;
+        let shouldAutoReborrow = options.autoReborrow !== false && !!reborrowPolicy.autoReborrow;
+        if (shouldAutoReborrow) {
+            const disallowedDealIds = this._normalizePolicyList(reborrowPolicy.disallowedDealIds);
+            if (disallowedDealIds.length > 0 && dealSummary.id && disallowedDealIds.includes(String(dealSummary.id))) {
+                shouldAutoReborrow = false;
+            }
+        }
         let deferredReborrowRequest = null;
         let inlineReborrowPlanned = false;
 
@@ -2386,6 +2388,14 @@ class CreditRuntime {
                 if (!requestPolicy || !requestPolicy.autoReborrow) {
                     this.warn(`credit runtime: dropping pending reborrow for offer ${request.offerId}; autoReborrow disabled or policy missing`);
                     continue;
+                }
+
+                if (request.sourceDealId && requestPolicy) {
+                    const disallowedDealIds = this._normalizePolicyList(requestPolicy.disallowedDealIds);
+                    if (disallowedDealIds.length > 0 && disallowedDealIds.includes(String(request.sourceDealId))) {
+                        this.warn(`credit runtime: dropping pending reborrow for deal ${request.sourceDealId} — deal excluded by disallowedDealIds`);
+                        continue;
+                    }
                 }
 
                 if (request.sourceDealId && activeDealIds.has(String(request.sourceDealId))) {

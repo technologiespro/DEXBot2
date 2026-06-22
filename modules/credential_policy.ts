@@ -1021,16 +1021,6 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
     }
 
     if (opName === 'credit_deal_repay') {
-        if (Array.isArray(constraints.disallowedDealIds) && constraints.disallowedDealIds.length > 0) {
-            const dealId = d.deal_id;
-            if (dealId && constraints.disallowedDealIds.includes(String(dealId))) {
-                return {
-                    allow: false,
-                    reason: `credit_deal_repay: deal "${dealId}" excluded by disallowedDealIds`,
-                    policyId: 'opParams',
-                };
-            }
-        }
         if (Array.isArray(constraints.allowedDebtAssets) && constraints.allowedDebtAssets.length > 0) {
             const assetId = d.repay_amount && d.repay_amount.asset_id;
             const resolved = await resolveConfiguredAssetRefs(constraints.allowedDebtAssets, 'allowedDebtAssets');
@@ -1072,16 +1062,6 @@ async function evaluateOpConstraints(opName: string, opData: any, constraints: a
     }
 
     if (opName === 'credit_deal_update') {
-        if (Array.isArray(constraints.disallowedDealIds) && constraints.disallowedDealIds.length > 0) {
-            const dealId = d.deal_id;
-            if (dealId && constraints.disallowedDealIds.includes(String(dealId))) {
-                return {
-                    allow: false,
-                    reason: `credit_deal_update: deal "${dealId}" excluded by disallowedDealIds`,
-                    policyId: 'opParams',
-                };
-            }
-        }
         if (constraints.allowAutoRepay === false && d.auto_repay) {
             return {
                 allow: false,

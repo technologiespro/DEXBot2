@@ -663,9 +663,8 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
         ],
     };
     const creditRepayResult = await policy.evaluatePolicy(creditRepayPolicy, creditRepayContext);
-    assert.strictEqual(creditRepayResult.allow, false, `Expected deny for excluded deal, got: ${creditRepayResult.reason}`);
-    assert(creditRepayResult.reason.includes('excluded by disallowedDealIds'), `Expected reason about disallowedDealIds, got: ${creditRepayResult.reason}`);
-    console.log('  ✓ credit_deal_repay excluded deal denied');
+    assert.strictEqual(creditRepayResult.allow, true, `Expected allow for excluded deal repay, got: ${creditRepayResult.reason}`);
+    console.log('  ✓ credit_deal_repay excluded deal allowed (disallowedDealIds no longer blocks repay)');
 
     // Test 14: credit_deal_update parameter validation
     console.log('[Test 18] Evaluate allowedOps - credit_deal_update parameter validation');
@@ -694,9 +693,9 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
         ],
     };
     const creditUpdateResult = await policy.evaluatePolicy(creditUpdatePolicy, creditUpdateContext);
-    assert.strictEqual(creditUpdateResult.allow, false, `Expected deny for excluded deal, got: ${creditUpdateResult.reason}`);
-    assert(creditUpdateResult.reason.includes('excluded by disallowedDealIds'), `Expected reason about disallowedDealIds, got: ${creditUpdateResult.reason}`);
-    console.log('  ✓ credit_deal_update excluded deal denied');
+    assert.strictEqual(creditUpdateResult.allow, false, `Expected deny for excluded deal (allowAutoRepay), got: ${creditUpdateResult.reason}`);
+    assert(creditUpdateResult.reason.includes('auto_repay'), `Expected reason about auto_repay, got: ${creditUpdateResult.reason}`);
+    console.log('  ✓ credit_deal_update excluded deal denied by allowAutoRepay');
 
     // Test 18b: credit_deal_update auto_repay denied (non-excluded deal)
     console.log('[Test 18b] Evaluate allowedOps - credit_deal_update auto_repay restriction');
