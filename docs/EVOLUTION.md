@@ -56,9 +56,13 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 
 **Jun 12–16**: First stable release v1.0.0 — profile validation, logging overhaul, AMA delta threshold, on-chain authority resolution, credential hardening, centralization of project-root/fs/math/magic-number utilities, error-path hardening. Post-release: docker context, root bypass, keep-alive recovery, phantom LP cleanup, chain client reconnect, headless unlock mode, Credit/MPA Claw bridge, credit runtime fixes, test auto-discovery. New: shared-account fund registry with cross-bot invariants, credit/MPA collateral proportional allocation, settings merge consolidation, uPlot vendored as local library, node config editor, audit log cleanup.
 
-**Jun 18–19**: Browser compatibility — six portable abstractions (`StorageAdapter`, `CryptoProvider`, `Config`, `PATHS`, `ProcessDiscovery`, `KeyStore`), `env.ts` environment detection, `Runtime` singleton, `path_api.ts`, pure-JS crypto fallbacks (`pure_scrypt`, `pure_ripemd160`, `pure_secp256k1`), `ecc.browser.ts` (pure-JS ECC), `ecc_selector.ts`, browser `StorageAdapter` (in-memory Map), lazy `require('ws')`/`require('pm2')`, browser bundle verification script, comprehensive 1288-line browser abstraction test suite. All 140+ existing files refactored to route through portable abstractions — browser-safe surface complete.
+**Jun 17**: Fund registry fixes (canonical bot keys in whitelist, `this` context restoration in collapsed runtime), DEXBot comparison doc refresh.
+
+**Jun 18–19**: Browser compatibility — six portable abstractions (`StorageAdapter`, `CryptoProvider`, `Config`, `PATHS`, `ProcessDiscovery`, `KeyStore`), `env.ts` environment detection, `Runtime` singleton, `path_api.ts`, pure-JS crypto fallbacks (`pure_scrypt`, `pure_ripemd160`, `pure_secp256k1`), `ecc.browser.ts` (pure-JS ECC), `ecc_selector.ts`, browser `StorageAdapter` (in-memory Map), lazy `require('ws')`/`require('pm2')`, browser bundle verification script, comprehensive 1288-line browser abstraction test suite. All 140+ existing files refactored to route through portable abstractions — browser-safe surface complete. Remaining browser-compat gaps closed.
 
 **Jun 20–21**: Credit runtime hardening (multi-asset collateral `assetId` wrapping, stale pending reborrow `renewOnly` bypass fix). Full I/O pipeline centralization through `StorageAdapter` with 15 newly browser-safe modules and 28-check bundle verification. Runtime path consolidation and shared `sleep()`/`writeJsonFileAtomic` utilities across 21 files. Final browser-compat gaps closed — `base58check.ts` Buffer-free, `ecc.ts` crypto routing, `paths.ts` env detection, serial/signing pipeline marked node-only.
+
+**Jun 22**: Browser-safe surface enforcement completed with lazy require wrappers and storage adapter path fix. Credit runtime extended with `disallowedDealIds` filter for 1.22.x BitShares compatibility and `ratio`→`outputWeight` rename with backward-compat shim. Doc sweep across 15 files.
 
 ---
 
@@ -149,8 +153,8 @@ BUILD_DIR centralization, source-mode runtime, HMAC recovery, error hardening, z
 ### v0.7.17 → v0.7.18 (8 commits)
 Removed all 89 @ts-nocheck directives, added type annotations across 67 files. Race-condition batch 1 (atomic JSON writes, in-flight flags, snapshot persist). Across-the-board timeout hardening and leak fixes. DRY refactoring extracting shared utilities (~460 lines removed).
 
-### v0.7.18 → v1.0.0 (81 commits)
-First stable release. Profile validation, logging overhaul, AMA delta threshold, on-chain authority resolution, credential hardening (8 finding groups), centralization of project-root/fs/math/magic-number utilities, error-path hardening, doc sweep. Post-release: headless unlock mode, Credit/MPA Claw bridge, credit runtime fixes, credential daemon hardening, test auto-discovery, settings merge consolidation, shared-account fund registry, credit/MPA collateral proportional allocation, vendored uPlot library, node config editor, analyze-git Chart.js→uPlot migration. Browser compatibility: six portable abstractions (`StorageAdapter`, `CryptoProvider`, `Config`, `PATHS`, `ProcessDiscovery`, `KeyStore`), `env.ts`, `Runtime` singleton, `path_api.ts`, pure-JS crypto fallbacks, `ecc.browser.ts`, `ecc_selector.ts`, lazy `ws`/`pm2` loading, browser bundle verification, 1288-line test suite, 15 newly browser-safe modules, 28-check dist-level verification. Credit runtime multi-asset collateral fixes and stale reborrow guard. I/O pipeline centralization through StorageAdapter. Final browser-compat gaps closed.
+### v0.7.18 → v1.0.0 (103 commits)
+First stable release. Profile validation, logging overhaul, AMA delta threshold, on-chain authority resolution, credential hardening (8 finding groups), centralization of project-root/fs/math/magic-number utilities, error-path hardening, doc sweep. Post-release: headless unlock mode, Credit/MPA Claw bridge, credit runtime fixes, credential daemon hardening, test auto-discovery, settings merge consolidation, shared-account fund registry, credit/MPA collateral proportional allocation, vendored uPlot library, node config editor, analyze-git Chart.js→uPlot migration, fund registry whitelist fixes. Browser compatibility: six portable abstractions (`StorageAdapter`, `CryptoProvider`, `Config`, `PATHS`, `ProcessDiscovery`, `KeyStore`), `env.ts`, `Runtime` singleton, `path_api.ts`, pure-JS crypto fallbacks, `ecc.browser.ts`, `ecc_selector.ts`, lazy `ws`/`pm2` loading, browser bundle verification, 1288-line test suite, 15 newly browser-safe modules, 28-check dist-level verification. Credit runtime multi-asset collateral fixes and stale reborrow guard. I/O pipeline centralization through StorageAdapter. Final browser-compat gaps closed. Browser-safe enforcement, storage adapter path fix, `disallowedDealIds` filter, `outputWeight` rename, doc sweep.
 
 ---
 
@@ -200,7 +204,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: June 21, 2026
-**Total Commits**: 1626
-**Date Range**: December 2, 2025 - June 21, 2026 (ongoing)
+**Last Updated**: June 22, 2026
+**Total Commits**: 1648
+**Date Range**: December 2, 2025 - June 22, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

@@ -961,7 +961,7 @@ graph TB
     SKIP --> DONE
 ```
 
-**Key Improvement (v0.7)**: Force reload mechanism now ensures fresh persisted grid data before comparison, preventing stale cache from causing false divergence detections.
+**Key Improvement (v1.0.0)**: Force reload mechanism now ensures fresh persisted grid data before comparison, preventing stale cache from causing false divergence detections.
 
 ---
 
@@ -1305,7 +1305,7 @@ price_candles -> ATR -> weight_variance (symmetric shift)
 
 ### Integration with Bot Runtime
 
-1. Adapter persists `profiles/orders/<botKey>.dynamicgrid.tson` before any reset trigger.
+1. Adapter persists `profiles/orders/<botKey>.dynamicgrid.json` before any reset trigger.
 2. Adapter writes `profiles/recalculate.<botKey>.trigger` for bootstrap, AMA-center delta, or whitelisted AMA-slope range reset.
 3. `dexbot_maintenance_runtime.ts` consumes the trigger under `_fillProcessingLock`, with idle/dust deferral when needed.
 4. Bot runtime reads accepted center, range-scaling fields, and dynamic weights from the dynamic-grid snapshot during reset and selected maintenance paths.

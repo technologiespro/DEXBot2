@@ -81,6 +81,12 @@ This release marks the project's first stable milestone. Includes 54 commits on 
 - **Feat**: vendor uPlot v1.6.32 as internal library under `analysis/uplot/` — replaces CDN-based uPlot loading in all 7 chart generators with local files, removing a runtime network dependency for offline analysis (`62efc53`).
 - **Fix**: migrate `analyze-git` charts from Chart.js to uPlot — replaces CDN-dependent Chart.js with vendored `analysis/uplot/` for all 5 charts (bar chart, daily, cumulative, net core, net repo). Implements horizontal stacked bars via `uPlot.paths.bars()` with `stack()` + `bands`, swapped orientation (`x.ori=1`, `dir=-1`), dark theme styling, wheel-zoom support, and responsive resize (`b8b7b5f`).
 
+### 2026-06-17
+
+- **Fix**: use canonical ID-based bot keys in whitelist lookup and missing normalization paths — whitelist generation now uses the full `{name}-{id}` bot key format for all registry operations, preventing stale entries when bot names are reused (`d7a0085`).
+- **Fix**: restore `this` context in de-this-ified method fallback calls — 3 methods in the collapsed-runtime bridge lost their receiver after refactoring; explicit `.bind(this)` restores correct dispatch (`875dfe4`).
+- **Docs**: refresh DEXBot comparison — fund registry, authority resolution, CLI helpers, scoring (`6354b40`).
+
 ### 2026-06-18
 
 - **Feat**: six portable abstractions for browser-portable core — `StorageAdapter` (in-memory Map for browser, `fs.*Sync` for Node via lazy adapter), `CryptoProvider` (Web Crypto vs Node crypto lazily selected), `Config` (load-time `process.env` snapshot), `PATHS` (guarded path resolution without `__dirname`), `ProcessDiscovery` (abstracted `/proc/` reads), and `KeyStore` portal interface (`03506ea`).
@@ -105,6 +111,8 @@ This release marks the project's first stable milestone. Includes 54 commits on 
 - **Fix**: hoist `DEXBOT_SKIP_PROFILE_VALIDATION` guard above `module_cache_stub` require in 5 startup tests to prevent premature profile validation at import time (`51c227c`).
 - **Fix**: correct `PROJECT_ROOT` resolution for dist builds and centralise scripts-root arithmetic — ensures `resolveProjectRoot()` returns the correct path when running from compiled `dist/` output (`0ad6ba1`).
 - **Test**: comprehensive browser abstraction tests — 1288-line `tests/test_browser_abstractions.ts` covering all 19 abstraction sections: `env.ts`, `config.ts`, `runtime.ts`, `paths.ts`, `path_api.ts`, `process_discovery.ts`, `storage/*`, `crypto/*`, `ecc_selector.ts`, `ecc.browser.ts`, `base58check.ts`, `transport.ts`, `sync.ts` (`607b6ae`).
+- **Fix**: close remaining browser-compat gaps — lazy `require('account_orders')`, guarded grid `require()` calls, `env.hasProcess` dedup in utility modules (`f5dd9c9`).
+- **Docs**: update CHANGELOG and EVOLUTION.md for browser compat commits (v1.0.0) (`1dea6e3`).
 
 ### 2026-06-20
 
@@ -116,6 +124,17 @@ This release marks the project's first stable milestone. Includes 54 commits on 
 - **Feat**: centralize read/write pipeline through `StorageAdapter` — adds `appendFile`/`appendFileAsync` (sync+async append) and `createReadStream`/`createWriteStream` (Node stream passthrough) to the portable abstraction; migrates `order/logger.ts` and `order/export.ts` from direct `require('fs')` to `getStorage()`; reclassifies 15 modules from Node-only to browser-safe (`bots_file_lock`, `general_settings`, `bot_settings`, `node_health_cache`, `order/index`, `order/manager`, `order/working_grid`, `order/sync_engine`, `order/strategy`, `order/accounting`, `order/grid`, `account_orders`, `validate_profiles`); removes 4 stale `package.json` browser entries that shadowed now-safe modules; expands bundle verification to 28 checks (source + dist level) (`70a1c58`).
 - **Refactor**: centralize runtime paths and consolidate 11 inline `setTimeout` promises into shared `sleep()` — banner-annotates all node-only entry points; migrates `bot.ts` `process.*` to `runtime`/`Config`; consolidates `writeJsonFileAtomic` (Claw `dexbot_profiles.ts` delegates to shared `bots_file_lock.ts`); normalizes import style in 7 mixed-import files (`import → require`) (`b5f210f`).
 - **Fix**: close 3 browser-compat gaps — `base58check.ts` replaces all `Buffer.*` calls with `Uint8Array` equivalents (TextEncoder, manual concat), `ecc.ts` removes direct `require('crypto')` in favor of guarded `crypto/sync.ts`, `paths.ts` replaces inline `typeof __dirname` with `hasProcess()`; marks 5 serial/signing pipeline files node-only in `package.json` (`bitshares-native/crypto/ecc.js`, `serial/serializer.js`, `serial/types.js`, `signing_client.js`, `tx/builder.js`) (`35ea2f8`).
+- **Docs**: sweep stale references and fix doc accuracy across 15 files (`2420ae4`).
+- **Docs**: reclassify `modules/order/logger.ts` as browser-safe in AGENTS.md (`27574a6`).
+- **Docs**: update AGENTS.md, CHANGELOG.md, EVOLUTION.md for Jun 20–21 changes (`f6ec218`).
+
+### 2026-06-22
+
+- **Refactor**: complete browser-safe surface enforcement with lazy require wrappers — wraps remaining direct `require()` calls in guard functions so bundlers can tree-shake Node-only modules at the call site (`d5af4d5`).
+- **Fix**: resolve `storage/index.ts` `_require('./node_adapter')` resolving from wrong directory — uses full relative path from `modules/` root instead of relative to storage subdir (`4db0beb`).
+- **Feat**: wire `disallowedDealIds` filter for credit deals (1.22.x) — `_addCreditOffer` and `createDeal` accept a `disallowedDealIds` set to exclude specific active deals from new credit offers (`c25cc4d`).
+- **Feat**: rename lending item `ratio` to `outputWeight` with backward-compat shim — `outputWeight` is the canonical name; old `ratio` key still accepted with a deprecation warning (`4facec6`).
+- **Fix**: narrow `disallowedDealIds` to reborrow-only exclusion — the filter now only blocks reborrows from excluded deals, not all matching-amount offers (`aa68e6c`).
 
 ## [0.7.18] - 2026-06-11 - @ts-nocheck Removal, Type Annotations, Race-Condition Batch 1 & DRY Refactoring
 
