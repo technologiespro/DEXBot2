@@ -777,7 +777,7 @@ class CreditRuntime {
             let groupHasNoUsablePrice = false;
             const weightEntries = await Promise.all(
                 items.map(async (item) => {
-                    const ratio = item.ratio ?? 1;
+                    const ratio = item.outputWeight ?? item.ratio ?? 1;
                     const resolvedAsset = await this._resolveAsset(item.asset);
                     const assetId = resolvedAsset?.id ? String(resolvedAsset.id) : null;
 

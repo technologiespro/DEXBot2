@@ -116,7 +116,7 @@ const validCreditOffer = {
                 asset: 'USD',
                     collateralAsset: 'BTS',
                 type: 'creditOffer',
-                ratio: 1,
+                outputWeight: 1,
                 maxBorrowAmount: 1000,
                 maxCollateralAmount: '25%',
                 maxFeeRatePerDay: 0.001,
@@ -280,7 +280,7 @@ const validMpa = {
                 asset: 'USD',
                     collateralAsset: 'BTS',
                 type: 'mpa',
-                ratio: 1,
+                outputWeight: 1,
                 maxBorrowAmount: 1000,
                 maxCollateralAmount: 5000,
                 minCollateralRatio: 2.0,
@@ -468,8 +468,8 @@ assert(
     'validateBotEntry should reject invalid lending type'
 );
 
-// Test: negative ratio is rejected
-const negativeRatio = {
+        // Test: negative outputWeight is rejected
+const negativeOutputWeight = {
     name: 'M',
     assetA: 'BTS',
     assetB: 'USD',
@@ -478,14 +478,138 @@ const negativeRatio = {
     debtPolicy: {
         lending: [
             { asset: 'USD',
-                    collateralAsset: 'BTS', type: 'mpa', ratio: -1, maxCollateralRatio: 2.0 },
+                    collateralAsset: 'BTS', type: 'mpa', outputWeight: -1, maxCollateralRatio: 2.0 },
         ],
     },
 };
 
 assert(
-    validateBotEntry(negativeRatio, 0, 'test').includes('ratio'),
-    'validateBotEntry should reject negative ratio'
+    validateBotEntry(negativeOutputWeight, 0, 'test').includes('outputWeight'),
+    'validateBotEntry should reject negative outputWeight'
+);
+
+// Test: deprecated ratio alone is accepted
+const deprecatedRatioAlone = {
+    name: 'N2',
+    assetA: 'BTS',
+    assetB: 'USD',
+    activeOrders: { sell: 20, buy: 20 },
+    botFunds: { sell: '100%', buy: '100%' },
+    debtPolicy: {
+        lending: [
+            { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'creditOffer', ratio: 2, maxCollateralRatio: 2.5 },
+        ],
+    },
+};
+
+assert.strictEqual(
+    validateBotEntry(deprecatedRatioAlone, 0, 'test'),
+    null,
+    'validateBotEntry should accept deprecated ratio alone'
+);
+
+// Test: both ratio and outputWeight (same value) is accepted with deprecation
+const deprecationSameValue = {
+    name: 'N3',
+    assetA: 'BTS',
+    assetB: 'USD',
+    activeOrders: { sell: 20, buy: 20 },
+    botFunds: { sell: '100%', buy: '100%' },
+    debtPolicy: {
+        lending: [
+            { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'creditOffer', ratio: 1, outputWeight: 1, maxCollateralRatio: 2.5 },
+        ],
+    },
+};
+
+assert.strictEqual(
+    validateBotEntry(deprecationSameValue, 0, 'test'),
+    null,
+    'validateBotEntry should accept both ratio and outputWeight (same value)'
+);
+
+// Test: conflicting ratio and outputWeight is rejected
+const deprecationConflict = {
+    name: 'N4',
+    assetA: 'BTS',
+    assetB: 'USD',
+    activeOrders: { sell: 20, buy: 20 },
+    botFunds: { sell: '100%', buy: '100%' },
+    debtPolicy: {
+        lending: [
+            { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'creditOffer', ratio: 1, outputWeight: 3, maxCollateralRatio: 2.5 },
+        ],
+    },
+};
+
+assert(
+    validateBotEntry(deprecationConflict, 0, 'test').includes('conflicting'),
+    'validateBotEntry should reject conflicting ratio and outputWeight'
+);
+
+// Test: deprecated negative ratio is rejected
+const deprecatedNegativeRatio = {
+    name: 'N5',
+    assetA: 'BTS',
+    assetB: 'USD',
+    activeOrders: { sell: 20, buy: 20 },
+    botFunds: { sell: '100%', buy: '100%' },
+    debtPolicy: {
+        lending: [
+            { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'mpa', ratio: -5, maxCollateralRatio: 2.0 },
+        ],
+    },
+};
+
+assert(
+    validateBotEntry(deprecatedNegativeRatio, 0, 'test').includes('ratio must be a non-negative'),
+    'validateBotEntry should reject deprecated negative ratio'
+);
+
+// Test: ratio: 0 is accepted (non-negative includes zero)
+const deprecatedZeroRatio = {
+    name: 'N6',
+    assetA: 'BTS',
+    assetB: 'USD',
+    activeOrders: { sell: 20, buy: 20 },
+    botFunds: { sell: '100%', buy: '100%' },
+    debtPolicy: {
+        lending: [
+            { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'creditOffer', ratio: 0, maxCollateralRatio: 2.5 },
+        ],
+    },
+};
+
+assert.strictEqual(
+    validateBotEntry(deprecatedZeroRatio, 0, 'test'),
+    null,
+    'validateBotEntry should accept deprecated ratio: 0 (non-negative)'
+);
+
+// Test: negative ratio + valid outputWeight with different value reports conflict (not negative-value)
+const negativeRatioWithValidOutputWeight = {
+    name: 'N7',
+    assetA: 'BTS',
+    assetB: 'USD',
+    activeOrders: { sell: 20, buy: 20 },
+    botFunds: { sell: '100%', buy: '100%' },
+    debtPolicy: {
+        lending: [
+            { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'creditOffer', ratio: -1, outputWeight: 1, maxCollateralRatio: 2.5 },
+        ],
+    },
+};
+
+const n7Result = validateBotEntry(negativeRatioWithValidOutputWeight, 0, 'test');
+assert(
+    n7Result !== null && n7Result.includes('conflicting'),
+    'validateBotEntry should reject negative ratio + different valid outputWeight as conflict'
 );
 
 // Test: global maxCollateralAmount percentage is accepted

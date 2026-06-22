@@ -22,7 +22,7 @@ Add `debtPolicy` to a bot entry in `profiles/bots.json`:
         "asset": "HONEST.USD",
         "collateralAsset": "BTS",
         "type": "mpa",
-        "ratio": 1,
+        "outputWeight": 1,
         "maxBorrowAmount": 1000,
         "maxCollateralAmount": 5000,
         "minCollateralRatio": 2.0,
@@ -33,7 +33,7 @@ Add `debtPolicy` to a bot entry in `profiles/bots.json`:
         "asset": "HONEST.CNY",
         "collateralAsset": "BTS",
         "type": "creditOffer",
-        "ratio": 1,
+        "outputWeight": 1,
         "maxBorrowAmount": 1000,
         "maxCollateralRatio": 2.5,
         "maxFeeRatePerDay": 0.05,
@@ -60,7 +60,6 @@ Every item in `lending` must have:
 | `asset` | `string` | Yes | Debt asset symbol or ID (e.g. `"HONEST.USD"`). |
 | `collateralAsset` | `string` | Yes | Collateral asset (e.g. `"BTS"`). Multiple items may share the same collateral asset. |
 | `type` | `string` | Yes | `"mpa"` (BitShares MPA call order) or `"creditOffer"` (credit offer deal). |
-| `ratio` | `number` | No | Output weight for this asset. Defaults to `1`. See **Collateral Distribution** below. |
 
 #### Shared Optional Fields
 
@@ -68,6 +67,7 @@ Fields available for both `"mpa"` and `"creditOffer"` types:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `outputWeight` | `number` | No | Output weight for this asset. Controls the proportion of debt value across lending items (not collateral). Defaults to `1`. See **Collateral Distribution** below. |
 | `maxBorrowAmount` | `number` | No | **Fixed** total debt ceiling. Must be a positive number (not a percentage). |
 | `maxCollateralAmount` | `number \| percentage string` | No | Total collateral ceiling. Use a number for an absolute collateral amount, e.g. `5000`, or a percentage string of total available collateral, e.g. `"80%"`. |
 | `minCollateralIncreaseThreshold` | `number \| percentage string` | No | Minimum unused collateral allocation before increasing debt. Use a number for an absolute collateral amount, e.g. `25`, or a percentage string of assigned collateral budget, e.g. `"5%"`. `0` means no minimum. |
@@ -112,29 +112,29 @@ There is no separate enable switch. If `debtPolicy.lending` is present, non-empt
 
 ## Collateral Distribution
 
-The runtime calculates required collateral for each lending item **backwards from the desired debt output ratio**. The `ratio` field controls the proportion of debt value (not collateral) each item receives.
+The runtime calculates required collateral for each lending item **backwards from the desired debt output ratio**. The `outputWeight` field controls the proportion of debt value (not collateral) each item receives.
 
 ### Formulas
 
 ```
-MPA weight_i    = ratio_i * feedPrice_i * targetCR_i
-Credit weight_i = (ratio_i * maxCR_i) / conversionRate_i
+MPA weight_i    = outputWeight_i * feedPrice_i * targetCR_i
+Credit weight_i = (outputWeight_i * maxCR_i) / conversionRate_i
 C_total         = min(availableCollateral, globalMaxCollateral)
 C_i             = C_total * weight_i / sum(all weights)
 ```
 
 - **MPA**: `feedPrice_i` is the current settlement feed price (collateral per debt asset), discovered from the chain and cached per position.
 - **Credit**: `conversionRate_i` is the offer's `acceptable_collateral` price (debt asset per collateral unit), discovered from existing deals or `allowedOfferIds`.
-- **Fallback**: If the price cannot be discovered, `weight = ratio * targetCR` and a warning is logged.
-- `ratio` is the user's output proportion. Equal ratios produce **equal economic debt value** across all lending items, regardless of price or CR differences.
+- **Fallback**: If the price cannot be discovered, `weight = outputWeight * targetCR` and a warning is logged.
+- `outputWeight` is the user's output proportion. Equal weights produce **equal economic debt value** across all lending items, regardless of price or CR differences.
 
 ### Examples
 
-**Two assets, equal ratio** — collateral split 50:50.
+**Two assets, equal weight** — collateral split 50:50.
 
 **Two assets, 80% output on USD** — USD receives a proportionally smaller share of the configured collateral pool, CNY receives the remaining larger share.
 
-**Three assets, equal ratio** — collateral split 1/3 : 1/3 : 1/3.
+**Three assets, equal weight** — collateral split 1/3 : 1/3 : 1/3.
 
 ## Runtime Timing
 
