@@ -1293,7 +1293,7 @@ function scheduleMaintenanceAfterIdle(ctx, context, options = {}) {
     // fillLockAlreadyHeld=true so the deferred path can't deadlock against
     // a lock the caller no longer owns.
     const timerOptions = {
-        ...options,
+        ...(options || {}),
         fillLockAlreadyHeld: false,
     };
 
