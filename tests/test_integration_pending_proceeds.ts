@@ -51,7 +51,7 @@ async function testCompleteLifecycle() {
         { id: 'buy-50', type: 'buy', price: 0.9, size: 10, state: 'virtual', orderId: null }
     ];
 
-    await accountOrders.storeMasterGrid(botKey, mockOrders, manager.funds.btsFeesOwed);
+    await accountOrders.storeMasterGrid(mockOrders, manager.funds.btsFeesOwed);
 
     console.log(`   ✓ Persisted ${mockOrders.length} orders`);
     console.log(`   ✓ Persisted BTS fees owed: ${Format.formatAmount8(manager.funds.btsFeesOwed)}\n`);
@@ -59,8 +59,8 @@ async function testCompleteLifecycle() {
     console.log('📌 PHASE 3: Restart + Restore\n');
 
     const accountOrders2 = new AccountOrders({ botKey });
-    const restoredGrid = accountOrders2.loadBotGrid(botKey);
-    const restoredBtsFees = accountOrders2.loadBtsFeesOwed(botKey);
+    const restoredGrid = accountOrders2.loadGrid();
+    const restoredBtsFees = accountOrders2.loadBtsFeesOwed();
 
     console.log(`   ✓ Restored grid: ${restoredGrid ? restoredGrid.length : 0} orders`);
     console.log(`   ✓ Restored BTS fees owed: ${Format.formatAmount8(restoredBtsFees)}\n`);

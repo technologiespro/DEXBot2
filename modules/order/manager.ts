@@ -1652,7 +1652,7 @@ class OrderManager {
             return validation;
         }
 
-        await persistGridSnapshot(this, this.accountOrders, this.config.botKey, snapshotOrders);
+        await persistGridSnapshot(this, this.accountOrders, snapshotOrders);
         return validation;
     }
 

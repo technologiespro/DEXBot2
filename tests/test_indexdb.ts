@@ -8,11 +8,11 @@ const { OrderManager, utils } = require('../modules/order');
 const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
 
 async function main() {
-  const botConfig = { name: 'My Bot', assetA: 'ASSET.A', assetB: 'ASSET.B', active: true };
+  const botConfig = { name: 'My Bot', assetA: 'ASSET.A', assetB: 'ASSET.B', active: true, botIndex: 0 };
   const botKey = createBotKey(botConfig, 0);
   const db = new AccountOrders({ botKey });
 
-  await db.ensureBotEntries([botConfig]);
+  await db.syncMeta(botConfig);
 
   const orders = [
     { id: '1', type: ORDER_TYPES.SELL, state: ORDER_STATES.VIRTUAL, size: 1, orderId: '' },
@@ -22,18 +22,15 @@ async function main() {
     { id: '5', type: ORDER_TYPES.SPREAD, state: ORDER_STATES.VIRTUAL, size: 10, orderId: '' }
   ];
 
-  await db.storeMasterGrid(botKey, orders);
+  await db.storeMasterGrid(orders);
 
-  const resByKey = db.getDBAssetBalances(botKey);
-  assert(resByKey, 'Expected non-null result for botKey');
-  assert.strictEqual(resByKey.assetA.virtual, 1, 'SELL virtual should be 1');
-  assert.strictEqual(resByKey.assetA.active, 2, 'SELL active should be 2');
-  assert.strictEqual(resByKey.assetB.virtual, 5, 'BUY virtual should be 5');
-  assert.strictEqual(resByKey.assetB.active, 3, 'BUY active should be 3');
-
-  const resByName = db.getDBAssetBalances('My Bot');
-  assert(resByName, 'Expected non-null result for bot name');
-  assert.deepStrictEqual(resByKey, resByName);
+  const res = db.getAssetBalances();
+  assert(res, 'Expected non-null result');
+  assert.strictEqual(res.assetA.virtual, 1, 'SELL virtual should be 1');
+  assert.strictEqual(res.assetA.active, 2, 'SELL active should be 2');
+  assert.strictEqual(res.assetB.virtual, 5, 'BUY virtual should be 5');
+  assert.strictEqual(res.assetB.active, 3, 'BUY active should be 3');
+  assert.strictEqual(res.meta.name, 'My Bot');
 
   const debugBotKey = createBotKey({ name: 'Debug Bot' }, 0);
   const tempOrdersDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot2-indexdb-'));
@@ -64,9 +61,9 @@ async function main() {
     };
     manager.funds.btsFeesOwed = 0.01;
 
-    await utils.persistGridSnapshot(manager, debugDb, debugBotKey);
+    await utils.persistGridSnapshot(manager, debugDb);
 
-    const debugEntry = debugDb._loadData().bots[debugBotKey];
+    const debugEntry = debugDb._loadData();
     assert(debugEntry.debugInputs, 'Expected debug input snapshot to persist');
     assert.strictEqual(debugEntry.debugInputs.config.assetA, 'ASSET.A');
     assert.strictEqual(debugEntry.debugInputs.config.gridPrice, 1.1);
@@ -86,7 +83,7 @@ async function main() {
     fs.rmSync(tempOrdersDir, { recursive: true, force: true });
   }
 
-  console.log('AccountOrders getDBAssetBalances tests passed');
+  console.log('AccountOrders getAssetBalances tests passed');
   process.exit(0);
 }
 

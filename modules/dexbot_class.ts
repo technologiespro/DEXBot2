@@ -689,8 +689,7 @@ class DEXBot {
         // Create AccountOrders with bot-specific file (one file per bot)
         this.accountOrders = new AccountOrders({ botKey: this.config.botKey });
         this._processedFillStore.configure({
-            accountOrders: this.accountOrders,
-            botKey: this.config.botKey
+            accountOrders: this.accountOrders
         });
 
         // Load persisted processed fills to prevent reprocessing after restart
@@ -704,11 +703,13 @@ class DEXBot {
         // Ensure bot metadata is properly initialized in storage BEFORE any Grid operations
         const raw = storage.readFile(PROFILES_BOTS_FILE);
         const allBotsConfig = parseJsonWithComments(raw).bots || [];
-        const allActiveBots = allBotsConfig
+        const myBotConfig = allBotsConfig
             .map((b, originalIdx) => b.active !== false ? normalizeBotEntry(b, originalIdx) : null)
-            .filter(b => b !== null);
+            .find(b => b && b.botKey === this.config.botKey);
 
-        await this.accountOrders.ensureBotEntries(allActiveBots);
+        if (myBotConfig) {
+            await this.accountOrders.syncMeta(myBotConfig);
+        }
 
         if (!this.manager) {
             const mgrLogFile = this.config?.name ? path.join(PATHS.LOGS_DIR, `${this.config.name}.log`) : undefined;
@@ -739,7 +740,7 @@ class DEXBot {
             this._log(`Fee cache initialization FAILED: ${err.message}. Fee calculations will use defaults until cache is refreshed.`, 'error');
         }
 
-        const persistedGrid = this.accountOrders.loadBotGrid(this.config.botKey);
+        const persistedGrid = this.accountOrders.loadGrid();
 
         // CRITICAL REPAIR: Strip fake orderIds where orderId === id (e.g. "slot-0")
         let repairedGrid = persistedGrid;
@@ -761,9 +762,9 @@ class DEXBot {
             }
         }
 
-        const persistedBtsFeesOwed = this.accountOrders.loadBtsFeesOwed(this.config.botKey);
-        const persistedBoundaryIdx = this.accountOrders.loadBoundaryIdx(this.config.botKey);
-        const persistedBtsBalance = this.accountOrders.loadBtsBalance(this.config.botKey);
+        const persistedBtsFeesOwed = this.accountOrders.loadBtsFeesOwed();
+        const persistedBoundaryIdx = this.accountOrders.loadBoundaryIdx();
+        const persistedBtsBalance = this.accountOrders.loadBtsBalance();
 
         return {
             persistedGrid: repairedGrid,
@@ -1882,7 +1883,7 @@ class DEXBot {
 
                     if (this._fillCleanupCounter >= cleanupThreshold) {
                         try {
-                            await this.accountOrders.cleanOldProcessedFills(this.config.botKey, TIMING.FILL_RECORD_RETENTION_MS);
+                            await this.accountOrders.cleanOldProcessedFills(TIMING.FILL_RECORD_RETENTION_MS);
                             this._fillCleanupCounter = 0;  // Reset counter after cleanup (success or retry on next batch if failed)
                         } catch (err: any) {
                             this.manager?.logger?.log(`Warning: Fill cleanup failed (will retry): ${err.message}`, 'warn');

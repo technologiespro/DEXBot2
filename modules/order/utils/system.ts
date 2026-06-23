@@ -21,7 +21,7 @@
  *   - initializeFeeCache(botsConfig, BitShares) - Initialize fee cache from blockchain
  *
  * SECTION 3: GRID STATE MANAGEMENT (3 functions)
- *   - persistGridSnapshot(manager, accountOrders, botKey) - Persist grid to storage
+ *   - persistGridSnapshot(manager, accountOrders) - Persist grid to storage
  *   - retryPersistenceIfNeeded(manager) - Retry persistence if previous failed
  *   - applyGridDivergenceCorrections(manager, ...) - Apply grid divergence corrections
  *
@@ -639,11 +639,10 @@ async function initializeFeeCache(botsConfig: any[], BitShares: any): Promise<Re
  * 
  * @param {Object} manager - OrderManager instance
  * @param {Object} accountOrders - AccountOrders data accessor
- * @param {string} botKey - Bot identifier for storage
  * @returns {Promise<boolean>} True if persistence succeeded, false on error
  */
-async function persistGridSnapshot(manager: any, accountOrders: any, botKey: string, snapshotOrders?: any[]): Promise<boolean> {
-    if (!manager || !accountOrders || !botKey) return false;
+async function persistGridSnapshot(manager: any, accountOrders: any, snapshotOrders?: any[]): Promise<boolean> {
+    if (!manager || !accountOrders) return false;
     try {
         const orders = Array.isArray(snapshotOrders)
             ? snapshotOrders
@@ -671,7 +670,6 @@ async function persistGridSnapshot(manager: any, accountOrders: any, botKey: str
             : null;
 
         await accountOrders.storeMasterGrid(
-            botKey,
             orders,
             manager.funds.btsFeesOwed,
             manager.boundaryIdx,
@@ -921,7 +919,7 @@ async function applyGridDivergenceCorrections(manager: any, accountOrders: any, 
                     if (typeof manager.persistGrid === 'function') {
                         await manager.persistGrid();
                     } else {
-                        await persistGridSnapshot(manager, accountOrders, botKey);
+                        await persistGridSnapshot(manager, accountOrders);
                     }
                     result = { executed: true, localOnly: true };
                     manager.logger.log(`[DIVERGENCE-COW] Applied local-only sizing updates (no blockchain ops)`, 'info');

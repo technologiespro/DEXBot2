@@ -13,8 +13,7 @@ function wireProcessedFillTracking(bot) {
     if (!bot.manager) return;
 
     bot._processedFillStore.configure({
-        accountOrders: bot.accountOrders,
-        botKey: bot.config?.botKey
+        accountOrders: bot.accountOrders
     });
 
     bot._processedFillStore.mergeTracker(bot.manager.processedFillTracker);

@@ -67,7 +67,7 @@ async function runTests() {
                 checkSpreadCondition: async () => ({ ordersPlaced: 0 }),
             },
             accountOrders: {
-                loadBotGrid: () => [],
+                loadGrid: () => [],
             },
             _targetedDriftSyncCooldownMs: 60_000,
             _lastTargetedDriftSyncAt: 0,

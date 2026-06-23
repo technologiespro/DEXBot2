@@ -86,8 +86,12 @@ function createBotKey(bot, index) {
   return `${baseKey}-${index}`;
 }
 
-function hasBotsObject(data) {
-  return Boolean(data && data.bots && typeof data.bots === 'object' && !Array.isArray(data.bots));
+function hasOrderGrid(data) {
+  return Boolean(
+    data && typeof data === 'object' && !Array.isArray(data) &&
+    data.meta && typeof data.meta === 'object' &&
+    Array.isArray(data.grid)
+  );
 }
 
 /**
@@ -344,20 +348,13 @@ function getOrderFileCandidate(fileName) {
     return { include: false, reason: `invalid JSON: ${error.message}`, report: true, name: fileName };
   }
 
-  if (!hasBotsObject(data)) {
-    return { include: false, reason: 'missing bots object', report: true, name: fileName };
-  }
-
-  const botKeys = Object.keys(data.bots);
-  if (botKeys.length === 0) {
-    return { include: false, reason: 'empty bots object', report: true, name: fileName };
-  }
-
-  const botKey = botKeys[0];
-  const botData = data.bots[botKey];
-  if (!botData || typeof botData !== 'object' || !botData.meta || !Array.isArray(botData.grid)) {
+  if (!hasOrderGrid(data)) {
     return { include: false, reason: 'not a persisted order grid', report: true, name: fileName };
   }
+
+  // Derive botKey from the file name: profiles/orders/<botKey>.json
+  const botKey = fileName.replace(/\.json$/, '');
+  const botData = data;
 
   const config = getConfiguredBotConfig(botKey, botData);
   if (!config) {
@@ -1408,16 +1405,12 @@ function main() {
     try {
       // Parse order file JSON
       const orderData = readJSON(file.path);
-      // Extract bot data (typically only one bot per file)
-      const botKeys = Object.keys(orderData.bots);
-      if (botKeys.length === 0) {
-        throw new Error('Empty bots object');
+      // Per-bot file: data is the bot's entry directly (no bots wrapper)
+      if (!orderData || !orderData.meta || !Array.isArray(orderData.grid)) {
+        throw new Error('Not a persisted order grid');
       }
-      const botKey = botKeys[0];
-      const botData = orderData.bots[botKey];
-      if (!botData) {
-        throw new Error(`Missing bot entry for ${botKey}`);
-      }
+      const botKey = file.botKey;
+      const botData = orderData;
 
       // Candidate validation already required a configured bot entry.
       const config = file.config || getConfiguredBotConfig(botKey, botData);

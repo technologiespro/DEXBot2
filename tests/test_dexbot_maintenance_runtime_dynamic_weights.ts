@@ -1019,7 +1019,7 @@ async function testRmsDivergenceRunsFullGridResync() {
             },
         },
         accountOrders: {
-            loadBotGrid: () => [{ id: 'buy-0', type: 'buy', price: 1, size: 1 }],
+            loadGrid: () => [{ id: 'buy-0', type: 'buy', price: 1, size: 1 }],
         },
         _getPipelineSignals: () => ({}),
         _cancelDustOrders: async () => ({ cancelledCount: 0, batchResult: null }),

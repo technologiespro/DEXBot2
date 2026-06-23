@@ -866,7 +866,7 @@ async function testStartupDustSchedulesTimer() {
         bot._cancelDustOrders = async () => ({ cancelledCount: 0, batchResult: null });
         bot._getPipelineSignals = () => ({});
         bot._abortFlowIfIllegalState = async () => false;
-        bot.accountOrders = { loadBotGrid: () => [] };
+        bot.accountOrders = { loadGrid: () => [] };
         bot.updateOrdersOnChainBatch = async () => {};
         bot.updateOrdersOnChainPlan = async () => {};
         bot._persistAndRecoverIfNeeded = async () => {};
@@ -1105,7 +1105,7 @@ async function testMaintenanceDefersStructuralWorkWhileDustPending() {
             orders: new Map()
         };
         bot.accountOrders = {
-            loadBotGrid: () => {
+            loadGrid: () => {
                 divergenceChecked = true;
                 return [];
             }

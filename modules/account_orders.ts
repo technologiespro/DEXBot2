@@ -6,7 +6,8 @@
  *
  * Per-Bot Architecture:
  * Each bot has its own dedicated file: profiles/orders/{botKey}.json
- * Eliminates race conditions when multiple bots write simultaneously.
+ * The file stores a single bot's data directly (no per-file wrapper),
+ * which makes the doubled-entry bug structurally impossible.
  *
  * ===============================================================================
  * EXPORTS (1 class + 1 helper)
@@ -22,24 +23,20 @@
  *
  * FILE STRUCTURE (profiles/orders/{botKey}.json):
  * {
- *   "bots": {
- *     "<botKey>": {
- *       "meta": {
- *         "name": "Bot name",
- *         "assetA": "BTS",
- *         "assetB": "USD",
- *         "active": true,
- *         "index": 0
- *       },
- *       "grid": [
- *         { "id": "slot-0", "type": "buy", "state": "virtual", "price": 100, "size": 1, "orderId": null },
- *         ...
- *       ],
- *       "btsFeesOwed": 0.1,
- *       "createdAt": "ISO timestamp",
- *       "lastUpdated": "ISO timestamp"
- *     }
- *   }
+ *   "meta": {
+ *     "name": "Bot name",
+ *     "assetA": "BTS",
+ *     "assetB": "USD",
+ *     "active": true,
+ *     "index": 0
+ *   },
+ *   "grid": [
+ *     { "id": "slot-0", "type": "buy", "state": "virtual", "price": 100, "size": 1, "orderId": null },
+ *     ...
+ *   ],
+ *   "btsFeesOwed": 0.1,
+ *   "createdAt": "ISO timestamp",
+ *   "lastUpdated": "ISO timestamp"
  * }
  *
  * GRID ENTRY FIELDS:
@@ -124,33 +121,6 @@ function createBotKey(bot, index) {
 }
 
 /**
- * Migrate persisted order files from old index-based keys to new stable keys.
- * Runs once per bot on first startup after the key format change.
- * Renames `profiles/orders/{oldKey}.json` → `profiles/orders/{newKey}.json`
- * and `profiles/orders/{oldKey}.dynamicgrid.json` → `profiles/orders/{newKey}.dynamicgrid.json`.
- *
- * @param {string} profilesDir - Path to the profiles directory
- * @param {string} oldKey - Previous bot key (index-based)
- * @param {string} newKey - New bot key (stable, without index)
- */
-function migrateBotKeyFile(profilesDir, oldKey, newKey) {
-  if (oldKey === newKey) return;
-  const ordersDir = path.join(profilesDir, 'orders');
-  const extensions = ['.json', '.dynamicgrid.json'];
-  for (const ext of extensions) {
-    const oldPath = path.join(ordersDir, `${oldKey}${ext}`);
-    const newPath = path.join(ordersDir, `${newKey}${ext}`);
-    try {
-      if (storage.exists(oldPath) && !storage.exists(newPath)) {
-        storage.rename(oldPath, newPath);
-      }
-    } catch (_err) {
-      // Best-effort migration; ignore failures
-    }
-  }
-}
-
-/**
  * Returns the current date and time in ISO format.
  * @returns {string} ISO timestamp.
  * @private
@@ -193,16 +163,38 @@ function cloneForDebug(value, seen = new WeakSet()) {
 }
 
 /**
+ * Builds an empty per-bot data object. The file is single-object, so this is
+ * the default content when the file does not yet exist.
+ * @returns {Object} Fresh data object
+ * @private
+ */
+function emptyData() {
+  const timestamp = nowIso();
+  return {
+    meta: null,
+    grid: [],
+    btsFeesOwed: 0,
+    btsBalance: null,
+    boundaryIdx: null,
+    assets: null,
+    debugInputs: null,
+    processedFills: {},
+    createdAt: timestamp,
+    lastUpdated: timestamp
+  };
+}
+
+/**
  * AccountOrders class - manages order grid persistence
- * 
+ *
  * Provides methods to:
  * - Store and load order grid snapshots
  * - Track bot metadata and state
  * - Calculate asset balances from stored grids
- * 
+ *
  * Each bot has its own file: {botkey}.json
- * This eliminates race conditions when multiple bots write simultaneously.
- * 
+ * The file holds the bot's data directly (no `bots: { [key]: ... }` wrapper).
+ *
  * @class
  */
 class AccountOrders {
@@ -231,7 +223,13 @@ class AccountOrders {
     this._persistenceLock = new AsyncLock();
 
     this._needsBootstrapSave = !storage.exists(this.profilesPath);
-    this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
+    this.data = this._loadData() || emptyData();
+    // One-time upgrade migration: pre-1.1.0 files used a { bots: { [key]: ... } }
+    // wrapper. Strip it and rewrite the file in the flat shape so the bot keeps
+    // its grid across the upgrade.
+    if (this._migrateLegacyWrapper()) {
+      this._needsBootstrapSave = true;
+    }
     if (this._needsBootstrapSave) {
       this._persist();
     }
@@ -245,6 +243,64 @@ class AccountOrders {
   _loadData() {
     // Load the file directly - per-bot files only contain their own bot's data
     return this._readFile(this.profilesPath);
+  }
+
+  /**
+   * Detects the pre-1.1.0 `{ bots: { [key]: ... } }` wrapper in `this.data` and,
+   * if present, extracts the entry matching this.botKey (and warns about any
+   * other keys, which were the doubled-entry bug). Returns true when a rewrite
+   * is required.
+   * @returns {boolean} True when this.data was rewritten and needs persistence.
+   * @private
+   */
+  _migrateLegacyWrapper(): boolean {
+    const data = this.data;
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+    if (!data.bots || typeof data.bots !== 'object' || Array.isArray(data.bots)) return false;
+
+    const bots = data.bots;
+    const keys = Object.keys(bots);
+    if (keys.length === 0) {
+      this.data = emptyData();
+      accountOrdersLogger.info(`Migrated legacy empty bots wrapper for ${this.botKey}`);
+      return true;
+    }
+
+    const matching = bots[this.botKey];
+    if (matching && typeof matching === 'object' && !Array.isArray(matching)) {
+      this.data = { ...emptyData(), ...matching };
+      const orphans = keys.filter((k) => k !== this.botKey);
+      if (orphans.length > 0) {
+        accountOrdersLogger.warn(
+          `Discarded ${orphans.length} orphan bot entr${orphans.length === 1 ? 'y' : 'ies'} ` +
+          `from legacy wrapper in ${this.botKey}.json: ${orphans.join(', ')}`
+        );
+      }
+      accountOrdersLogger.info(`Migrated legacy { bots: { ... } } wrapper for ${this.botKey}`);
+      return true;
+    }
+
+    // No usable entry for this bot. Pick the first object-valued entry, or
+    // start fresh if every value is corrupt (array / primitive / null).
+    const fallbackKey = keys.find((k) => {
+      const v = bots[k];
+      return v && typeof v === 'object' && !Array.isArray(v);
+    });
+    if (fallbackKey) {
+      const fallback = bots[fallbackKey];
+      accountOrdersLogger.warn(
+        `Legacy wrapper in ${this.botKey}.json had no entry for this bot; ` +
+        `falling back to ${fallbackKey}`
+      );
+      this.data = { ...emptyData(), ...fallback };
+      return true;
+    }
+
+    accountOrdersLogger.warn(
+      `Legacy wrapper in ${this.botKey}.json had no object entry; starting with empty data`
+    );
+    this.data = emptyData();
+    return true;
   }
 
   /**
@@ -275,89 +331,44 @@ class AccountOrders {
   }
 
   /**
-   * Ensure storage entries exist for all provided bot configurations.
-   * Creates new entries for unknown bots, updates metadata for existing ones.
-   *
-   * When in per-bot mode (botKey set): Only processes the matching bot entry and ignores others.
-   * @param {Array} botEntries - Array of bot configurations from bots.json
+   * Sync the persisted meta for this bot from its bots.json entry.
+   * Creates a new file if the meta was never written; updates the existing
+   * meta in place if it has drifted. The grid and other state are not touched.
+   * @param {Object} botConfig - The bot config matching this.botKey
    */
-  async ensureBotEntries(botEntries = []) {
-    if (!Array.isArray(botEntries)) return;
+  async syncMeta(botConfig: any) {
+    if (!botConfig) return;
 
-    // Use AsyncLock to serialize with other write operations (storeMasterGrid, fee/state updates, etc.)
-    // Prevents race conditions during hot-reload or concurrent initialization scenarios
     await this._persistenceLock.acquire(async () => {
       // Reload from disk to ensure we have the latest state
-      this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
+      this.data = this._loadData() || emptyData();
 
-      const validKeys = new Set();
-      let changed = false;
+      const newMeta = this._buildMeta(botConfig, this.botKey, botConfig.botIndex ?? 0, this.data.meta);
+      const prevMeta = this.data.meta;
 
-      // Filter to only the matching bot entry, preserving original indices
-      const entriesToProcess = botEntries
-        .map((bot, origIdx) => ({ bot, origIdx }))
-        .filter(item => {
-          const key = item.bot.botKey || createBotKey(item.bot, item.origIdx);
-          return key === this.botKey;
-        });
-
-      // 1. Update/Create the matching bot entry
-      for (const { bot, origIdx } of entriesToProcess) {
-        const key = bot.botKey || createBotKey(bot, origIdx);
-        validKeys.add(key);
-
-        let entry = this.data.bots[key];
-        const meta = this._buildMeta(bot, key, origIdx, entry && entry.meta);
-
-        if (!entry) {
-          entry = {
-            meta,
-            grid: [],
-            btsFeesOwed: 0,
-            createdAt: meta.createdAt,
-            lastUpdated: meta.updatedAt
-          };
-          this.data.bots[key] = entry;
-          changed = true;
-        } else {
-          // Ensure btsFeesOwed exists even for existing bots
-          if (typeof entry.btsFeesOwed !== 'number') {
-            entry.btsFeesOwed = 0;
-            changed = true;
-          }
-
-          entry.grid = entry.grid || [];
-          if (this._metaChanged(entry.meta, meta)) {
-            accountOrdersLogger.info(`Metadata changed for bot ${key}: updating from old metadata to new`);
-            accountOrdersLogger.info(`  OLD: name=${entry.meta?.name}, assetA=${entry.meta?.assetA}, assetB=${entry.meta?.assetB}, active=${entry.meta?.active}`);
-            accountOrdersLogger.info(`  NEW: name=${meta.name}, assetA=${meta.assetA}, assetB=${meta.assetB}, active=${meta.active}`);
-            entry.meta = { ...entry.meta, ...meta, createdAt: entry.meta?.createdAt || meta.createdAt };
-            entry.lastUpdated = nowIso();
-            changed = true;
-          } else {
-            accountOrdersLogger.info(`No metadata change for bot ${key} - skipping update`);
-            accountOrdersLogger.info(`  CURRENT: name=${entry.meta?.name}, assetA=${entry.meta?.assetA}, assetB=${entry.meta?.assetB}, active=${entry.meta?.active}`);
-            accountOrdersLogger.info(`  PASSED:  name=${meta.name}, assetA=${meta.assetA}, assetB=${meta.assetB}, active=${meta.active}`);
-          }
-        }
-        bot.botKey = key;
-      }
-
-      if (changed) {
+      if (this._metaChanged(prevMeta, newMeta)) {
+        accountOrdersLogger.info(`Metadata changed for bot ${this.botKey}: updating from old metadata to new`);
+        accountOrdersLogger.info(`  OLD: name=${prevMeta?.name}, assetA=${prevMeta?.assetA}, assetB=${prevMeta?.assetB}, active=${prevMeta?.active}`);
+        accountOrdersLogger.info(`  NEW: name=${newMeta.name}, assetA=${newMeta.assetA}, assetB=${newMeta.assetB}, active=${newMeta.active}`);
+        this.data.meta = { ...(prevMeta || {}), ...newMeta, createdAt: prevMeta?.createdAt || newMeta.createdAt };
         this.data.lastUpdated = nowIso();
         this._persist();
+      } else {
+        accountOrdersLogger.info(`No metadata change for bot ${this.botKey} - skipping update`);
+        accountOrdersLogger.info(`  CURRENT: name=${prevMeta?.name}, assetA=${prevMeta?.assetA}, assetB=${prevMeta?.assetB}, active=${prevMeta?.active}`);
+        accountOrdersLogger.info(`  PASSED:  name=${newMeta.name}, assetA=${newMeta.assetA}, assetB=${newMeta.assetB}, active=${newMeta.active}`);
       }
     });
   }
 
   /**
-   * Checks if metadata has changed between two metadata objects.
-   * @param {Object} existing - The existing metadata.
-   * @param {Object} next - The new metadata.
-   * @returns {boolean} True if metadata has changed.
+   * Checks whether two meta objects differ on the relevant fields.
+   * @param {Object} existing - The existing meta (possibly null).
+   * @param {Object} next - The new meta.
+   * @returns {boolean} True if meta has changed.
    * @private
    */
-  _metaChanged(existing, next) {
+  _metaChanged(existing: any, next: any) {
     if (!existing) return true;
     return existing.name !== next.name ||
       existing.assetA !== next.assetA ||
@@ -372,10 +383,10 @@ class AccountOrders {
    * @param {string} key - The bot key.
    * @param {number} index - The bot index.
    * @param {Object} [existing={}] - Existing metadata for preserving createdAt.
-   * @returns {Object} The metadata object.
+   * @returns {Object} The new meta object.
    * @private
    */
-  _buildMeta(bot: any, key: string, index: number, existing: { createdAt?: string } = {}) {
+  _buildMeta(bot: any, key: string, index: number, existing: { createdAt?: string } | null = null) {
     const timestamp = nowIso();
     return {
       key,
@@ -384,137 +395,102 @@ class AccountOrders {
       assetB: bot.assetB || null,
       active: !!bot.active,
       index,
-      createdAt: existing.createdAt || timestamp,
+      createdAt: (existing && existing.createdAt) || timestamp,
       updatedAt: timestamp
     };
   }
 
   /**
-   * Save the current order grid snapshot for a bot.
+   * Save the current order grid snapshot for this bot.
    * Called after grid changes (initialization, fills, syncs).
-   *
-   * In per-bot mode: Only stores the specified bot's data (ignores other bots in this.data).
-   * @param {string} botKey - Bot identifier key
    * @param {Array} orders - Array of order objects from OrderManager
    * @param {number|null} btsFeesOwed - Optional BTS blockchain fees owed
    * @param {number|null} boundaryIdx - Optional master boundary index for StrategyEngine
    * @param {Object|null} assets - Optional asset metadata { assetA, assetB }
    * @param {Object|null} debugInputs - Optional debug-only input snapshot
    */
-  async storeMasterGrid(botKey, orders = [], btsFeesOwed = null, boundaryIdx = null, assets = null, debugInputs = null) {
-    if (!botKey) return;
-
-    // Use AsyncLock to serialize read-modify-write operations (fixes Issue #1, #5)
-    // Prevents concurrent calls from overwriting each other's changes
+  async storeMasterGrid(orders: any[] = [], btsFeesOwed: any = null, boundaryIdx: any = null, assets: any = null, debugInputs: any = null) {
+    // Use AsyncLock to serialize read-modify-write operations
     await this._persistenceLock.acquire(async () => {
-      // CRITICAL: Reload from disk before writing to prevent race conditions between bot processes
-      // Loads this bot's data from its dedicated file
-      this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
+      // Reload from disk before writing to prevent race conditions
+      this.data = this._loadData() || emptyData();
 
       const snapshot = Array.isArray(orders) ? orders.map(order => this._serializeOrder(order)) : [];
       const debugSnapshot = debugInputs ? cloneForDebug(debugInputs) : null;
-      if (!this.data.bots[botKey]) {
-        const meta = this._buildMeta({ name: null, assetA: null, assetB: null, active: false }, botKey, null);
-        this.data.bots[botKey] = {
-          meta,
-          grid: snapshot,
-          btsFeesOwed: Number.isFinite(btsFeesOwed) ? btsFeesOwed : 0,
-          btsBalance: (debugSnapshot && debugSnapshot.btsBalance) || null,
-          boundaryIdx: Number.isFinite(boundaryIdx) ? boundaryIdx : null,
-          assets: assets || null,
-          debugInputs: debugSnapshot,
-          processedFills: {},
-          createdAt: meta.createdAt,
-          lastUpdated: meta.updatedAt
-        };
-      } else {
-        this.data.bots[botKey].grid = snapshot;
 
-        if (Number.isFinite(btsFeesOwed)) {
-          this.data.bots[botKey].btsFeesOwed = btsFeesOwed;
-        }
+      this.data.grid = snapshot;
 
-        if (Number.isFinite(boundaryIdx)) {
-          this.data.bots[botKey].boundaryIdx = boundaryIdx;
-        }
-
-        if (assets) {
-          this.data.bots[botKey].assets = assets;
-        }
-
-        if (debugSnapshot) {
-          this.data.bots[botKey].debugInputs = debugSnapshot;
-        }
-
-        // Persist btsBalance for non-BTS pairs (passed via debugInputs)
-        if (debugSnapshot && debugSnapshot.btsBalance) {
-          this.data.bots[botKey].btsBalance = debugSnapshot.btsBalance;
-        }
-
-        // Initialize processedFills if missing (backward compat)
-        if (!this.data.bots[botKey].processedFills) {
-          this.data.bots[botKey].processedFills = {};
-        }
-
-        const timestamp = nowIso();
-        this.data.bots[botKey].lastUpdated = timestamp;
-        if (this.data.bots[botKey].meta) this.data.bots[botKey].meta.updatedAt = timestamp;
+      if (Number.isFinite(btsFeesOwed)) {
+        this.data.btsFeesOwed = btsFeesOwed;
       }
-      this.data.lastUpdated = nowIso();
+
+      if (Number.isFinite(boundaryIdx)) {
+        this.data.boundaryIdx = boundaryIdx;
+      }
+
+      if (assets) {
+        this.data.assets = assets;
+      }
+
+      if (debugSnapshot) {
+        this.data.debugInputs = debugSnapshot;
+      }
+
+      // Persist btsBalance for non-BTS pairs (passed via debugInputs)
+      if (debugSnapshot && debugSnapshot.btsBalance) {
+        this.data.btsBalance = debugSnapshot.btsBalance;
+      }
+
+      // Initialize processedFills if missing (backward compat)
+      if (!this.data.processedFills) {
+        this.data.processedFills = {};
+      }
+
+      const timestamp = nowIso();
+      this.data.lastUpdated = timestamp;
+      if (this.data.meta) this.data.meta.updatedAt = timestamp;
       this._persist();
     });
   }
 
   /**
-   * Load the persisted order grid for a bot.
-   * @param {string} botKey - Bot identifier key
-   * @param {boolean} forceReload - If true, reload from disk to ensure fresh data (fixes Issue #2)
+   * Load the persisted order grid for this bot.
+   * @param {boolean} forceReload - If true, reload from disk to ensure fresh data
    * @returns {Array|null} Order grid array or null if not found
    */
-  loadBotGrid(botKey, forceReload = false) {
-    // Optionally reload from disk to prevent using stale in-memory data
+  loadGrid(forceReload: boolean = false) {
     if (forceReload) {
-      this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
+      this.data = this._loadData() || emptyData();
     }
-
-    if (this.data && this.data.bots && this.data.bots[botKey]) {
-      const botData = this.data.bots[botKey];
-      return botData.grid || null;
-    }
-    return null;
+    return (this.data && Array.isArray(this.data.grid)) ? this.data.grid : null;
   }
 
   /**
-   * Load persisted asset metadata for a bot.
-   * @param {string} botKey - Bot identifier key
+   * Load persisted asset metadata for this bot.
    * @param {boolean} forceReload - If true, reload from disk
    * @returns {Object|null} Asset metadata { assetA, assetB } or null if not found
    */
-  loadPersistedAssets(botKey, forceReload = false) {
+  loadPersistedAssets(forceReload: boolean = false) {
     if (forceReload) {
-      this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
+      this.data = this._loadData() || emptyData();
     }
-
-    if (this.data && this.data.bots && this.data.bots[botKey]) {
-      return this.data.bots[botKey].assets || null;
+    if (this.data && this.data.assets) {
+      return this.data.assets;
     }
     return null;
   }
 
   /**
-   * Load the master boundary index for a bot.
-   * @param {string} botKey - Bot identifier key
+   * Load the master boundary index for this bot.
    * @param {boolean} forceReload - If true, reload from disk
    * @returns {number|null} Boundary index or null if not found
    */
-  loadBoundaryIdx(botKey, forceReload = false) {
+  loadBoundaryIdx(forceReload: boolean = false) {
     if (forceReload) {
-      this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
+      this.data = this._loadData() || emptyData();
     }
-
-    if (this.data && this.data.bots && this.data.bots[botKey]) {
-      const botData = this.data.bots[botKey];
-      const idx = botData.boundaryIdx;
+    if (this.data) {
+      const idx = this.data.boundaryIdx;
       if (typeof idx === 'number' && Number.isFinite(idx)) {
         return idx;
       }
@@ -523,42 +499,33 @@ class AccountOrders {
   }
 
   /**
-   * Load persisted BTS balance for a bot (non-BTS pairs only).
-   * @param {string} botKey - Bot identifier key
+   * Load persisted BTS balance for this bot (non-BTS pairs only).
    * @param {boolean} forceReload - If true, reload from disk
    * @returns {Object|null} BTS balance { free, total, locked } or null if not found
    */
-  loadBtsBalance(botKey, forceReload = false) {
+  loadBtsBalance(forceReload: boolean = false) {
     if (forceReload) {
-      this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
+      this.data = this._loadData() || emptyData();
     }
-
-    if (this.data && this.data.bots && this.data.bots[botKey]) {
-      const botData = this.data.bots[botKey];
-      if (botData.btsBalance && typeof botData.btsBalance === 'object') {
-        return botData.btsBalance;
-      }
+    if (this.data && this.data.btsBalance && typeof this.data.btsBalance === 'object') {
+      return this.data.btsBalance;
     }
     return null;
   }
 
   /**
-   * Load BTS blockchain fees owed for a bot.
+   * Load BTS blockchain fees owed for this bot.
    * BTS fees accumulate during fill processing and must persist across restarts
    * to ensure they are properly deducted from proceeds during rotation.
-   * @param {string} botKey - Bot identifier key
-   * @param {boolean} forceReload - If true, reload from disk to ensure fresh data (fixes Issue #2)
+   * @param {boolean} forceReload - If true, reload from disk to ensure fresh data
    * @returns {number} BTS fees owed or 0 if not found
    */
-  loadBtsFeesOwed(botKey, forceReload = false) {
-    // Optionally reload from disk to prevent using stale in-memory data
+  loadBtsFeesOwed(forceReload: boolean = false) {
     if (forceReload) {
-      this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
+      this.data = this._loadData() || emptyData();
     }
-
-    if (this.data && this.data.bots && this.data.bots[botKey]) {
-      const botData = this.data.bots[botKey];
-      const fees = botData.btsFeesOwed;
+    if (this.data) {
+      const fees = this.data.btsFeesOwed;
       if (typeof fees === 'number' && Number.isFinite(fees)) {
         return fees;
       }
@@ -567,66 +534,53 @@ class AccountOrders {
   }
 
   /**
-   * Update (persist) BTS blockchain fees for a bot.
-   * BTS fees are deducted during fill processing and must be tracked across restarts
-   * to prevent fund loss if the bot crashes before rotation.
-   * @param {string} botKey - Bot identifier key
+   * Update (persist) BTS blockchain fees for this bot.
+   * BTS fees are deducted during fill processing and must be tracked across
+   * restarts to prevent fund loss if the bot crashes before rotation.
    * @param {number} btsFeesOwed - BTS blockchain fees owed
    */
-  async updateBtsFeesOwed(botKey, btsFeesOwed) {
-    if (!botKey) return;
-
+  async updateBtsFeesOwed(btsFeesOwed: any) {
     await this._persistenceLock.acquire(async () => {
-      this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
-
-      if (!this.data || !this.data.bots || !this.data.bots[botKey]) {
-        return;
-      }
-      this.data.bots[botKey].btsFeesOwed = btsFeesOwed || 0;
+      this.data = this._loadData() || emptyData();
+      this.data.btsFeesOwed = btsFeesOwed || 0;
       this.data.lastUpdated = nowIso();
       this._persist();
     });
   }
 
   /**
-   * Clear the persisted grid for the bot.
+   * Clear the persisted grid for this bot.
    * @returns {Promise<boolean>} true if cleared successfully
    */
-  async clearBotGrid() {
+  async clearGrid() {
     return await this._persistenceLock.acquire(async () => {
-      this.data = this._loadData() || { bots: {} };
-      if (this.data.bots[this.botKey]) {
-        this.data.bots[this.botKey].grid = [];
-        this.data.bots[this.botKey].btsFeesOwed = 0;
-        this.data.lastUpdated = nowIso();
-        this._persist();
-        return true;
-      }
-      return false;
+      this.data = this._loadData() || emptyData();
+      this.data.grid = [];
+      this.data.btsFeesOwed = 0;
+      this.data.lastUpdated = nowIso();
+      this._persist();
+      return true;
     });
   }
 
   /**
-   * Load processed fill IDs for a bot to prevent reprocessing fills across restarts.
-   * Returns a Map of fillKey => timestamp for fills already processed.
-   * @param {string} botKey - Bot identifier key
+   * Load processed fill IDs for this bot to prevent reprocessing fills across
+   * restarts. Returns a Map of fillKey => timestamp for fills already processed.
    * @param {boolean|Object} options - Reload/filter options
    * @returns {Map} Map of fillKey => timestamp
    */
-  loadProcessedFills(botKey: string, options: boolean | { forceReload?: boolean; minTimestamp?: number } = {}) {
+  loadProcessedFills(options: boolean | { forceReload?: boolean; minTimestamp?: number } = {}) {
     const forceReload = typeof options === 'boolean' ? options : options?.forceReload === true;
     const minTimestamp = typeof options === 'object' && options !== null && Number.isFinite(options.minTimestamp)
       ? options.minTimestamp
       : null;
 
-    // Optionally reload from disk to prevent using stale in-memory data
     if (forceReload) {
-      this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
+      this.data = this._loadData() || emptyData();
     }
 
-    if (this.data && this.data.bots && this.data.bots[botKey]) {
-      const botData = this.data.bots[botKey];
-      const fills = botData.processedFills || {};
+    if (this.data) {
+      const fills = this.data.processedFills || {};
       const entries = Object.entries(fills).filter(([, timestamp]) =>
         minTimestamp === null || (Number.isFinite(timestamp) && (timestamp as number) >= minTimestamp)
       );
@@ -637,29 +591,23 @@ class AccountOrders {
 
   /**
    * Persist a batch of processed fill records in one locked disk write.
-   * @param {string} botKey - Bot identifier key
    * @param {Map<string, number>} fills - Processed fill entries
    */
-  async updateProcessedFillsBatch(botKey, fills) {
-    if (!botKey || !(fills instanceof Map) || fills.size === 0) return;
+  async updateProcessedFillsBatch(fills: Map<string, number>) {
+    if (!(fills instanceof Map) || fills.size === 0) return;
 
-    // Use AsyncLock to serialize writes
     await this._persistenceLock.acquire(async () => {
-      this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
+      this.data = this._loadData() || emptyData();
 
-      if (!this.data || !this.data.bots || !this.data.bots[botKey]) {
-        return;
-      }
-
-      if (!this.data.bots[botKey].processedFills) {
-        this.data.bots[botKey].processedFills = {};
+      if (!this.data.processedFills) {
+        this.data.processedFills = {};
       }
 
       let changed = false;
       for (const [fillKey, timestamp] of fills) {
         if (!fillKey) continue;
-        if (this.data.bots[botKey].processedFills[fillKey] === timestamp) continue;
-        this.data.bots[botKey].processedFills[fillKey] = timestamp;
+        if (this.data.processedFills[fillKey] === timestamp) continue;
+        this.data.processedFills[fillKey] = timestamp;
         changed = true;
       }
 
@@ -673,26 +621,19 @@ class AccountOrders {
   /**
    * Clean up old processed fill records (remove entries older than specified age).
    * Prevents processedFills from growing unbounded over time.
-   * @param {string} botKey - Bot identifier key
    * @param {number} olderThanMs - Remove fills processed more than this many milliseconds ago
    */
-  async cleanOldProcessedFills(botKey, olderThanMs = 3600000) {
+  async cleanOldProcessedFills(olderThanMs: number = 3600000) {
     // Default: 1 hour (3600000ms)
-    if (!botKey) return;
-
     await this._persistenceLock.acquire(async () => {
-      this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
+      this.data = this._loadData() || emptyData();
 
-      if (!this.data || !this.data.bots || !this.data.bots[botKey]) {
-        return;
-      }
-
-      if (!this.data.bots[botKey].processedFills) {
+      if (!this.data.processedFills) {
         return;
       }
 
       const now = Date.now();
-      const fills = this.data.bots[botKey].processedFills;
+      const fills = this.data.processedFills;
       let deletedCount = 0;
 
       for (const [fillKey, timestamp] of Object.entries(fills)) {
@@ -710,44 +651,23 @@ class AccountOrders {
   }
 
   /**
-   * Calculate asset balances from a stored grid.
+   * Calculate asset balances from the persisted grid for this bot.
    * Sums order sizes by asset and state (active vs virtual).
-   * @param {string} botKeyOrName - Bot key or name to look up
    * @param {boolean} forceReload - If true, reload from disk to ensure fresh data
-   * @returns {Object|null} Balance summary or null if not found
+   * @returns {Object|null} Balance summary or null if no data
    */
-  getDBAssetBalances(botKeyOrName, forceReload = false) {
-    if (!botKeyOrName) return null;
-
+  getAssetBalances(forceReload: boolean = false) {
     if (forceReload) {
-      this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
+      this.data = this._loadData() || emptyData();
     }
 
-    let key = null;
-    if (this.data && this.data.bots) {
-      if (this.data.bots[botKeyOrName]) key = botKeyOrName;
-      else {
-        const lower = String(botKeyOrName).toLowerCase();
-        for (const k of Object.keys(this.data.bots)) {
-          const meta = this.data.bots[k] && this.data.bots[k].meta;
-          if (meta && meta.name && String(meta.name).toLowerCase() === lower) {
-            key = k;
-            break;
-          }
-        }
-      }
-    }
-    if (!key) return null;
-
-    const entry = this.data.bots[key];
-    if (!entry) return null;
-
-    const meta = entry.meta || {};
-    const grid = Array.isArray(entry.grid) ? entry.grid : [];
+    if (!this.data) return null;
+    const meta = this.data.meta || {};
+    const grid = Array.isArray(this.data.grid) ? this.data.grid : [];
     const sums = {
       assetA: { active: 0, virtual: 0 },
       assetB: { active: 0, virtual: 0 },
-      meta: { key, name: meta.name || null, assetA: meta.assetA || null, assetB: meta.assetB || null }
+      meta: { key: this.botKey, name: meta.name || null, assetA: meta.assetA || null, assetB: meta.assetB || null }
     };
 
     for (const o of grid) {
@@ -776,13 +696,13 @@ class AccountOrders {
   _serializeOrder(order: any = {}) {
     const priceValue = toFiniteNumber(order.price);
     const sizeValue = toFiniteNumber(order.size);
-    
+
     // SANITY CHECK: If order is ACTIVE/PARTIAL but has no orderId, it's corrupted.
     // Downgrade to VIRTUAL to prevent persisting phantom active orders.
     // This fixes the root cause of "Active No ID" state in JSON files.
     let state = order.state || null;
     let orderId = order.orderId || '';
-    
+
     if (isPhantomOrder(order)) {
         state = ORDER_STATES.VIRTUAL;
         orderId = '';
@@ -803,6 +723,5 @@ class AccountOrders {
 
 export = {
   AccountOrders,
-  createBotKey,
-  migrateBotKeyFile
+  createBotKey
 };

@@ -38,7 +38,6 @@ class ProcessedFillStore {
     _persistTimer: ReturnType<typeof setTimeout> | null;
     _flushPromise: Promise<void>;
     _accountOrders: any | null;
-    _botKey: string | null;
     _shuttingDown: boolean;
 
     /**
@@ -61,19 +60,16 @@ class ProcessedFillStore {
         this._persistTimer = null;
         this._flushPromise = Promise.resolve();
         this._accountOrders = null;
-        this._botKey = null;
         this._shuttingDown = false;
     }
 
     /**
-     * Configure the store with an AccountOrders instance and bot key.
+     * Configure the store with an AccountOrders instance.
      * @param {Object} [options] - Configuration options
      * @param {Object} [options.accountOrders] - AccountOrders instance for persistence
-     * @param {string} [options.botKey] - Bot identifier key
      */
-    configure({ accountOrders, botKey }: { accountOrders?: any; botKey?: string } = {}): void {
+    configure({ accountOrders }: { accountOrders?: any } = {}): void {
         this._accountOrders = accountOrders || null;
-        this._botKey = botKey || null;
     }
 
     /**
@@ -92,9 +88,9 @@ class ProcessedFillStore {
      * @returns {number} Number of persisted entries loaded
      */
     loadPersisted({ forceReload = false, minTimestamp = null }: { forceReload?: boolean; minTimestamp?: number | null } = {}): number {
-        if (!this._accountOrders || !this._botKey) return 0;
+        if (!this._accountOrders) return 0;
 
-        const persistedFills = this._accountOrders.loadProcessedFills(this._botKey, {
+        const persistedFills = this._accountOrders.loadProcessedFills({
             forceReload,
             minTimestamp
         });
@@ -134,7 +130,7 @@ class ProcessedFillStore {
      * @returns {Promise<void>}
      */
     async persist(fillKey: string, timestamp: number, { mode = PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE }: { mode?: string } = {}): Promise<void> {
-        if (!this._accountOrders || !this._botKey || !fillKey) return;
+        if (!this._accountOrders || !fillKey) return;
 
         if (mode === PROCESSED_FILL_PERSISTENCE_MODES.MANUAL) {
             this._queue(fillKey, timestamp, { schedule: false });
@@ -171,7 +167,7 @@ class ProcessedFillStore {
             this._persistTimer = null;
         }
 
-        if (!this._accountOrders || !this._botKey) {
+        if (!this._accountOrders) {
             await this._flushPromise;
             return;
         }
@@ -187,7 +183,7 @@ class ProcessedFillStore {
 
         const flushWork = async () => {
             try {
-                await this._accountOrders.updateProcessedFillsBatch(this._botKey, batch);
+                await this._accountOrders.updateProcessedFillsBatch(batch);
             } catch (err: any) {
                 flushError = err;
                 for (const [fillKey, timestamp] of batch) {
@@ -220,7 +216,7 @@ class ProcessedFillStore {
         const keySet = fillKeys instanceof Set ? fillKeys : new Set(fillKeys || []);
         if (keySet.size === 0) return;
 
-        if (!this._accountOrders || !this._botKey) {
+        if (!this._accountOrders) {
             return;
         }
 
@@ -239,7 +235,7 @@ class ProcessedFillStore {
         let flushError = null;
         const flushWork = async () => {
             try {
-                await this._accountOrders.updateProcessedFillsBatch(this._botKey, batch);
+                await this._accountOrders.updateProcessedFillsBatch(batch);
             } catch (err: any) {
                 flushError = err;
                 for (const [fillKey, timestamp] of batch) {

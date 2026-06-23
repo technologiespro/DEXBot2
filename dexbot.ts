@@ -97,7 +97,6 @@ const storage = getStorage();
 const chainKeys = require('./modules/chain_keys');
 const { initializeFeeCache, ensureProfilesDirectory, readInput } = require('./modules/order/utils/system');
 const accountBots = require('./modules/account_bots');
-const { migrateBotKeyFile } = require('./modules/account_orders');
 const SharedDEXBot = require('./modules/dexbot_class');
 const fundRegistry = require('./modules/fund_registry');
 
@@ -436,8 +435,8 @@ async function runBotInstances(botEntries: any[], { forceDryRun = false, sourceN
             dryRun: forceDryRun ? true : entry.dryRun,
         }));
 
-        // Note: ensureBotEntries is no longer needed here. Each bot creates its own AccountOrders
-        // instance with per-bot file when it starts, eliminating the need for shared initialization.
+        // Note: each bot creates its own AccountOrders instance with per-bot file when it
+        // starts and syncs its own meta via syncMeta(). No shared initialization needed here.
 
         const { errors } = collectValidationIssues(prepared, sourceName);
 
@@ -448,22 +447,12 @@ async function runBotInstances(botEntries: any[], { forceDryRun = false, sourceN
             process.exit(1);
         }
 
-        // Phase 4: Persist newly-generated bot ids and migrate order files from old index-based keys
+        // Phase 4: Persist newly-generated bot ids
         try {
             const { config: sourceConfig } = loadSettingsFile(PROFILES_BOTS_FILE, { silent: true });
             persistMissingIds(sourceConfig, prepared, PROFILES_BOTS_FILE);
         } catch (_err) {
             // Best-effort; id persistence is non-critical
-        }
-        // Migrate order files from old index-based keys to new stable keys.
-        // Uses the already-exported migrateBotKeyFile which handles both .json and .dynamicgrid.json.
-        for (const entry of prepared) {
-            if (!entry.active || !entry.id || !entry.name) continue;
-            const oldKey = `${entry.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}-${entry.botIndex}`;
-            const newKey = entry.botKey;
-            if (oldKey !== newKey) {
-                migrateBotKeyFile(PROFILES_DIR, oldKey, newKey);
-            }
         }
 
         const needMaster = prepared.some((b: any) => b.active && b.preferredAccount);

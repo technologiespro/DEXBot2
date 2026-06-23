@@ -1422,7 +1422,7 @@ class SyncEngine {
             } catch (err: any) {
                 // If blockchain lookup fails, check for persisted fallback
                 if (mgr.accountOrders) {
-                    const persistedAssets = mgr.accountOrders.loadPersistedAssets(mgr.config.botKey);
+                    const persistedAssets = mgr.accountOrders.loadPersistedAssets();
                     const assetData = (side === 'A') ? persistedAssets?.assetA : persistedAssets?.assetB;
 
                     if (assetData && assetData.symbol === symbol && typeof assetData.precision === 'number') {

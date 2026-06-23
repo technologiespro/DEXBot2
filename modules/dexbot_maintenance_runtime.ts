@@ -1432,7 +1432,7 @@ async function executeMaintenanceLogic(bot, context) {
         }
 
         try {
-            const persistedGridData = bot.accountOrders.loadBotGrid(bot.config.botKey, true) || [];
+            const persistedGridData = bot.accountOrders.loadGrid(true) || [];
             const calculatedGrid = Array.from(bot.manager.orders.values());
 
             const divergence = await Grid.monitorDivergence(bot.manager, calculatedGrid, persistedGridData);
