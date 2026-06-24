@@ -48,7 +48,7 @@ export function buildSkillTomlLines(skillName: string, description: string, tags
     '[skill]',
     `name = "${skillName}"`,
     `description = "${description}"`,
-    'version = "1.0.0"',
+    'version = "1.0.1"',
     `tags = [${tags.map(t => JSON.stringify(t)).join(', ')}]`
   ];
 
