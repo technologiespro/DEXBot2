@@ -82,7 +82,7 @@ const {
     buildFillKey,
     formatUnmatchedChainOrder
 } = require('./order/utils/order');
-const { validateOrderSize, calculateRotationOrderSizes } = require('./order/utils/math');
+const { validateOrderSize } = require('./order/utils/math');
 const {
     ProcessedFillStore,
     PROCESSED_FILL_PERSISTENCE_MODES
@@ -1284,10 +1284,8 @@ class DEXBot {
                     }
 
                     // Drain any fills that arrived during startup while still in bootstrap
-                    // mode. This gives them the simple rotation path instead of deferred
-                    // full COW rebalance after the lock is released. Safe to call directly
-                    // since we already hold _fillProcessingLock and _processFillsWithBootstrapMode
-                    // does NOT re-acquire it.
+                    // mode. Safe to call directly since we already hold _fillProcessingLock
+                    // and _processFillsWithBootstrapMode does NOT re-acquire it.
                     if (this._incomingFillQueue.length > 0) {
                         this._log(`[STARTUP] Processing ${this._incomingFillQueue.length} queued fill(s) before bootstrap ends`);
                         await this._processFillsWithBootstrapMode(chainOrders);
@@ -1984,20 +1982,18 @@ class DEXBot {
     }
 
     /**
-     * Process fills during bootstrap phase using simple rotation.
+     * Process fills during bootstrap phase using the standard fill pipeline.
      *
      * BOOTSTRAP MODE STRATEGY:
-     * - Use pre-calculated grid sizes (no new math)
-     * - When fill occurs: rotate opposite-side capital to cover the gap
-     * - When BUY fills → rotate highest active BUY to next SELL slot
-     * - When SELL fills → rotate highest active SELL to next BUY slot
-     * - Maintain grid coverage with original slot sizes
-     * - No rebalancing, no resizing - just rotation
+     * - Delegate to the same fill pipeline as the post-reset path
+     * - Same-side replacement at the filled slot (handled by processFillsOnly)
+     * - Symmetric grid regen via COW rebalance (calculateTargetGrid + reconcileGrid)
+     * - Dust orders are cancelled by the rebalance's isCreateHealthy / cancelSurpluses
      *
      * This ensures:
-     * - Opposite-side reaction immediate (inventory balance)
-     * - Grid sizes stay consistent with startup calculation
-     * - Fast response during bootstrap without expensive calculations
+     * - Identical behavior between bootstrap and post-reset
+     * - Grid symmetry maintained by the rebalance, not by manual rotation
+     * - Budget safety enforced by validateWorkingGridFunds in the COW engine
      *
      * @param {Object} chainOrders - Chain orders instance for broadcasting
      * @returns {Promise<void>}
@@ -2010,7 +2006,6 @@ class DEXBot {
         const validFills = [];
         const processedFillKeys = new Set();
         let requiresOpenOrdersSync = false;
-        const ORDER_TYPES = require('./constants').ORDER_TYPES;
 
         // 1. Validate and deduplicate fills
         for (const fill of fills) {
@@ -2035,7 +2030,7 @@ class DEXBot {
 
             const accountingResult = await this._applyReplaySafeTrackedFillAccounting(fill, fillOp, {
                 context: 'BOOTSTRAP',
-                replayMessage: (op) => `[BOOTSTRAP] Replay detected for ${op.order_id}; skipping duplicate bootstrap rotation`
+                replayMessage: (op) => `[BOOTSTRAP] Replay detected for ${op.order_id}; skipping duplicate bootstrap rebalance`
             });
             if (accountingResult.status === 'missing_key') {
                 requiresOpenOrdersSync = true;
@@ -2071,114 +2066,25 @@ class DEXBot {
 
         if (validFills.length === 0) return;
 
-        // Refresh dynamic weights so rotation orders use live weight distribution
-        this._refreshDynamicWeightDistribution('bootstrap fill');
-
-        // 2. Process fills with simple rotation (use fresh weights for sizing)
+        // 2. Process fills through the standard fill pipeline.
+        // This handles same-side replacement, symmetric rebalance, and dust cleanup
+        // via the same path used by the post-reset flow.
         try {
-            this._log(`[BOOTSTRAP] Processing ${validFills.length} fill(s) with simple rotation`, 'info');
+            this._log(`[BOOTSTRAP] Processing ${validFills.length} fill(s) through standard pipeline`, 'info');
 
-            const ordersToPlace = [];
+            const filledOrders = validFills.map(f => f.gridOrder);
+            const result = await this._processFillsWithBatching(
+                filledOrders,
+                new Set(),
+                '[BOOTSTRAP] fill processing'
+            );
 
-            for (const fill of validFills) {
-                const filledOrder = fill.gridOrder;
-                const filledType = filledOrder.type;
-                const oppositeType = filledType === ORDER_TYPES.BUY ? ORDER_TYPES.SELL : ORDER_TYPES.BUY;
-
-                // Mark filled slot as VIRTUAL (released)
-                const fillOk = await this.manager._updateOrder(
-                    { ...virtualizeOrder(filledOrder), size: 0 },
-                    'bootstrap-fill',
-                    { skipAccounting: false, fee: 0 }
-                );
-                if (fillOk === false) {
-                    this.manager.logger.log(`[BOOTSTRAP] Failed to virtualize filled slot ${filledOrder.id}`, 'warn');
-                }
-
-                // Find highest active order on opposite side (closest to market)
-                const allOrders = Array.from(this.manager.orders.values()) as any[];
-                const activeOpposite = allOrders.filter((o: any) =>
-                    o.type === oppositeType &&
-                    o.orderId &&
-                    o.state === ORDER_STATES.ACTIVE
-                );
-
-                if (activeOpposite.length === 0) {
-                    this._log(`[BOOTSTRAP] No active ${oppositeType} orders to rotate`, 'debug');
-                    continue;
-                }
-
-                // Sort to find market-closest (highest price for SELL, lowest price for BUY)
-                activeOpposite.sort((a: any, b: any) =>
-                    oppositeType === ORDER_TYPES.SELL ? a.price - b.price : b.price - a.price
-                );
-
-                const surplusOrder = activeOpposite[0];
-
-                // Find empty slot on opposite side (VIRTUAL with no orderId)
-                const emptySlotsOpposite = allOrders.filter((o: any) =>
-                    o.type === oppositeType &&
-                    !o.orderId &&
-                    o.state === ORDER_STATES.VIRTUAL
-                );
-
-                if (emptySlotsOpposite.length === 0) {
-                    this._log(`[BOOTSTRAP] No empty ${oppositeType} slots to rotate into`, 'debug');
-                    continue;
-                }
-
-                // Sort to find best slot (closest to market)
-                emptySlotsOpposite.sort((a: any, b: any) =>
-                    oppositeType === ORDER_TYPES.SELL ? a.price - b.price : b.price - a.price
-                );
-
-                const targetSlot = emptySlotsOpposite[0];
-
-                // Recalculate size using fresh dynamic weights (same logic as normal path)
-                const oppositeSide = oppositeType === ORDER_TYPES.BUY ? 'buy' : 'sell';
-                const ctx = await Grid._getSizingContext(this.manager, oppositeSide);
-                const allOppositeSlots = allOrders
-                    .filter((o: any) => o.type === oppositeType)
-                    .sort((a: any, b: any) => (a.price ?? 0) - (b.price ?? 0));
-                const targetIdx = allOppositeSlots.findIndex((s: any) => s.id === targetSlot.id);
-                const rotationSize = (ctx && ctx.budget > 0 && targetIdx >= 0)
-                    ? calculateRotationOrderSizes(ctx.budget, 0, allOppositeSlots.length, oppositeType, this.manager.config, 0, ctx.precision)[targetIdx]
-                    : targetSlot.size;
-
-                this._log(`[BOOTSTRAP] Rotating ${surplusOrder.id} → ${targetSlot.id} (${oppositeType} ${Format.formatAmount8(rotationSize)})`, 'info');
-
-                // Mark surplus as released
-                const rotateOk = await this.manager._updateOrder(
-                    { ...virtualizeOrder(surplusOrder), size: 0 },
-                    'bootstrap-rotate',
-                    { skipAccounting: false, fee: 0 }
-                );
-                if (rotateOk === false) {
-                    this.manager.logger.log(`[BOOTSTRAP] Failed to release surplus order ${surplusOrder.id}`, 'warn');
-                }
-
-                // Create rotation order with weight-adjusted size
-                ordersToPlace.push({
-                    id: targetSlot.id,
-                    type: oppositeType,
-                    price: targetSlot.price,
-                    size: rotationSize
-                });
-            }
-
-            // Broadcast rotation orders using the same fixed cap as normal fill handling.
-            if (ordersToPlace.length > 0) {
-                const sizes = ordersToPlace.map(o => `${o.type}:${Format.formatAmount8(o.size)}`).join(' ');
-                this._log(`[BOOTSTRAP] Broadcasting ${ordersToPlace.length} rotation order(s) - sizes: ${sizes}`, 'info');
-                const maxBatch = this._getMaxFillBatchSize();
-                for (let i = 0; i < ordersToPlace.length; i += maxBatch) {
-                    await this.updateOrdersOnChainPlan({ ordersToPlace: ordersToPlace.slice(i, i + maxBatch) });
-                }
+            if (result.aborted) {
+                this._warn('[BOOTSTRAP] Aborted batch due to illegal state; skipping grid persistence this cycle');
             }
 
             this._metrics.fillsProcessed += validFills.length;
             this._metrics.fillProcessingTimeMs += Date.now() - startTime;
-
         } catch (err: any) {
             this._warn(`[BOOTSTRAP] Error processing fills: ${err.message}`);
             this.manager.logger.log(`[BOOTSTRAP] Fill error: ${err.message}`, 'error');
