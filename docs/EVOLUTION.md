@@ -9,7 +9,7 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 - **Growth Phase**: 1,600+ commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~58,000+ LoC intelligent TypeScript system
 - **Stability**: Progression from manual testing to a suite of 200+ automated test files
-- **Releases**: 35 release entries (v0.1.0 to v1.0.0)
+- **Releases**: 36 release entries (v0.1.0 to v1.0.1)
 
 ---
 
@@ -156,13 +156,16 @@ Removed all 89 @ts-nocheck directives, added type annotations across 67 files. R
 ### v0.7.18 → v1.0.0 (103 commits)
 First stable release. Profile validation, logging overhaul, AMA delta threshold, on-chain authority resolution, credential hardening (8 finding groups), centralization of project-root/fs/math/magic-number utilities, error-path hardening, doc sweep. Post-release: headless unlock mode, Credit/MPA Claw bridge, credit runtime fixes, credential daemon hardening, test auto-discovery, settings merge consolidation, shared-account fund registry, credit/MPA collateral proportional allocation, vendored uPlot library, node config editor, analyze-git Chart.js→uPlot migration, fund registry whitelist fixes. Browser compatibility: six portable abstractions (`StorageAdapter`, `CryptoProvider`, `Config`, `PATHS`, `ProcessDiscovery`, `KeyStore`), `env.ts`, `Runtime` singleton, `path_api.ts`, pure-JS crypto fallbacks, `ecc.browser.ts`, `ecc_selector.ts`, lazy `ws`/`pm2` loading, browser bundle verification, 1288-line test suite, 15 newly browser-safe modules, 28-check dist-level verification. Credit runtime multi-asset collateral fixes and stale reborrow guard. I/O pipeline centralization through StorageAdapter. Final browser-compat gaps closed. Browser-safe enforcement, storage adapter path fix, `disallowedDealIds` filter, `outputWeight` rename, doc sweep.
 
+### v1.0.0 → v1.0.1 (4 commits)
+Bootstrap fill pipeline refactored to use the standard same-side replacement path via `_processFillsWithBatching`, eliminating the only cross-side rotation in the codebase. AccountOrders simplified to one bot per file, removing the `{bots: {[key]: ...}}` wrapper that caused doubled-entry bugs during bot-id migration. Deferred maintenance timer guard prevents rare null/undefined spread errors during periodic blockchain fetches.
+
 ---
 
 
 
 ## Development Statistics
 
-200+ automated test files (all TypeScript), 35 release entries. See **Version History** for commit breakdown by release.
+200+ automated test files (all TypeScript), 36 release entries. See **Version History** for commit breakdown by release.
 
 ---
 
@@ -204,7 +207,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: June 22, 2026
-**Total Commits**: 1648
-**Date Range**: December 2, 2025 - June 22, 2026 (ongoing)
+**Last Updated**: June 24, 2026
+**Total Commits**: 1652
+**Date Range**: December 2, 2025 - June 24, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)
