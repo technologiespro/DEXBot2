@@ -2,6 +2,7 @@ const { getStorage } = require('../../modules/storage');
 const storage = getStorage();
 const { path } = require('../../modules/path_api');
 const { PATHS } = require('../../modules/paths');
+const { version: DEXBOT_VERSION } = require('../../package.json');
 
 export function normalizeRepoRoot(variableName: string, repoRoot?: string) {
   return path.resolve(repoRoot || PATHS.CLAW.DIR);
@@ -48,7 +49,7 @@ export function buildSkillTomlLines(skillName: string, description: string, tags
     '[skill]',
     `name = "${skillName}"`,
     `description = "${description}"`,
-    'version = "1.0.1"',
+    `version = "${DEXBOT_VERSION}"`,
     `tags = [${tags.map(t => JSON.stringify(t)).join(', ')}]`
   ];
 
