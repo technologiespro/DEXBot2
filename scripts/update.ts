@@ -259,7 +259,7 @@ try {
             log('DEXBot2 is now tracking the correct branch.');
         }
         log('DEXBot2 is already up to date (local is equal or ahead of remote).');
-        process.exit(2);
+        process.exit(0);
     }
 
     log(`${incomingCommits} update(s) available. Proceeding with update process...`);
@@ -281,8 +281,25 @@ try {
      * Ignores gitignored directories (profiles/, dist/) — they are
      * never touched by stash, so bot configs and keys are safe.
      */
+    const STASH_MESSAGE = 'dexbot-update-auto';
+    let ourStashRef = '';
     log('Stashing local changes before pull...');
-    run('git stash push --include-untracked --message "dexbot-update-auto" 2>/dev/null; true');
+    run(`git stash push --include-untracked --message "${STASH_MESSAGE}" 2>/dev/null; true`);
+    // Capture the stash ref by message so we pop the exact entry after pull,
+    // avoiding ambiguity if any other stash operation occurs between push and pop.
+    try {
+        const list = execSync(`git stash list --format="%gd %gs" 2>/dev/null`, { stdio: 'pipe', cwd: PATHS.PROJECT_ROOT }).toString().trim();
+        if (list) {
+            for (const line of list.split('\n')) {
+                if (line.includes(STASH_MESSAGE)) {
+                    ourStashRef = line.split(' ')[0];
+                    break;
+                }
+            }
+        }
+    } catch (_) {
+        log('Debug: Could not enumerate stash list to resolve stash ref. Skipping pop.');
+    }
 
     /**
      * STEP 7: Pull Latest Code Changes
@@ -295,6 +312,28 @@ try {
     log(`Pulling latest changes from ${repoUrl} (branch: ${branch})...`);
     // Use --rebase to avoid merge commits and keep clean linear history
     run(`git pull --rebase origin ${branch}`);
+
+    /**
+     * Restore our stashed entry by ref (if we created one).
+     * Using the captured ref prevents accidentally popping a stash that was
+     * created by another process between push and pop.
+     */
+    if (ourStashRef) {
+        try {
+            execSync(`git stash pop ${ourStashRef}`, { stdio: 'inherit', cwd: PATHS.PROJECT_ROOT });
+            // Check for unmerged paths that git stash pop may have left behind.
+            // git diff --diff-filter=U catches all asymmetric variants (AU, UA, DU, UD)
+            // in addition to the symmetric ones (UU, AA, DD).
+            const unmerged = execSync('git diff --name-only --diff-filter=U', { stdio: 'pipe', cwd: PATHS.PROJECT_ROOT }).toString().trim();
+            if (unmerged) {
+                log('Warning: Stash pop completed with merge conflicts. Run `git status` to resolve unresolved files.');
+            }
+        } catch (err) {
+            log(`Warning: Could not restore stashed changes (merge conflicts may exist). ` +
+                `Check \`git stash list\` for "${STASH_MESSAGE}" entry.`);
+            if (err.message) log(`Details: ${err.message}`);
+        }
+    }
 
     /**
      * STEP 8: Reinstall Dependencies

@@ -1124,7 +1124,7 @@ let LOGGING_CONFIG = {
 // Updater Configuration
 let UPDATER = {
     // Whether the automated updater is enabled
-    ACTIVE: true,
+    ACTIVE: false,
     // Hardcoded repository URL
     REPOSITORY_URL: "https://github.com/froooze/DEXBot2.git",
     // Default branch policy: 'auto' (track current), 'main', 'dev', 'test'

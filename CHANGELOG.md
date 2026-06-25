@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.2] - 2026-06-25 - Auto-Update Default & Update Script Hardening
+
+### 2026-06-25
+
+- **Chore**: disable auto-update by default (`UPDATER.ACTIVE: true` → `false`) — a DEX bot handling real funds should never silently change its code without explicit operator opt-in (`modules/constants.ts:1127`).
+  - Existing installations with a pre-existing `UPDATER.ACTIVE: true` in `general.settings.json` are unaffected; the new default only applies to fresh installs or users who remove the `UPDATER` key from their settings.
+- **Fix**: exit code 2 → 0 on "already up to date" — PM2's `cron_restart` treats non-zero exits as failures, causing false-positive error logs on every successful no-op tick (`scripts/update.ts:262`).
+- **Fix**: restore stashed local changes after `git pull` with ref-specific pop — uses the exact stash ref (matched by message) instead of bare `git stash pop`, preventing cross-contamination with other stash entries. Also checks `git status --porcelain` for unmerged paths after pop and logs the error object on failure (`scripts/update.ts:299-307`).
+
 ## [1.0.1] - 2026-06-24 - Bootstrap Fill Pipeline, AccountOrders Simplification & Timer Guard
 
 ### 2026-06-24
