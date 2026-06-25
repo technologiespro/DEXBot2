@@ -7,7 +7,7 @@ const {
     executeOperationsViaCredentialDaemon,
     BroadcastUncertainError,
 } = require('./dexbot_credential_client');
-const { TIMING } = require('./constants');
+const { TIMING, DAEMON_ERRORS } = require('./constants');
 const { path } = require('./path_api');
 const { PATHS } = require('./paths');
 const { getStorage } = require('./storage');
@@ -123,10 +123,6 @@ export class DaemonKeyStore implements KeyStore {
                 };
             } catch (err: any) {
                 if (err instanceof BroadcastUncertainError) throw err;
-                const DAEMON_ERRORS = {
-                    SESSION_EXPIRED: 'SESSION_EXPIRED',
-                    SOURCE_AUTH_DENIED: 'SOURCE_AUTH_DENIED',
-                };
                 if (err.message && (err.message.includes(DAEMON_ERRORS.SESSION_EXPIRED) || err.message.includes(DAEMON_ERRORS.SOURCE_AUTH_DENIED))) {
                     const isSourceAuthError = err.message.includes(DAEMON_ERRORS.SOURCE_AUTH_DENIED);
                     if (isSourceAuthError) {

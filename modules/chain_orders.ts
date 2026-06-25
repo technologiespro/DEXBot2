@@ -95,7 +95,7 @@
 
 const { BitShares, createAccountClient, waitForConnected, withTimeout } = require('./bitshares_client');
 const { floatToBlockchainInt, blockchainToFloat, normalizeInt, validateOrderAmountsWithinLimits } = require('./order/utils/math');
-const { FILL_PROCESSING, TIMING, NATIVE_CLIENT, DAEMON_ERRORS } = require('./constants');
+const { FILL_PROCESSING, TIMING, NATIVE_CLIENT } = require('./constants');
 const Format = require('./order/format');
 const { toFiniteNumber } = Format;
 const AsyncLock = require('./order/async_lock');
