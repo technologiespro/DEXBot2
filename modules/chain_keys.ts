@@ -534,11 +534,12 @@ function verifyCurrentPassword(password, accountsData) {
 }
 
 class MasterPasswordError extends Error {
+    static code = 'MASTER_PASSWORD_FAILED';
     code: string;
     constructor(message: string) {
         super(message);
         this.name = 'MasterPasswordError';
-        this.code = 'MASTER_PASSWORD_FAILED';
+        this.code = MasterPasswordError.code;
     }
 }
 
@@ -548,7 +549,7 @@ class MasterPasswordError extends Error {
  * @returns {boolean} True if the error indicates a master password failure
  */
 function isMasterPasswordFailure(err) {
-    return !!(err && (err instanceof MasterPasswordError || err.code === 'MASTER_PASSWORD_FAILED'));
+    return !!(err && (err instanceof MasterPasswordError || err.code === MasterPasswordError.code));
 }
 
 const MASTER_PASSWORD_MAX_ATTEMPTS = CREDENTIAL_PROMPTS.MAX_MASTER_PASSWORD_ATTEMPTS;

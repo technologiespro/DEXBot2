@@ -3,7 +3,7 @@ const assert = require('assert');
 const DEXBot = require('../modules/dexbot_class');
 const chainOrders = require('../modules/chain_orders');
 const { OrderManager } = require('../modules/order');
-const { ORDER_STATES, ORDER_TYPES, TIMING } = require('../modules/constants');
+const { ORDER_STATES, ORDER_TYPES, TIMING, DAEMON_CODES } = require('../modules/constants');
 const { buildFillKey } = require('../modules/order/utils/order');
 const {
     ProcessedFillStore,
@@ -389,7 +389,7 @@ async function runTests() {
         };
         bot._executeBatchIfNeeded = async () => {
             const err = new Error('Credential daemon unavailable before COW batch broadcast: ENOENT');
-            (err as any).code = 'CREDENTIAL_DAEMON_UNAVAILABLE';
+            (err as any).code = DAEMON_CODES.CREDENTIAL_DAEMON_UNAVAILABLE;
             throw err;
         };
         bot._triggerStateRecoverySync = async () => {

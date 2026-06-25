@@ -10,7 +10,7 @@ try {
 const { getStorage } = require('./storage');
 const storage = getStorage();
 const { createHmac } = require('./crypto/sync');
-const { TIMING } = require('./constants');
+const { TIMING, DAEMON_CODES } = require('./constants');
 const {
     getCredentialReadyFilePath,
     getCredentialSocketPath,
@@ -256,8 +256,8 @@ function executeOperationsViaCredentialDaemon(accountName: string, operations: a
         // the uncertainOnTimeout flag.
         if (
             isBroadcast &&
-            (errCode === 'BROADCAST_DEADLINE' ||
-                (typeof errMsg === 'string' && errMsg.startsWith('BROADCAST_DEADLINE')))
+            (errCode === DAEMON_CODES.BROADCAST_DEADLINE ||
+                (typeof errMsg === 'string' && errMsg.startsWith(DAEMON_CODES.BROADCAST_DEADLINE)))
         ) {
             throw new BroadcastUncertainError(
                 `Credential daemon broadcast uncertain: ${errCode || errMsg}`,

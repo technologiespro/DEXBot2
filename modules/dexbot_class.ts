@@ -99,6 +99,7 @@ const {
     MAINTENANCE,
     GRID_LIMITS,
     FILL_PROCESSING,
+    DAEMON_CODES,
 } = require('./constants');
 const { PATHS, getRecalculateTriggerFile } = require('./paths');
 const { attemptResumePersistedGridByPriceMatch, decideStartupGridAction, reconcileGridOrders } = require('./order/grid_reconcile');
@@ -3336,7 +3337,7 @@ class DEXBot {
             this._suspendGridPersistenceForCredentialOutage(message);
             this.manager?.logger?.log?.(`[CREDENTIAL] ${message}. Write operations paused; re-unlock with node pm2.`, 'error');
             const wrapped: any = new Error(message);
-            wrapped.code = 'CREDENTIAL_DAEMON_UNAVAILABLE';
+            wrapped.code = DAEMON_CODES.CREDENTIAL_DAEMON_UNAVAILABLE;
             wrapped.cause = err;
             throw wrapped;
         }
@@ -3349,7 +3350,7 @@ class DEXBot {
      */
     _isCredentialDaemonError(err) {
         if (!err) return false;
-        if (err.code === 'CREDENTIAL_DAEMON_UNAVAILABLE') return true;
+        if (err.code === DAEMON_CODES.CREDENTIAL_DAEMON_UNAVAILABLE) return true;
         const message = String(err.message || '');
         return /Credential daemon|Daemon connection failed|daemon .*unavailable|dexbot-cred-daemon\.sock|ECONNREFUSED|ENOENT/.test(message);
     }

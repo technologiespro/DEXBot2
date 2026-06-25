@@ -64,6 +64,8 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 
 **Jun 22**: Browser-safe surface enforcement completed with lazy require wrappers and storage adapter path fix. Credit runtime extended with `disallowedDealIds` filter for 1.22.x BitShares compatibility and `ratio`→`outputWeight` rename with backward-compat shim. Doc sweep across 15 files.
 
+**Jun 25**: DAEMON_ERRORS retry-path fix — `DaemonKeyStore` session-expiry retry never fired due to locally-hardcoded mismatch with canonical constants. Canonical error-code hardening — `DAEMON_CODES` added to `constants.ts` for `BROADCAST_DEADLINE`/`CREDENTIAL_DAEMON_UNAVAILABLE`, `MasterPasswordError.code` static property, replacing 12+ literal sites with single-source-of-truth references.
+
 ---
 
 ## Architecture Evolution
@@ -157,10 +159,10 @@ Removed all 89 @ts-nocheck directives, added type annotations across 67 files. R
 First stable release. Profile validation, logging overhaul, AMA delta threshold, on-chain authority resolution, credential hardening (8 finding groups), centralization of project-root/fs/math/magic-number utilities, error-path hardening, doc sweep. Post-release: headless unlock mode, Credit/MPA Claw bridge, credit runtime fixes, credential daemon hardening, test auto-discovery, settings merge consolidation, shared-account fund registry, credit/MPA collateral proportional allocation, vendored uPlot library, node config editor, analyze-git Chart.js→uPlot migration, fund registry whitelist fixes. Browser compatibility: six portable abstractions (`StorageAdapter`, `CryptoProvider`, `Config`, `PATHS`, `ProcessDiscovery`, `KeyStore`), `env.ts`, `Runtime` singleton, `path_api.ts`, pure-JS crypto fallbacks, `ecc.browser.ts`, `ecc_selector.ts`, lazy `ws`/`pm2` loading, browser bundle verification, 1288-line test suite, 15 newly browser-safe modules, 28-check dist-level verification. Credit runtime multi-asset collateral fixes and stale reborrow guard. I/O pipeline centralization through StorageAdapter. Final browser-compat gaps closed. Browser-safe enforcement, storage adapter path fix, `disallowedDealIds` filter, `outputWeight` rename, doc sweep.
 
 ### v1.0.0 → v1.0.1 (4 commits)
-Bootstrap fill pipeline refactored to use the standard same-side replacement path via `_processFillsWithBatching`, eliminating the only cross-side rotation in the codebase. AccountOrders simplified to one bot per file, removing the `{bots: {[key]: ...}}` wrapper that caused doubled-entry bugs during bot-id migration. Deferred maintenance timer guard prevents rare null/undefined spread errors during periodic blockchain fetches.
+Bootstrap fill pipeline refactored to same-side replacement, AccountOrders simplified to one bot per file, deferred maintenance timer guard.
 
-### v1.0.1 → v1.0.2 (3 changes)
-Auto-update disabled by default (`ACTIVE: true` → `false`) — explicit operator opt-in required for unattended code changes on financial systems. Update script hardened: exit code 2 → 0 on "already up to date" stops PM2 false-positive error logging, and `git stash pop` added after pull to restore previously stashed uncommitted work.
+### v1.0.1 → v1.0.2 (4 commits)
+Auto-update disabled by default, update script hardened, DAEMON_ERRORS retry-path fix, and canonical error-code hardening via `DAEMON_CODES`/`MasterPasswordError.code` static.
 
 ---
 

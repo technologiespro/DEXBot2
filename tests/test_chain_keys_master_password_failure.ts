@@ -6,7 +6,7 @@ console.log('Running chain_keys master password failure tests');
 const masterPasswordError = new chainKeys.MasterPasswordError('Incorrect master password after 3 attempts.');
 assert.strictEqual(chainKeys.isMasterPasswordFailure(masterPasswordError), true, 'MasterPasswordError instances should be recognized');
 assert.strictEqual(
-    chainKeys.isMasterPasswordFailure({ code: 'MASTER_PASSWORD_FAILED', message: 'Incorrect master password after 3 attempts.' }),
+    chainKeys.isMasterPasswordFailure({ code: chainKeys.MasterPasswordError.code, message: 'Incorrect master password after 3 attempts.' }),
     true,
     'plain errors carrying MASTER_PASSWORD_FAILED should be recognized'
 );

@@ -10,6 +10,8 @@ All notable changes to this project will be documented in this file.
   - Existing installations with a pre-existing `UPDATER.ACTIVE: true` in `general.settings.json` are unaffected; the new default only applies to fresh installs or users who remove the `UPDATER` key from their settings.
 - **Fix**: exit code 2 → 0 on "already up to date" — PM2's `cron_restart` treats non-zero exits as failures, causing false-positive error logs on every successful no-op tick (`scripts/update.ts:262`).
 - **Fix**: restore stashed local changes after `git pull` with ref-specific pop — uses the exact stash ref (matched by message) instead of bare `git stash pop`, preventing cross-contamination with other stash entries. Also checks `git status --porcelain` for unmerged paths after pop and logs the error object on failure (`scripts/update.ts:299-307`).
+- **Fix**: align DAEMON_ERRORS string checks with canonical constants — `DaemonKeyStore` in `key_store.ts` used locally-hardcoded strings (`'SESSION_EXPIRED'`, `'SOURCE_AUTH_DENIED'`) that did not match the actual daemon error values from `constants.ts:520`, causing session refresh/retry to silently never trigger. Removed the local shadow; test mocks updated to match (`0b2fdca`).
+- **Fix**: canonicalize BROADCAST_DEADLINE, CREDENTIAL_DAEMON_UNAVAILABLE, and MASTER_PASSWORD_FAILED — adds `DAEMON_CODES` to `constants.ts` (modeled after `DAEMON_ERRORS`) and `MasterPasswordError.code` static property, replacing 12+ literal sites across the credential daemon, bot client, `dexbot_class`, `chain_keys`, and 4 test files with single-source-of-truth references to prevent silent recovery-path breakage from string drift.
 
 ## [1.0.1] - 2026-06-24 - Bootstrap Fill Pipeline, AccountOrders Simplification & Timer Guard
 

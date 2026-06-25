@@ -13,6 +13,9 @@ const systemPath = require.resolve('../modules/order/utils/system');
 const accountBotsPath = require.resolve('../modules/account_bots');
 const bitsharesClientPath = require.resolve('../modules/bitshares_client');
 
+// Import real MasterPasswordError before the chain_keys stub replaces it
+const { MasterPasswordError } = require('../modules/chain_keys');
+
 const originalDexbotModule = require.cache[dexbotPath];
 const originalBotSettings = require.cache[botSettingsPath];
 const originalDexbotClass = require.cache[dexbotClassPath];
@@ -74,7 +77,7 @@ function installStubs() {
 
     const masterPasswordError = new Error('Incorrect master password after 3 attempts.');
     masterPasswordError.name = 'MasterPasswordError';
-    (masterPasswordError as any).code = 'MASTER_PASSWORD_FAILED';
+    (masterPasswordError as any).code = MasterPasswordError.code;
 
     class StubSharedDEXBot {
     [key: string]: any;
@@ -101,7 +104,7 @@ function installStubs() {
         authenticate: async () => 'test-password',
         isDaemonReady: () => false,
         isDaemonResponsive: async () => false,
-        isMasterPasswordFailure: (err) => !!(err && (err.code === 'MASTER_PASSWORD_FAILED' || err.name === 'MasterPasswordError')),
+        isMasterPasswordFailure: (err) => !!(err && (err.code === MasterPasswordError.code || err.name === 'MasterPasswordError')),
     });
     setCachedModule(gracefulShutdownPath, {
         setupGracefulShutdown: () => {},

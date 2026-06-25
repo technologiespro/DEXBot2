@@ -71,7 +71,7 @@ const { path } = require('./modules/path_api');
 const os = require('os');
 const { randomBytes } = require('./modules/crypto/sync');
 const chainKeys = require('./modules/chain_keys');
-const { TIMING, NODE_MANAGEMENT, DAEMON_ERRORS } = require('./modules/constants');
+const { TIMING, NODE_MANAGEMENT, DAEMON_ERRORS, DAEMON_CODES } = require('./modules/constants');
 const { readGeneralSettings } = require('./modules/general_settings');
 const { orderNodesForSettings } = require('./modules/node_health_cache');
 const credentialPolicy = require('./modules/credential_policy');
@@ -393,9 +393,9 @@ async function broadcastWithRetry(accountName: any, privateKey: any, broadcastFn
     const deadlinePromise = new Promise((_, reject) => {
         deadlineTimer = setTimeout(() => {
             const err: any = new Error(
-                `BROADCAST_DEADLINE:inner broadcast deadline ${innerDeadlineMs}ms exceeded`
+                `${DAEMON_CODES.BROADCAST_DEADLINE}:inner broadcast deadline ${innerDeadlineMs}ms exceeded`
             );
-            err.code = 'BROADCAST_DEADLINE';
+            err.code = DAEMON_CODES.BROADCAST_DEADLINE;
             err.uncertain = true;
             err.accountName = accountName;
             err.startedAt = startedAt;
@@ -809,7 +809,7 @@ function processRequest(requestStr: string, socket: any) {
                             (client: any) => client.broadcast(operation)
                         );
                     } catch (broadcastErr: any) {
-                        if (broadcastErr && broadcastErr.code === 'BROADCAST_DEADLINE') {
+                        if (broadcastErr && broadcastErr.code === DAEMON_CODES.BROADCAST_DEADLINE) {
                             appendAuditLog({
                                 event: 'sign_timeout',
                                 accountName,
@@ -828,7 +828,7 @@ function processRequest(requestStr: string, socket: any) {
                             return sendError(
                                 socket,
                                 'chain status uncertain after inner deadline',
-                                'BROADCAST_DEADLINE'
+                                DAEMON_CODES.BROADCAST_DEADLINE
                             );
                         }
                         throw broadcastErr;
@@ -914,7 +914,7 @@ function processRequest(requestStr: string, socket: any) {
                             (client: any) => executeOperationsWithClient(client, operations)
                         );
                     } catch (broadcastErr: any) {
-                        if (broadcastErr && broadcastErr.code === 'BROADCAST_DEADLINE') {
+                        if (broadcastErr && broadcastErr.code === DAEMON_CODES.BROADCAST_DEADLINE) {
                             appendAuditLog({
                                 event: 'sign_timeout',
                                 accountName,
@@ -930,7 +930,7 @@ function processRequest(requestStr: string, socket: any) {
                             return sendError(
                                 socket,
                                 'chain status uncertain after inner deadline',
-                                'BROADCAST_DEADLINE'
+                                DAEMON_CODES.BROADCAST_DEADLINE
                             );
                         }
                         throw broadcastErr;

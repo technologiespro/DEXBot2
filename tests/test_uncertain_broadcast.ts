@@ -9,7 +9,7 @@ installBitsharesClientStub(bitsharesClientPath);
 const chainOrders = require('../modules/chain_orders');
 const chainKeys = require('../modules/chain_keys');
 const { OrderManager } = require('../modules/order/manager');
-const { ORDER_TYPES, ORDER_STATES, COW_ACTIONS } = require('../modules/constants');
+const { ORDER_TYPES, ORDER_STATES, COW_ACTIONS, DAEMON_CODES } = require('../modules/constants');
 const {
     BroadcastUncertainError,
     executeOperationsViaCredentialDaemon
@@ -596,7 +596,7 @@ async function testCredentialClientDeadlineReplyBecomesUncertain() {
     const operations = [{ op_name: 'limit_order_create', op_data: { amount_to_sell: 1 } }];
     const transport = installFakeCredentialDaemonTransport((request, socket) => {
         assert.strictEqual(request.type, 'execute-operations');
-        socket.endLine({ success: false, code: 'BROADCAST_DEADLINE', error: 'inner broadcast deadline exceeded' });
+        socket.endLine({ success: false, code: DAEMON_CODES.BROADCAST_DEADLINE, error: 'inner broadcast deadline exceeded' });
     });
     try {
         await assert.rejects(
@@ -655,7 +655,7 @@ async function testExecuteBatchDoesNotRetryUncertainDaemonBroadcast() {
     const origProbe = chainKeys.probeAccountInDaemon;
     const transport = installFakeCredentialDaemonTransport((request, socket) => {
         requestCount++;
-        socket.endLine({ success: false, code: 'BROADCAST_DEADLINE', error: 'inner broadcast deadline exceeded' });
+        socket.endLine({ success: false, code: DAEMON_CODES.BROADCAST_DEADLINE, error: 'inner broadcast deadline exceeded' });
     });
     const token = chainKeys.createDaemonSigningToken('test-account', {
         socketPath: transport.socketPath,
@@ -729,7 +729,7 @@ async function testExecuteBatchRetryPreservesUncertainBroadcastHandling() {
             socket.endLine({ success: false, error: 'invalid or expired session' });
         } else {
             assert.strictEqual(request.sessionId, 'session-2', 'retry should use renegotiated session');
-            socket.endLine({ success: false, code: 'BROADCAST_DEADLINE', error: 'inner broadcast deadline exceeded on retry' });
+            socket.endLine({ success: false, code: DAEMON_CODES.BROADCAST_DEADLINE, error: 'inner broadcast deadline exceeded on retry' });
         }
     });
     const token = chainKeys.createDaemonSigningToken('test-account', {
