@@ -89,7 +89,7 @@ Fields available for both `"mpa"` and `"creditOffer"` types:
 | `autoReborrow` | `boolean` | No | If `true`, the bot reborrows from the same offer after repayment. |
 | `autoRepay` | `number` | No | On-chain auto-repay mode: `0` (off), `1` (full only), `2` (partial allowed). |
 | `allowedOfferIds` | `string[]` | No | Whitelist of credit offer object IDs (1.21.x) the bot may accept. |
-| `disallowedDealIds` | `string[]` | No | Denylist of credit deal object IDs (1.22.x) the bot must ignore. Deals in this list are excluded — no repay, reborrow, or auto-repay update. |
+| `disallowedDealIds` | `string[]` | No | Denylist of credit deal object IDs (1.22.x) the bot must not reborrow from. Repay is unaffected — the bot can still repay deals in this list. |
 | `renewOnly` | `boolean` | No | If `true`, the bot only reborrows existing deals — standalone credit borrows are refused. Default `false`. |
 | `minDurationSeconds` | `number` | No | Minimum acceptable offer duration in seconds. Offers with `duration_seconds` below this value are skipped. |
 

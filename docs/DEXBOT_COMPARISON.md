@@ -39,7 +39,7 @@
 | **Release Track** | 1.0.0 | v1.0.2 |
 | **Language** | Python 3.6+ | TypeScript 5.x |
 | **Status** | Released 1.0.0, unmaintained | Active development |
-| **Last Repo Activity** | May 23, 2020 | 2026-06-16 |
+| **Last Repo Activity** | May 23, 2020 | 2026-06-25 |
 | **License** | MIT | MIT |
 | **Origin** | BitShares worker-proposal funded, Codaone Oy | Private rewrite by froooze |
 | **Primary Goal** | Multi-strategy, extensible trading framework | Hardened adaptive grid runtime with operator/AI tooling |
@@ -679,7 +679,7 @@ Where:
 | `docs/docker.md` | 3 KB | Docker deployment guide |
 | `docs/README.md` | 12 KB | Docs index |
 | `AGENTS.md` | 7 KB | AI development context |
-| `CHANGELOG.md` | Very large | Full version history (1648 commits at current HEAD) |
+| `CHANGELOG.md` | Very large | Full version history (1659 commits at current HEAD) |
 
 ### Documentation Comparison
 
@@ -776,8 +776,8 @@ Where:
 |---|---|---|
 | **Release Track** | 1.0.0 | v1.0.2 |
 | **Active Since** | ~2018 | December 2025 |
-| **Last Commit** | May 23, 2020 | 2026-06-22 |
-| **Total Commits** | 2281 | 1648 at current HEAD |
+| **Last Commit** | May 23, 2020 | 2026-06-25 |
+| **Total Commits** | 2281 | 1659 at current HEAD |
 | **Lines of Code** | ~10,846 Python LOC in `dexbot/` | Large TypeScript runtime + adapter + Claw + analysis + tests |
 | **Source Files** | 72 Python files in `dexbot/` | 430+ TS files across the repo |
 | **Test Files** | 16 Python test files | 211 `test_*.ts` files |
